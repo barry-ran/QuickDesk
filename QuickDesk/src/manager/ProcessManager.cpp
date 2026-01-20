@@ -109,12 +109,10 @@ void ProcessManager::stopHostProcess()
     if (m_hostProcess && m_hostProcess->state() != QProcess::NotRunning) {
         qInfo() << "Stopping host process...";
         m_hostProcess->closeWriteChannel(); // Close stdin to trigger graceful exit
-        if (!m_hostProcess->waitForFinished(5000)) {
+        if (!m_hostProcess->waitForFinished(1000)) {
             qWarning() << "Host process did not exit gracefully, terminating...";
             m_hostProcess->terminate();
-            if (!m_hostProcess->waitForFinished(3000)) {
-                m_hostProcess->kill();
-            }
+            m_hostProcess->kill();
         }
     }
     m_hostMessaging.reset();
@@ -131,12 +129,10 @@ void ProcessManager::stopClientProcess()
     if (m_clientProcess && m_clientProcess->state() != QProcess::NotRunning) {
         qInfo() << "Stopping client process...";
         m_clientProcess->closeWriteChannel();
-        if (!m_clientProcess->waitForFinished(5000)) {
+        if (!m_clientProcess->waitForFinished(1000)) {
             qWarning() << "Client process did not exit gracefully, terminating...";
             m_clientProcess->terminate();
-            if (!m_clientProcess->waitForFinished(3000)) {
-                m_clientProcess->kill();
-            }
+            m_clientProcess->kill();
         }
     }
     m_clientMessaging.reset();
