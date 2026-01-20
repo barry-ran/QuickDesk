@@ -362,15 +362,71 @@ ApplicationWindow {
                         radius: 8
                         border.color: "#E0E0E0"
                         border.width: 1
+                        clip: true
 
+                        // Empty state
                         Text {
                             anchors.centerIn: parent
-                            text: mainController.hostManager ? 
-                                  (mainController.hostManager.clientCount > 0 ? 
-                                   mainController.hostManager.clientCount + " 个客户端" : 
-                                   "暂无连接") : 
-                                  "加载中..."
+                            visible: !mainController.hostManager || 
+                                     mainController.hostManager.clientCount === 0
+                            text: mainController.hostManager ? "暂无连接" : "加载中..."
                             color: "#999"
+                        }
+
+                        // Client list
+                        ListView {
+                            id: clientList
+                            anchors.fill: parent
+                            anchors.margins: 8
+                            visible: mainController.hostManager && 
+                                     mainController.hostManager.clientCount > 0
+                            model: mainController.hostManager ? 
+                                   mainController.hostManager.clientIds : []
+                            spacing: 8
+                            
+                            delegate: Rectangle {
+                                width: clientList.width
+                                height: 50
+                                color: "#F5F5F5"
+                                radius: 6
+                                
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.margins: 10
+                                    spacing: 10
+                                    
+                                    // Client info
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 2
+                                        
+                                        Text {
+                                            text: mainController.hostManager.getClientUsername(modelData) || modelData
+                                            font.pixelSize: 13
+                                            font.bold: true
+                                            color: "#333"
+                                            elide: Text.ElideMiddle
+                                            Layout.fillWidth: true
+                                        }
+                                        
+                                        Text {
+                                            text: mainController.hostManager.getClientState(modelData) || "已连接"
+                                            font.pixelSize: 11
+                                            color: "#4CAF50"
+                                        }
+                                    }
+                                    
+                                    // Disconnect button
+                                    Button {
+                                        text: "断开"
+                                        font.pixelSize: 11
+                                        onClicked: {
+                                            console.log("Kicking client:", modelData)
+                                            mainController.hostManager.kickClient(modelData)
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }

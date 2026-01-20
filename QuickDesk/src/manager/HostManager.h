@@ -8,6 +8,7 @@
 #include <QJsonObject>
 #include <QList>
 #include <QMap>
+#include <QStringList>
 
 namespace quickdesk {
 
@@ -34,6 +35,7 @@ class HostManager : public QObject {
     Q_PROPERTY(QString accessCode READ accessCode NOTIFY accessCodeChanged)
     Q_PROPERTY(bool isConnected READ isConnected NOTIFY connectionStatusChanged)
     Q_PROPERTY(int clientCount READ clientCount NOTIFY clientCountChanged)
+    Q_PROPERTY(QStringList clientIds READ clientIds NOTIFY clientListChanged)
     Q_PROPERTY(QString signalingState READ signalingState NOTIFY signalingStateChanged)
     Q_PROPERTY(int signalingRetryCount READ signalingRetryCount NOTIFY signalingStateChanged)
     Q_PROPERTY(int signalingNextRetryIn READ signalingNextRetryIn NOTIFY signalingStateChanged)
@@ -64,7 +66,12 @@ public:
     QString accessCode() const;
     bool isConnected() const;
     int clientCount() const;
+    QStringList clientIds() const;
     QList<SessionInfo> connectedClients() const;
+    
+    // Get client info for display
+    Q_INVOKABLE QString getClientUsername(const QString& clientId) const;
+    Q_INVOKABLE QString getClientState(const QString& clientId) const;
     
     // Signaling state getters
     QString signalingState() const;

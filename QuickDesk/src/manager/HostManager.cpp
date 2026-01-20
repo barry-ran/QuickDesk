@@ -142,9 +142,34 @@ int HostManager::clientCount() const
     return m_clients.size();
 }
 
+QStringList HostManager::clientIds() const
+{
+    return m_clients.keys();
+}
+
 QList<SessionInfo> HostManager::connectedClients() const
 {
     return m_clients.values();
+}
+
+QString HostManager::getClientUsername(const QString& clientId) const
+{
+    if (m_clients.contains(clientId)) {
+        return m_clients[clientId].username;
+    }
+    return QString();
+}
+
+QString HostManager::getClientState(const QString& clientId) const
+{
+    if (m_clients.contains(clientId)) {
+        QString state = m_clients[clientId].state;
+        if (state == "connected") return "已连接";
+        if (state == "authenticating") return "认证中...";
+        if (state == "disconnected") return "已断开";
+        return state;
+    }
+    return QString();
 }
 
 void HostManager::onMessageReceived(const QJsonObject& message)
@@ -221,37 +246,52 @@ void HostManager::handleTemporaryPasswordChanged(const QJsonObject& message)
 
 void HostManager::handleClientConnected(const QJsonObject& message)
 {
-    QString connectionId = message["connectionId"].toString();
+    // Support both "clientId" (new format) and "connectionId" (old format)
+    QString clientId = message["clientId"].toString();
+    if (clientId.isEmpty()) {
+        clientId = message["connectionId"].toString();
+    }
+    QString clientUsername = message["clientUsername"].toString();
+    
+    // Also support nested clientInfo for backward compatibility
     QJsonObject clientInfo = message["clientInfo"].toObject();
+    if (clientUsername.isEmpty()) {
+        clientUsername = clientInfo["username"].toString();
+    }
 
     SessionInfo session;
-    session.connectionId = connectionId;
-    session.username = clientInfo["username"].toString();
+    session.connectionId = clientId;
+    session.username = clientUsername;
     session.ip = clientInfo["ip"].toString();
     session.deviceName = clientInfo["deviceName"].toString();
     session.state = "connected";
 
-    m_clients[connectionId] = session;
+    m_clients[clientId] = session;
 
-    qInfo() << "Client connected:" << connectionId << session.username;
+    qInfo() << "Client connected:" << clientId << session.username;
 
     emit clientCountChanged();
     emit clientListChanged();
-    emit clientConnected(connectionId, clientInfo);
+    emit clientConnected(clientId, message);
 }
 
 void HostManager::handleClientDisconnected(const QJsonObject& message)
 {
-    QString connectionId = message["connectionId"].toString();
+    // Support both "clientId" (new format) and "connectionId" (old format)
+    QString clientId = message["clientId"].toString();
+    if (clientId.isEmpty()) {
+        clientId = message["connectionId"].toString();
+    }
+    QString clientUsername = message["clientUsername"].toString();
     QString reason = message["reason"].toString();
 
-    m_clients.remove(connectionId);
+    m_clients.remove(clientId);
 
-    qInfo() << "Client disconnected:" << connectionId << reason;
+    qInfo() << "Client disconnected:" << clientId << clientUsername << reason;
 
     emit clientCountChanged();
     emit clientListChanged();
-    emit clientDisconnected(connectionId, reason);
+    emit clientDisconnected(clientId, reason);
 }
 
 void HostManager::handleAuthorizationRequest(const QJsonObject& message)
