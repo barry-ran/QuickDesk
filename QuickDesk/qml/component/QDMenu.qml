@@ -1,6 +1,7 @@
 // Fluent Design Menu Component
 import QtQuick
 import QtQuick.Controls as Controls
+import Qt5Compat.GraphicalEffects
 
 Controls.Popup {
     id: control
@@ -27,10 +28,15 @@ Controls.Popup {
         border.color: Theme.border
         radius: Theme.radiusMedium
         
-        // Shadow
+        // DropShadow effect
         layer.enabled: true
-        layer.effect: ShaderEffect {
-            property color shadowColor: Theme.shadowMedium
+        layer.effect: DropShadow {
+            horizontalOffset: 0
+            verticalOffset: 2
+            radius: 12
+            samples: 25
+            color: Qt.rgba(0, 0, 0, 0.3)
+            transparentBorder: true
         }
     }
     

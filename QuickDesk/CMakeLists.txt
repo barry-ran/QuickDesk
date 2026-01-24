@@ -90,6 +90,7 @@ qt_add_qml_module(QuickDesk
         qml/component/QDMenu.qml
         qml/component/QDMenuItem.qml
         qml/component/QDMenuSeparator.qml
+        qml/component/QDShadow.qml
     RESOURCES
         res/font/SegoeFluentIcons.ttf
         qml/component/qmldir

@@ -52,21 +52,9 @@ Item {
     
     // ============ Toast Container ============
     
-    Rectangle {
-        id: toastContainer
+    Item {
         width: Math.min(500, toastContent.implicitWidth + Theme.spacingXLarge * 2)
         height: toastContent.implicitHeight + Theme.spacingMedium * 2
-        radius: Theme.radiusMedium
-        
-        color: {
-            switch(toastType) {
-                case QDToast.Type.Success: return Theme.success
-                case QDToast.Type.Error: return Theme.error
-                case QDToast.Type.Warning: return Theme.warning
-                case QDToast.Type.Info: return Theme.info
-                default: return Theme.surface
-            }
-        }
         
         opacity: _showing ? 1 : 0
         scale: _showing ? 1 : 0.8
@@ -86,8 +74,31 @@ Item {
             }
         }
         
-        // Content
-        Row {
+        // Shadow
+        QDShadow {
+            anchors.fill: toastContainer
+            target: toastContainer
+            shadowSize: 12
+            shadowColor: Qt.rgba(0, 0, 0, 0.3)
+        }
+        
+        Rectangle {
+            id: toastContainer
+            anchors.fill: parent
+            radius: Theme.radiusMedium
+        
+            color: {
+                switch(toastType) {
+                    case QDToast.Type.Success: return Theme.success
+                    case QDToast.Type.Error: return Theme.error
+                    case QDToast.Type.Warning: return Theme.warning
+                    case QDToast.Type.Info: return Theme.info
+                    default: return Theme.surface
+                }
+            }
+        
+            // Content
+            Row {
             id: toastContent
             anchors.centerIn: parent
             spacing: Theme.spacingMedium
@@ -139,6 +150,7 @@ Item {
                 width: (toastContainer.width - toastContainer.radius * 2) * (1 - hideTimer.progress)
                 color: Qt.rgba(1, 1, 1, 0.3)
                 radius: 1.5
+                }
             }
         }
     }

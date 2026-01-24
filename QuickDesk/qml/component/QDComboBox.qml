@@ -1,6 +1,7 @@
 // Fluent Design ComboBox Component
 import QtQuick
 import QtQuick.Controls as Controls
+import Qt5Compat.GraphicalEffects
 
 Controls.ComboBox {
     id: control
@@ -77,14 +78,25 @@ Controls.ComboBox {
     popup: Controls.Popup {
         y: control.height + Theme.spacingSmall
         width: control.width
-        implicitHeight: Math.min(contentItem.implicitHeight + 2, 300)
-        padding: 1
+        implicitHeight: Math.min(contentItem.implicitHeight + padding * 2, 300)
+        padding: Theme.spacingSmall
         
         background: Rectangle {
             color: Theme.surface
             border.width: Theme.borderWidthThin
             border.color: Theme.border
             radius: Theme.radiusMedium
+            
+            // DropShadow effect
+            layer.enabled: true
+            layer.effect: DropShadow {
+                horizontalOffset: 0
+                verticalOffset: 2
+                radius: 12
+                samples: 25
+                color: Qt.rgba(0, 0, 0, 0.3)
+                transparentBorder: true
+            }
         }
         
         contentItem: ListView {
@@ -100,7 +112,7 @@ Controls.ComboBox {
     // ============ Delegate ============
     
     delegate: Controls.ItemDelegate {
-        width: control.width
+        width: ListView.view.width
         height: Theme.buttonHeightMedium
         
         contentItem: Text {

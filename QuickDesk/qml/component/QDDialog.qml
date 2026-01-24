@@ -76,15 +76,10 @@ Item {
     
     // ============ Dialog Container ============
     
-    Rectangle {
-        id: dialogContainer
+    Item {
         anchors.centerIn: parent
         width: dialogWidth
         height: dialogHeight
-        radius: Theme.radiusLarge
-        color: Theme.surface
-        border.width: Theme.borderWidthThin
-        border.color: Theme.border
         
         opacity: root.showing ? 1 : 0
         scale: root.showing ? 1 : 0.7
@@ -102,6 +97,22 @@ Item {
                 easing.type: Easing.OutBack
             }
         }
+        
+        // Shadow
+        QDShadow {
+            anchors.fill: dialogContainer
+            target: dialogContainer
+            shadowSize: 16
+            shadowColor: Qt.rgba(0, 0, 0, 0.4)
+        }
+        
+        Rectangle {
+            id: dialogContainer
+            anchors.fill: parent
+            radius: Theme.radiusLarge
+            color: Theme.surface
+            border.width: Theme.borderWidthThin
+            border.color: Theme.border
         
         // Prevent click through
         MouseArea {
@@ -228,4 +239,5 @@ Item {
             }
         }
     }
+}
 }

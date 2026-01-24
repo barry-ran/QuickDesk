@@ -24,3 +24,4 @@ QDAvatar 1.0 QDAvatar.qml
 QDMenu 1.0 QDMenu.qml
 QDMenuItem 1.0 QDMenuItem.qml
 QDMenuSeparator 1.0 QDMenuSeparator.qml
+QDShadow 1.0 QDShadow.qml

@@ -23,6 +23,7 @@
         <file>qml/component/QDMenu.qml</file>
         <file>qml/component/QDMenuItem.qml</file>
         <file>qml/component/QDMenuSeparator.qml</file>
+        <file>qml/component/QDShadow.qml</file>
         <file>qml/component/qmldir</file>
         <file>qml/Example.qml</file>
         <file>res/font/SegoeFluentIcons.ttf</file>

@@ -87,15 +87,10 @@ Item {
     
     // ============ MessageBox Container ============
     
-    Rectangle {
-        id: messageBoxContainer
+    Item {
         anchors.centerIn: parent
         width: 450
         height: messageBoxContent.implicitHeight + Theme.spacingXXLarge * 2
-        radius: Theme.radiusMedium
-        color: Theme.surface
-        border.width: Theme.borderWidthThin
-        border.color: Theme.border
         
         opacity: root.showing ? 1 : 0
         scale: root.showing ? 1 : 0.9
@@ -113,6 +108,22 @@ Item {
                 easing.type: Easing.OutBack
             }
         }
+        
+        // Shadow
+        QDShadow {
+            anchors.fill: messageBoxContainer
+            target: messageBoxContainer
+            shadowSize: 16
+            shadowColor: Qt.rgba(0, 0, 0, 0.4)
+        }
+        
+        Rectangle {
+            id: messageBoxContainer
+            anchors.fill: parent
+            radius: Theme.radiusMedium
+            color: Theme.surface
+            border.width: Theme.borderWidthThin
+            border.color: Theme.border
         
         ColumnLayout {
             id: messageBoxContent
@@ -241,4 +252,5 @@ Item {
             }
         }
     }
+}
 }
