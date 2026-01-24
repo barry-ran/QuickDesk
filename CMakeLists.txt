@@ -30,6 +30,7 @@ list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 # 对每个subdirectories（递归）：自动添加subdirectories的CMAKE_CURRENT_BINARY_DIR和CMAKE_CURRENT_SOURCE_DIR到subdirectories的include_directories
 # 注意：上述include_directories只作用于对应的subdirectories，不会向下传播到subdirectories的subdirectories
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/QuickDesk)
 
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTOMOC ON)

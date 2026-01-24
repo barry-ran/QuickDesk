@@ -1,3 +1,7 @@
+include(spdlog)
+
+add_subdirectory(base)
+add_subdirectory(infra)
 
 # Source files
 set(MANAGER_SOURCES
@@ -51,7 +55,7 @@ qt_add_qml_module(QuickDesk
 
 # Include directories
 target_include_directories(QuickDesk PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/src    
 )
 
 set_target_properties(QuickDesk PROPERTIES
@@ -65,6 +69,8 @@ target_link_libraries(QuickDesk
     PRIVATE 
     Qt6::Quick 
     Qt6::Core
+    base
+    infra
 )
 
 include(GNUInstallDirs)

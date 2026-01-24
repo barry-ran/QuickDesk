@@ -7,6 +7,9 @@
 #include <QIcon>
 #include <QDebug>
 
+#include "infra/env/applicationcontext.h"
+#include "infra/log/log.h"
+
 #include "controller/MainController.h"
 #include "manager/ServerManager.h"
 #include "manager/HostManager.h"
@@ -15,11 +18,19 @@
 int main(int argc, char *argv[])
 {
     QGuiApplication app(argc, argv);
-    
+
+    // infra
+    infra::ApplicationContext::instance().init();
+    infra::Log::instance().init(infra::ApplicationContext::instance().logPath());
+    LOG_INFO("start app {}, log level:{} ********", infra::ApplicationContext::instance().applicationName().toStdString(), SPDLOG_ACTIVE_LEVEL);
+    LOG_INFO("current version:{}", infra::ApplicationContext::instance().applicationVersion().toStdString());
+
+    // QML FileDialog需要这个
+    // 放在ApplicationContext::init后面设置，否则OrganizationName会包含在QStandardPaths::AppLocalDataLocation目录中
+    app.setOrganizationName("QuickCoder");
     app.setApplicationName("QuickDesk");
     app.setApplicationVersion("0.1.0");
-    app.setOrganizationName("QuickDesk");
-    
+
     qInfo() << "QuickDesk starting...";
     qInfo() << "Qt version:" << qVersion();
 
