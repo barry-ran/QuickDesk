@@ -17,6 +17,8 @@ Controls.ToolTip {
     padding: Theme.spacingSmall
     leftPadding: Theme.spacingMedium
     rightPadding: Theme.spacingMedium
+    topPadding: Theme.spacingSmall - 2
+    bottomPadding: Theme.spacingSmall - 2
     
     font.family: Theme.fontFamily
     font.pixelSize: Theme.fontSizeSmall
@@ -24,15 +26,18 @@ Controls.ToolTip {
     // ============ Background ============
     
     background: Rectangle {
-        color: Theme.surfaceVariant
+        id: bgRect
+        color: Theme.surfaceVariant  // 使用Theme的surface变体色
         border.width: Theme.borderWidthThin
-        border.color: Theme.border
+        border.color: Theme.border  // 使用Theme的边框色
         radius: Theme.radiusSmall
         
-        // Slight shadow effect
-        layer.enabled: true
-        layer.effect: ShaderEffect {
-            property color shadowColor: Theme.shadowLight
+        // Shadow using QDShadow
+        QDShadow {
+            anchors.fill: parent
+            target: bgRect
+            shadowSize: 8
+            shadowColor: Theme.shadowMedium  // 使用Theme的阴影色
         }
     }
     
@@ -41,7 +46,7 @@ Controls.ToolTip {
     contentItem: Text {
         text: control.text
         font: control.font
-        color: Theme.text
+        color: Theme.text  // 使用Theme的文字色
         wrapMode: Text.WordWrap
     }
     
@@ -51,13 +56,6 @@ Controls.ToolTip {
         NumberAnimation { 
             property: "opacity"
             from: 0.0
-            to: 1.0
-            duration: Theme.animationDurationFast
-            easing.type: Easing.OutCubic
-        }
-        NumberAnimation {
-            property: "scale"
-            from: 0.9
             to: 1.0
             duration: Theme.animationDurationFast
             easing.type: Easing.OutCubic

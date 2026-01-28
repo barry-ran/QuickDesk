@@ -603,8 +603,8 @@ void ClientManager::handleCursorShapeChanged(const QJsonObject& message)
     // Decode base64 data
     QByteArray data = QByteArray::fromBase64(base64Data.toLatin1());
     
-    LOG_DEBUG("Cursor shape changed for connection {}: {}x{} hotspot({}, {}) data size: {}",
-              connectionId.toStdString(), width, height, hotspotX, hotspotY, data.size());
+    // LOG_DEBUG("Cursor shape changed for connection {}: {}x{} hotspot({}, {}) data size: {}",
+    //           connectionId.toStdString(), width, height, hotspotX, hotspotY, data.size());
     
     emit cursorShapeChanged(connectionId, width, height, hotspotX, hotspotY, data);
 }

@@ -71,6 +71,9 @@ int main(int argc, char *argv[])
     // Register cursor image provider
     engine.addImageProvider("cursor", new quickdesk::CursorImageProvider());
     
+    // Expose version to QML
+    engine.rootContext()->setContextProperty("APP_VERSION", APP_VERSION_STR);
+    
     QFontDatabase::addApplicationFont(":/res/font/SegoeFluentIcons.ttf");
 
     // Handle QML creation failures
@@ -82,7 +85,7 @@ int main(int argc, char *argv[])
         Qt::QueuedConnection);
 
     // Load main QML
-    engine.loadFromModule("QuickDesk", "Main");
+    engine.loadFromModule("QuickDesk", "MainWindow");
 
     LOG_INFO("QuickDesk started successfully");
 

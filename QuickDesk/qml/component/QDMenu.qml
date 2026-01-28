@@ -1,7 +1,6 @@
 // Fluent Design Menu Component
 import QtQuick
 import QtQuick.Controls as Controls
-import Qt5Compat.GraphicalEffects
 
 Controls.Popup {
     id: control
@@ -23,21 +22,24 @@ Controls.Popup {
     
     // ============ Background ============
     
-    background: Rectangle {
-        color: Theme.surface
-        border.width: Theme.borderWidthThin
-        border.color: Theme.border
-        radius: Theme.radiusMedium
+    background: Item {
+        Rectangle {
+            id: menuBg
+            anchors.fill: parent
+            color: Theme.surface
+            border.width: Theme.borderWidthThin
+            border.color: Theme.border
+            radius: Theme.radiusMedium
+        }
         
-        // DropShadow effect
-        layer.enabled: true
-        layer.effect: DropShadow {
-            horizontalOffset: 0
-            verticalOffset: 2
-            radius: 12
-            samples: 25
-            color: Qt.rgba(0, 0, 0, 0.3)
-            transparentBorder: true
+        // Shadow using QDShadow
+        QDShadow {
+            anchors.fill: menuBg
+            target: menuBg
+            shadowSize: 12
+            shadowColor: Qt.rgba(0, 0, 0, 0.3)
+            z: -1
+            visible: true
         }
     }
     
@@ -80,7 +82,13 @@ Controls.Popup {
                     id: menuItemBg
                     anchors.fill: parent
                     visible: modelData && modelData.separator !== true
-                    color: menuItemArea.containsMouse ? Theme.primary : "transparent"
+                    color: {
+                        if (!menuItemArea.containsMouse) return "transparent"
+                        if (modelData && modelData.isDestructive === true) {
+                            return Qt.rgba(Theme.error.r, Theme.error.g, Theme.error.b, 0.1)
+                        }
+                        return Theme.surfaceHover
+                    }
                     radius: Theme.radiusSmall
                     
                     Behavior on color {
@@ -92,6 +100,33 @@ Controls.Popup {
                         anchors.leftMargin: Theme.spacingMedium
                         anchors.rightMargin: Theme.spacingMedium
                         spacing: Theme.spacingMedium
+                        
+                        // Icon (if provided)
+                        Item {
+                            width: Theme.iconSizeSmall
+                            height: parent.height
+                            visible: modelData && modelData.iconText !== undefined && modelData.iconText !== ""
+                            
+                            Text {
+                                anchors.centerIn: parent
+                                text: modelData ? (modelData.iconText || "") : ""
+                                font.family: "Segoe Fluent Icons"
+                                font.pixelSize: Theme.iconSizeSmall
+                                color: {
+                                    if (!modelData || (modelData.enabled !== undefined && !modelData.enabled)) {
+                                        return Theme.textDisabled
+                                    }
+                                    if (modelData && modelData.isDestructive === true) {
+                                        return Theme.error
+                                    }
+                                    return menuItemArea.containsMouse ? Theme.primary : Theme.text
+                                }
+                                
+                                Behavior on color {
+                                    ColorAnimation { duration: Theme.animationDurationFast }
+                                }
+                            }
+                        }
                         
                         // Checkbox indicator
                         Item {
@@ -105,7 +140,7 @@ Controls.Popup {
                                 text: FluentIconGlyph.checkMarkGlyph
                                 font.family: "Segoe Fluent Icons"
                                 font.pixelSize: Theme.iconSizeSmall
-                                color: menuItemArea.containsMouse ? Theme.textOnPrimary : Theme.primary
+                                color: menuItemArea.containsMouse ? Theme.primary : Theme.primary
                                 
                                 Behavior on color {
                                     ColorAnimation { duration: Theme.animationDurationFast }
@@ -115,7 +150,16 @@ Controls.Popup {
                         
                         // Text
                         Text {
-                            width: parent.width - ((modelData && modelData.checkable === true) ? Theme.iconSizeSmall + Theme.spacingMedium : 0)
+                            width: {
+                                var w = parent.width
+                                if (modelData && modelData.iconText !== undefined && modelData.iconText !== "") {
+                                    w -= Theme.iconSizeSmall + Theme.spacingMedium
+                                }
+                                if (modelData && modelData.checkable === true) {
+                                    w -= Theme.iconSizeSmall + Theme.spacingMedium
+                                }
+                                return w
+                            }
                             height: parent.height
                             text: (modelData && modelData.text) ? modelData.text : ""
                             font.family: Theme.fontFamily
@@ -124,7 +168,10 @@ Controls.Popup {
                                 if (!modelData || (modelData.enabled !== undefined && !modelData.enabled)) {
                                     return Theme.textDisabled
                                 }
-                                return menuItemArea.containsMouse ? Theme.textOnPrimary : Theme.text
+                                if (modelData && modelData.isDestructive === true) {
+                                    return Theme.error
+                                }
+                                return Theme.text
                             }
                             verticalAlignment: Text.AlignVCenter
                             elide: Text.ElideRight

@@ -1,5 +1,12 @@
 <RCC>
     <qresource prefix="/">
+        <file>qml/views/Main.qml</file>
+        <file>qml/views/MainEntry.qml</file>
+        <file>qml/views/MainWindow.qml</file>
+        <file>qml/views/RemoteWindow.qml</file>
+        <file>qml/views/Example.qml</file>
+        <file>qml/pages/RemoteControlPage.qml</file>
+        <file>qml/pages/SettingsPage.qml</file>
         <file>qml/component/FluentIconGlyph.qml</file>
         <file>qml/component/Theme.qml</file>
         <file>qml/component/QDButton.qml</file>
@@ -46,7 +53,10 @@
         <file>qml/component/QDSearchBox.qml</file>
         <file>qml/component/QDNavigationView.qml</file>
         <file>qml/component/qmldir</file>
-        <file>qml/Example.qml</file>
+        <file>qml/quickdeskcomponent/RemoteDesktopView.qml</file>
+        <file>qml/quickdeskcomponent/RemoteTab.qml</file>
+        <file>qml/quickdeskcomponent/RemoteTabBar.qml</file>
+        <file>qml/quickdeskcomponent/FloatingToolButton.qml</file>
         <file>res/font/SegoeFluentIcons.ttf</file>
     </qresource>
 </RCC>

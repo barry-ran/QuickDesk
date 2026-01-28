@@ -5,8 +5,8 @@ import QtQuick.Layouts
 import QtMultimedia
 import QuickDesk 1.0
 
-import "qml"
-import "qml/component"
+import "../"
+import "../component"
 
 ApplicationWindow {
     id: root

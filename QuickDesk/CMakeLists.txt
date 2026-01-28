@@ -81,8 +81,13 @@ qt_add_qml_module(QuickDesk
     URI QuickDesk
     VERSION 1.0
     QML_FILES 
-        Main.qml
-        qml/Example.qml
+        qml/views/Main.qml
+        qml/views/MainEntry.qml
+        qml/views/MainWindow.qml
+        qml/views/RemoteWindow.qml
+        qml/views/Example.qml
+        qml/pages/RemoteControlPage.qml
+        qml/pages/SettingsPage.qml
         qml/component/Theme.qml
         qml/component/FluentIconGlyph.qml
         qml/component/QDButton.qml
@@ -128,7 +133,10 @@ qt_add_qml_module(QuickDesk
         qml/component/QDTextArea.qml
         qml/component/QDSearchBox.qml
         qml/component/QDNavigationView.qml
-        qml/component/RemoteDesktopView.qml
+        qml/quickdeskcomponent/RemoteDesktopView.qml
+        qml/quickdeskcomponent/RemoteTab.qml
+        qml/quickdeskcomponent/RemoteTabBar.qml
+        qml/quickdeskcomponent/FloatingToolButton.qml
     RESOURCES
         res/font/SegoeFluentIcons.ttf
         qml/component/qmldir

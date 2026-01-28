@@ -53,62 +53,14 @@ Item {
                 Item {
                     id: headerContent
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 48
+                    Layout.preferredHeight: 72
                 }
                 
-                // Menu Toggle Button
+                // Separator after header
                 Rectangle {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 48
-                    Layout.leftMargin: Theme.spacingSmall
-                    Layout.rightMargin: Theme.spacingSmall
-                    color: toggleMouseArea.containsMouse ? Theme.surfaceHover : "transparent"
-                    radius: Theme.radiusSmall
-                    
-                    Behavior on color {
-                        ColorAnimation { duration: Theme.animationDurationFast }
-                    }
-                    
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.leftMargin: Theme.spacingMedium
-                        anchors.rightMargin: Theme.spacingMedium
-                        spacing: Theme.spacingMedium
-                        
-                        Text {
-                            text: FluentIconGlyph.globalNavButtonGlyph
-                            font.family: "Segoe Fluent Icons"
-                            font.pixelSize: 16
-                            color: Theme.text
-                        }
-                        
-                        Text {
-                            visible: control.isExpanded
-                            text: "菜单"
-                            font.family: Theme.fontFamily
-                            font.pixelSize: Theme.fontSizeMedium
-                            color: Theme.text
-                            Layout.fillWidth: true
-                        }
-                    }
-                    
-                    MouseArea {
-                        id: toggleMouseArea
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        
-                        onClicked: {
-                            control.isExpanded = !control.isExpanded
-                            control.toggleRequested()
-                        }
-                    }
-                }
-                
-                QDDivider {
-                    Layout.fillWidth: true
-                    Layout.leftMargin: Theme.spacingSmall
-                    Layout.rightMargin: Theme.spacingSmall
+                    Layout.preferredHeight: 1
+                    color: Theme.border
                 }
                 
                 // Menu Items ScrollView
@@ -212,17 +164,20 @@ Item {
                     }
                 }
                 
-                QDDivider {
+                Item { Layout.fillHeight: true }
+                
+                // Separator before footer
+                Rectangle {
                     Layout.fillWidth: true
-                    Layout.leftMargin: Theme.spacingSmall
-                    Layout.rightMargin: Theme.spacingSmall
+                    Layout.preferredHeight: 1
+                    color: Theme.border
                 }
                 
                 // Footer Area
                 Item {
                     id: footerContent
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 48
+                    Layout.preferredHeight: 35
                 }
             }
         }

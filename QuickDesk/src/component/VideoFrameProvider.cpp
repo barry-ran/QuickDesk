@@ -170,8 +170,8 @@ void VideoFrameProvider::onCursorShapeChanged(int width, int height,
     
     m_cursorHotspot = QPoint(hotspotX, hotspotY);
     
-    LOG_DEBUG("Cursor updated: {}x{} hotspot({}, {})", 
-              width, height, hotspotX, hotspotY);
+    // LOG_DEBUG("Cursor updated: {}x{} hotspot({}, {})", 
+    //           width, height, hotspotX, hotspotY);
     
     // Update the image provider so QML can access the cursor
     if (CursorImageProvider::instance()) {
