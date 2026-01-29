@@ -70,23 +70,23 @@ Item {
                         width: parent.width
                         spacing: Theme.spacingMedium
                         
-                        // Auto Accept Connections
+                        // Password Refresh Interval
                         Row {
                             width: parent.width
                             spacing: Theme.spacingMedium
                             
                             Column {
-                                width: parent.width - autoAcceptSwitch.width - parent.spacing
+                                width: parent.width - passwordRefreshCombo.width - parent.spacing
                                 spacing: Theme.spacingXSmall
                                 
                                 Text {
-                                    text: qsTr("Auto Accept Connections")
+                                    text: qsTr("Temporary Password Auto-Refresh")
                                     font.pixelSize: Theme.fontSizeMedium
                                     color: Theme.text
                                 }
                                 
                                 Text {
-                                    text: qsTr("No confirmation needed for incoming connections")
+                                    text: qsTr("Automatically refresh temporary password at intervals")
                                     font.pixelSize: Theme.fontSizeSmall
                                     color: Theme.textSecondary
                                     wrapMode: Text.WordWrap
@@ -94,9 +94,54 @@ Item {
                                 }
                             }
                             
-                            QDSwitch {
-                                id: autoAcceptSwitch
-                                checked: false
+                            QDComboBox {
+                                id: passwordRefreshCombo
+                                model: ListModel {
+                                    id: passwordRefreshModel
+                                }
+                                textRole: "text"
+                                valueRole: "value"
+
+                                Component.onCompleted: {
+                                    // Build interval options based on debug mode
+                                    let options = [
+                                            {"text": qsTr("Never"), "value": -1}
+                                        ]
+
+                                    // Only add 1 minute option in debug builds
+                                    if (APP_VERSION.includes("Debug") || APP_VERSION === "0.0.0.1") {
+                                        options.push({"text": qsTr("1 Minute (Debug)"), "value": 1})
+                                    }
+
+                                    options.push(
+                                                {"text": qsTr("30 Minutes"), "value": 30},
+                                                {"text": qsTr("2 Hours"), "value": 120},
+                                                {"text": qsTr("6 Hours"), "value": 360},
+                                                {"text": qsTr("12 Hours"), "value": 720},
+                                                {"text": qsTr("24 Hours"), "value": 1440}
+                                                )
+
+                                    for (let i = 0; i < options.length; i++) {
+                                        passwordRefreshModel.append(options[i])
+                                    }
+
+                                    // Set current value
+                                    currentIndex = indexOfValue(configViewModel.passwordRefreshInterval)
+                                }
+
+                                onActivated: {
+                                    // Save to config (timer will be updated automatically via signal)
+                                    configViewModel.passwordRefreshInterval = selectedValue
+                                }
+
+                                function indexOfValue(value) {
+                                    for (let i = 0; i < passwordRefreshModel.count; i++) {
+                                        if (passwordRefreshModel.get(i).value === value) {
+                                            return i
+                                        }
+                                    }
+                                    return 3  // Default to 2 hours if not found
+                                }
                             }
                         }
                     }
@@ -150,9 +195,9 @@ Item {
                                     let languages = LanguageManage.getSupportLanguages()
                                     for (let i = 0; i < languages.length; ++i) {
                                         languageModel.append({
-                                            "text": LanguageManage.getLanguageName(languages[i]), 
-                                            "value": languages[i]
-                                        })
+                                                                 "text": LanguageManage.getLanguageName(languages[i]),
+                                                                 "value": languages[i]
+                                                             })
                                     }
                                     currentIndex = indexOfValue(LanguageManage.getCurrentLanguage())
                                 }

@@ -5,6 +5,7 @@
 #define QUICKDESK_CONTROLLER_MAINCONTROLLER_H
 
 #include <QObject>
+#include <QTimer>
 #include <memory>
 
 #include "../manager/ServerManager.h"
@@ -160,6 +161,13 @@ private:
     QString m_accessCode;
     QString m_lastServerUrl;  // For auto-reconnect after Host restart
     bool m_hostWasHosting = false;  // Was Host connected before restart
+    
+    // Password auto-refresh timer
+    QTimer m_passwordRefreshTimer;
+    int m_passwordRefreshIntervalMinutes = -1;  // -1 = disabled
+    
+    void onPasswordRefreshTimer();
+    void updatePasswordRefreshTimer();
 
     void updateInitStatus(const QString& status);
     void checkInitialized();

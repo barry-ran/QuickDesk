@@ -7,6 +7,7 @@ ConfigViewModel::ConfigViewModel(QObject* parent)
 {
     connect(&core::LocalConfigCenter::instance(), &core::LocalConfigCenter::signalDarkThemeChanged, this, &ConfigViewModel::darkThemeChanged);
     connect(&core::LocalConfigCenter::instance(), &core::LocalConfigCenter::signalLanguageChanged, this, &ConfigViewModel::languageChanged);
+    connect(&core::LocalConfigCenter::instance(), &core::LocalConfigCenter::signalPasswordRefreshIntervalChanged, this, &ConfigViewModel::passwordRefreshIntervalChanged);
 }
 
 ConfigViewModel::~ConfigViewModel()
@@ -31,4 +32,14 @@ QString ConfigViewModel::language()
 void ConfigViewModel::setLanguage(const QString& value)
 {
     core::LocalConfigCenter::instance().setLanguage(value);
+}
+
+int ConfigViewModel::passwordRefreshInterval()
+{
+    return core::LocalConfigCenter::instance().passwordRefreshInterval();
+}
+
+void ConfigViewModel::setPasswordRefreshInterval(int value)
+{
+    core::LocalConfigCenter::instance().setPasswordRefreshInterval(value);
 }

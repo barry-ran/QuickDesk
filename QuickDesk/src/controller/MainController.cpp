@@ -5,6 +5,7 @@
 #include "../manager/NativeMessaging.h"
 #include "infra/env/applicationcontext.h"
 #include "infra/log/log.h"
+#include "core/localconfigcenter.h"
 #include <QTimer>
 #include <QClipboard>
 #include <QGuiApplication>
@@ -52,6 +53,19 @@ MainController::MainController(QObject* parent)
             this, &MainController::hostConnectionChanged);
     connect(m_hostManager.get(), &HostManager::signalingStateChanged,
             this, &MainController::signalingStateChanged);
+    
+    // Setup password auto-refresh timer
+    connect(&m_passwordRefreshTimer, &QTimer::timeout,
+            this, &MainController::onPasswordRefreshTimer);
+    
+    // Listen to configuration changes
+    connect(&core::LocalConfigCenter::instance(), 
+            &core::LocalConfigCenter::signalPasswordRefreshIntervalChanged,
+            this, [this](int interval) {
+        LOG_INFO("Password refresh interval changed to: {} minutes", interval);
+        m_passwordRefreshIntervalMinutes = interval;
+        updatePasswordRefreshTimer();
+    });
 }
 
 MainController::~MainController()
@@ -385,6 +399,11 @@ void MainController::onHostReady(const QString& deviceId, const QString& accessC
     m_accessCode = accessCode;
     emit deviceIdChanged();
     emit accessCodeChanged();
+    
+    // Load password refresh interval from config and start timer
+    m_passwordRefreshIntervalMinutes = core::LocalConfigCenter::instance().passwordRefreshInterval();
+    LOG_INFO("Starting password auto-refresh timer: {} minutes", m_passwordRefreshIntervalMinutes);
+    updatePasswordRefreshTimer();
 }
 
 void MainController::updateInitStatus(const QString& status)
@@ -413,6 +432,39 @@ void MainController::checkInitialized()
 QString MainController::getDefaultServerUrl() const
 {
     return m_serverManager->serverUrl();
+}
+
+void MainController::onPasswordRefreshTimer()
+{
+    LOG_INFO("Password auto-refresh timer triggered");
+    
+    // Check if host is still connected
+    if (!m_hostManager->isConnected()) {
+        LOG_WARN("Host not connected, skipping auto-refresh");
+        return;
+    }
+    
+    // Call refresh password
+    m_hostManager->refreshTempPassword();
+}
+
+void MainController::updatePasswordRefreshTimer()
+{
+    // Stop existing timer
+    m_passwordRefreshTimer.stop();
+    
+    // -1 means never refresh
+    if (m_passwordRefreshIntervalMinutes <= 0) {
+        LOG_INFO("Password auto-refresh disabled (interval: {})", m_passwordRefreshIntervalMinutes);
+        return;
+    }
+    
+    // Start timer with interval in milliseconds
+    int intervalMs = m_passwordRefreshIntervalMinutes * 60 * 1000;
+    m_passwordRefreshTimer.start(intervalMs);
+    
+    LOG_INFO("Password auto-refresh timer started: {} minutes ({} ms)", 
+             m_passwordRefreshIntervalMinutes, intervalMs);
 }
 
 } // namespace quickdesk

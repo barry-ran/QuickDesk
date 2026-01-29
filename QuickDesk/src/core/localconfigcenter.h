@@ -27,7 +27,10 @@ public:
     bool init();
 
     LCC_FUNCTION_DEC_BOOL(groupWindowVerticalScreen, GroupWindowVerticalScreen, true);
-    LCC_FUNCTION_DEC_INT(darkTheme, DarkTheme, 1);  // 0=Light, 1=Dark, 2=Auto
+
+    LCC_FUNCTION_DEC_INT(passwordRefreshInterval, PasswordRefreshInterval, 120);  // minutes: never=-1, 1, 30, 120(default), 360, 720, 1440
+    LCC_FUNCTION_DEC_INT(darkTheme, DarkTheme, 1);  // 0=Light, 1=Dark, default=Dark
+
     LCC_FUNCTION_DEC_STRING(language, Language, "Auto");
 
 private:
