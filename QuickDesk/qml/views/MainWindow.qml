@@ -144,23 +144,122 @@ ApplicationWindow {
             
             Row {
                 anchors.centerIn: parent
-                spacing: Theme.spacingSmall
+                spacing: Theme.spacingLarge
                 
-                Rectangle {
-                    width: 8
-                    height: 8
-                    radius: 4
-                    anchors.verticalCenter: parent.verticalCenter
-                    color: root.mainController && root.mainController.signalingState === "connected" ? 
-                           Theme.success : Theme.textDisabled
+                // Host Status (show server status if running, otherwise show process status)
+                Row {
+                    spacing: Theme.spacingXSmall
+                    
+                    Rectangle {
+                        width: 8
+                        height: 8
+                        radius: 4
+                        anchors.verticalCenter: parent.verticalCenter
+                        color: {
+                            if (!root.mainController) return Theme.textDisabled
+                            var processStatus = root.mainController.hostProcessStatus
+                            var serverStatus = root.mainController.hostServerStatus
+                            
+                            // If process is running, show server status color
+                            if (processStatus === ProcessStatus.Running) {
+                                if (serverStatus === ServerStatus.Connected) return Theme.success
+                                if (serverStatus === ServerStatus.Connecting || serverStatus === ServerStatus.Reconnecting) return Theme.warning
+                                if (serverStatus === ServerStatus.Failed) return Theme.error
+                                return Theme.textDisabled
+                            }
+                            
+                            // Otherwise show process status color
+                            if (processStatus === ProcessStatus.Starting || processStatus === ProcessStatus.Restarting) return Theme.warning
+                            if (processStatus === ProcessStatus.Failed) return Theme.error
+                            return Theme.textDisabled
+                        }
+                    }
+                    
+                    Text {
+                        text: {
+                            if (!root.mainController) return qsTr("Host") + ": " + qsTr("Unknown")
+                            var processStatus = root.mainController.hostProcessStatus
+                            var serverStatus = root.mainController.hostServerStatus
+                            
+                            // If process is running, show server status
+                            if (processStatus === ProcessStatus.Running) {
+                                if (serverStatus === ServerStatus.Disconnected) return qsTr("Host") + ": " + qsTr("Disconnected")
+                                if (serverStatus === ServerStatus.Connecting) return qsTr("Host") + ": " + qsTr("Connecting")
+                                if (serverStatus === ServerStatus.Connected) return qsTr("Host") + ": " + qsTr("Connected")
+                                if (serverStatus === ServerStatus.Failed) return qsTr("Host") + ": " + qsTr("Connection Failed")
+                                if (serverStatus === ServerStatus.Reconnecting) return qsTr("Host") + ": " + qsTr("Reconnecting")
+                                return qsTr("Host") + ": " + qsTr("Unknown")
+                            }
+                            
+                            // Otherwise show process status
+                            if (processStatus === ProcessStatus.NotStarted) return qsTr("Host") + ": " + qsTr("Not Started")
+                            if (processStatus === ProcessStatus.Starting) return qsTr("Host") + ": " + qsTr("Starting")
+                            if (processStatus === ProcessStatus.Failed) return qsTr("Host") + ": " + qsTr("Start Failed")
+                            if (processStatus === ProcessStatus.Restarting) return qsTr("Host") + ": " + qsTr("Restarting")
+                            return qsTr("Host") + ": " + qsTr("Unknown")
+                        }
+                        font.pixelSize: Theme.fontSizeSmall
+                        color: Theme.textSecondary
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
                 }
                 
-                Text {
-                    text: root.mainController && root.mainController.signalingState === "connected" ? 
-                          qsTr("Online") : qsTr("Offline")
-                    font.pixelSize: Theme.fontSizeSmall
-                    color: Theme.textSecondary
-                    anchors.verticalCenter: parent.verticalCenter
+                // Client Status (show server status if running, otherwise show process status)
+                Row {
+                    spacing: Theme.spacingXSmall
+                    
+                    Rectangle {
+                        width: 8
+                        height: 8
+                        radius: 4
+                        anchors.verticalCenter: parent.verticalCenter
+                        color: {
+                            if (!root.mainController) return Theme.textDisabled
+                            var processStatus = root.mainController.clientProcessStatus
+                            var serverStatus = root.mainController.clientServerStatus
+                            
+                            // If process is running, show server status color
+                            if (processStatus === ProcessStatus.Running) {
+                                if (serverStatus === ServerStatus.Connected) return Theme.success
+                                if (serverStatus === ServerStatus.Connecting || serverStatus === ServerStatus.Reconnecting) return Theme.warning
+                                if (serverStatus === ServerStatus.Failed) return Theme.error
+                                return Theme.textDisabled
+                            }
+                            
+                            // Otherwise show process status color
+                            if (processStatus === ProcessStatus.Starting || processStatus === ProcessStatus.Restarting) return Theme.warning
+                            if (processStatus === ProcessStatus.Failed) return Theme.error
+                            return Theme.textDisabled
+                        }
+                    }
+                    
+                    Text {
+                        text: {
+                            if (!root.mainController) return qsTr("Client") + ": " + qsTr("Unknown")
+                            var processStatus = root.mainController.clientProcessStatus
+                            var serverStatus = root.mainController.clientServerStatus
+                            
+                            // If process is running, show server status
+                            if (processStatus === ProcessStatus.Running) {
+                                if (serverStatus === ServerStatus.Disconnected) return qsTr("Client") + ": " + qsTr("Disconnected")
+                                if (serverStatus === ServerStatus.Connecting) return qsTr("Client") + ": " + qsTr("Connecting")
+                                if (serverStatus === ServerStatus.Connected) return qsTr("Client") + ": " + qsTr("Connected")
+                                if (serverStatus === ServerStatus.Failed) return qsTr("Client") + ": " + qsTr("Connection Failed")
+                                if (serverStatus === ServerStatus.Reconnecting) return qsTr("Client") + ": " + qsTr("Reconnecting")
+                                return qsTr("Client") + ": " + qsTr("Unknown")
+                            }
+                            
+                            // Otherwise show process status
+                            if (processStatus === ProcessStatus.NotStarted) return qsTr("Client") + ": " + qsTr("Not Started")
+                            if (processStatus === ProcessStatus.Starting) return qsTr("Client") + ": " + qsTr("Starting")
+                            if (processStatus === ProcessStatus.Failed) return qsTr("Client") + ": " + qsTr("Start Failed")
+                            if (processStatus === ProcessStatus.Restarting) return qsTr("Client") + ": " + qsTr("Restarting")
+                            return qsTr("Client") + ": " + qsTr("Unknown")
+                        }
+                        font.pixelSize: Theme.fontSizeSmall
+                        color: Theme.textSecondary
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
                 }
             }
         }

@@ -60,6 +60,54 @@
         <source>Offline</source>
         <translation>Offline</translation>
     </message>
+    <message>
+        <source>Host</source>
+        <translation>Host</translation>
+    </message>
+    <message>
+        <source>Client</source>
+        <translation>Client</translation>
+    </message>
+    <message>
+        <source>Unknown</source>
+        <translation>Unknown</translation>
+    </message>
+    <message>
+        <source>Not Started</source>
+        <translation>Not Started</translation>
+    </message>
+    <message>
+        <source>Starting</source>
+        <translation>Starting</translation>
+    </message>
+    <message>
+        <source>Start Failed</source>
+        <translation>Start Failed</translation>
+    </message>
+    <message>
+        <source>Restarting</source>
+        <translation>Restarting</translation>
+    </message>
+    <message>
+        <source>Disconnected</source>
+        <translation>Disconnected</translation>
+    </message>
+    <message>
+        <source>Connecting</source>
+        <translation>Connecting</translation>
+    </message>
+    <message>
+        <source>Connected</source>
+        <translation>Connected</translation>
+    </message>
+    <message>
+        <source>Connection Failed</source>
+        <translation>Connection Failed</translation>
+    </message>
+    <message>
+        <source>Reconnecting</source>
+        <translation>Reconnecting</translation>
+    </message>
 </context>
 <context>
     <name>RemoteControlPage</name>

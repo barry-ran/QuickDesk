@@ -30,6 +30,10 @@ set(CONTROLLER_HEADERS
     src/controller/MainController.h
 )
 
+set(COMMON_HEADERS
+    src/common/ProcessStatus.h
+)
+
 set(COMPONENT_SOURCES
     src/component/VideoFrameProvider.cpp
     src/component/KeycodeMapper.cpp
@@ -77,6 +81,7 @@ set(ALL_SOURCES
 set(ALL_HEADERS
     ${MANAGER_HEADERS}
     ${CONTROLLER_HEADERS}
+    ${COMMON_HEADERS}
     ${COMPONENT_HEADERS}
 )
 

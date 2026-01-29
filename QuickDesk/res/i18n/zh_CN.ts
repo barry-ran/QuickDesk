@@ -60,6 +60,54 @@
         <source>Offline</source>
         <translation>离线</translation>
     </message>
+    <message>
+        <source>Host</source>
+        <translation>主机</translation>
+    </message>
+    <message>
+        <source>Client</source>
+        <translation>客户端</translation>
+    </message>
+    <message>
+        <source>Unknown</source>
+        <translation>未知</translation>
+    </message>
+    <message>
+        <source>Not Started</source>
+        <translation>未启动</translation>
+    </message>
+    <message>
+        <source>Starting</source>
+        <translation>启动中</translation>
+    </message>
+    <message>
+        <source>Start Failed</source>
+        <translation>启动失败</translation>
+    </message>
+    <message>
+        <source>Restarting</source>
+        <translation>重启中</translation>
+    </message>
+    <message>
+        <source>Disconnected</source>
+        <translation>未连接</translation>
+    </message>
+    <message>
+        <source>Connecting</source>
+        <translation>连接中</translation>
+    </message>
+    <message>
+        <source>Connected</source>
+        <translation>已连接</translation>
+    </message>
+    <message>
+        <source>Connection Failed</source>
+        <translation>连接失败</translation>
+    </message>
+    <message>
+        <source>Reconnecting</source>
+        <translation>重连中</translation>
+    </message>
 </context>
 <context>
     <name>RemoteControlPage</name>

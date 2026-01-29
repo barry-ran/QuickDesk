@@ -24,6 +24,7 @@
 #include "component/CursorImageProvider.h"
 #include "viewmodel/configviewmodel.h"
 #include "language/languagemanage.h"
+#include "common/ProcessStatus.h"
 
 int main(int argc, char *argv[])
 {
@@ -63,6 +64,12 @@ int main(int argc, char *argv[])
     qmlRegisterUncreatableType<quickdesk::SharedMemoryManager>("QuickDesk", 1, 0, "SharedMemoryManager",
         "SharedMemoryManager is accessed through ClientManager");
     qmlRegisterType<quickdesk::VideoFrameProvider>("QuickDesk", 1, 0, "VideoFrameProvider");
+    
+    // Register enums for QML
+    qmlRegisterUncreatableType<quickdesk::ProcessStatus>("QuickDesk", 1, 0, "ProcessStatus",
+        "ProcessStatus is an enum container");
+    qmlRegisterUncreatableType<quickdesk::ServerStatus>("QuickDesk", 1, 0, "ServerStatus",
+        "ServerStatus is an enum container");
     
     // Register KeycodeMapper as singleton
     qmlRegisterSingletonType<quickdesk::KeycodeMapper>("QuickDesk", 1, 0, "KeycodeMapper",

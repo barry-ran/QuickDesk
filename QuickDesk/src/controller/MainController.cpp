@@ -55,6 +55,65 @@ MainController::MainController(QObject* parent)
     connect(m_hostManager.get(), &HostManager::signalingStateChanged,
             this, &MainController::signalingStateChanged);
     
+    // Listen to signaling state to update host server status
+    connect(m_hostManager.get(), &HostManager::signalingStateChanged,
+            this, [this]() {
+        QString state = m_hostManager->signalingState();
+        if (state == "connected") {
+            m_hostServerStatus = ServerStatus::Connected;
+        } else if (state == "connecting") {
+            m_hostServerStatus = ServerStatus::Connecting;
+        } else if (state == "disconnected") {
+            m_hostServerStatus = ServerStatus::Disconnected;
+        } else if (state == "failed") {
+            m_hostServerStatus = ServerStatus::Failed;
+        } else if (state == "reconnecting") {
+            m_hostServerStatus = ServerStatus::Reconnecting;
+        }
+        emit hostServerStatusChanged();
+    });
+    
+    // Listen to Client signaling state to update client server status (with connectionId)
+    connect(m_clientManager.get(), &ClientManager::signalingStateChanged,
+            this, &MainController::onClientSignalingStateChanged);
+    
+    // Listen to Client connection removed to update primary connection
+    connect(m_clientManager.get(), &ClientManager::connectionRemoved,
+            this, [this](const QString& connectionId) {
+        // If the removed connection was primary, reset and pick new primary
+        if (connectionId == m_primaryConnectionId) {
+            m_primaryConnectionId.clear();
+            
+            // If there are other connections, pick the first one as new primary
+            QStringList connIds = m_clientManager->connectionIds();
+            if (!connIds.isEmpty()) {
+                QString newPrimary = connIds.first();
+                m_primaryConnectionId = newPrimary;
+                LOG_INFO("Primary connection removed, new primary: {}", newPrimary.toStdString());
+                
+                // Update status with new primary's signaling state
+                QString state = m_clientManager->getSignalingState(newPrimary);
+                if (state == "connected") {
+                    m_clientServerStatus = ServerStatus::Connected;
+                } else if (state == "connecting") {
+                    m_clientServerStatus = ServerStatus::Connecting;
+                } else if (state == "disconnected") {
+                    m_clientServerStatus = ServerStatus::Disconnected;
+                } else if (state == "failed") {
+                    m_clientServerStatus = ServerStatus::Failed;
+                } else if (state == "reconnecting") {
+                    m_clientServerStatus = ServerStatus::Reconnecting;
+                }
+                emit clientServerStatusChanged();
+            } else {
+                // No connections left, set to disconnected
+                LOG_INFO("Primary connection removed, no more connections");
+                m_clientServerStatus = ServerStatus::Disconnected;
+                emit clientServerStatusChanged();
+            }
+        }
+    });
+    
     // Listen to access code changes to save when in "never refresh" mode
     connect(m_hostManager.get(), &HostManager::accessCodeChanged,
             this, [this]() {
@@ -89,7 +148,12 @@ MainController::~MainController()
 void MainController::initialize()
 {
     LOG_INFO("MainController::initialize()");
-    updateInitStatus("正在初始化...");
+    
+    // Set host and client process status to Starting
+    m_hostProcessStatus = ProcessStatus::Starting;
+    m_clientProcessStatus = ProcessStatus::Starting;
+    emit hostProcessStatusChanged();
+    emit clientProcessStatusChanged();
 
     // Auto-detect executable paths
     if (!m_processManager->autoDetectPaths()) {
@@ -101,23 +165,20 @@ void MainController::initialize()
     m_processManager->setLogDir(logDir);
 
     // Start Host process
-    updateInitStatus("启动 Host 进程...");
     if (!m_processManager->startHostProcess()) {
-        updateInitStatus("Host 进程启动失败");
+        m_hostProcessStatus = ProcessStatus::Failed;
+        emit hostProcessStatusChanged();
         emit initializationFailed("Failed to start Host process");
         return;
     }
 
     // Start Client process
-    updateInitStatus("启动 Client 进程...");
     if (!m_processManager->startClientProcess()) {
-        updateInitStatus("Client 进程启动失败");
+        m_clientProcessStatus = ProcessStatus::Failed;
+        emit clientProcessStatusChanged();
         emit initializationFailed("Failed to start Client process");
         return;
     }
-
-    // Initialization will complete when both processes are ready
-    updateInitStatus("等待进程就绪...");
 }
 
 void MainController::shutdown()
@@ -128,9 +189,6 @@ void MainController::shutdown()
     m_clientManager->disconnectAll();
     
     m_processManager->stopAllProcesses();
-
-    m_isInitialized = false;
-    emit initializedChanged();
 }
 
 QString MainController::connectToRemoteHost(const QString& deviceId,
@@ -190,16 +248,6 @@ void MainController::copyDeviceInfo()
     
     QString info = QString("设备ID: %1\n访问码: %2").arg(deviceId, accessCode);
     copyToClipboard(info);
-}
-
-bool MainController::isInitialized() const
-{
-    return m_isInitialized;
-}
-
-QString MainController::initStatus() const
-{
-    return m_initStatus;
 }
 
 ServerManager* MainController::serverManager() const
@@ -281,36 +329,24 @@ QString MainController::signalingStatusText() const
     return state;
 }
 
-QString MainController::hostProcessStatus() const
+ProcessStatus::Status MainController::hostProcessStatus() const
 {
-    QString status = m_processManager->hostStatus();
-    if (status == "running") {
-        return "运行中";
-    } else if (status == "stopped") {
-        return "已停止";
-    } else if (status == "failed") {
-        return "启动失败";
-    } else if (status.startsWith("restarting:")) {
-        int count = status.mid(11).toInt();
-        return QString("重启中(第%1次)").arg(count);
-    }
-    return status;
+    return m_hostProcessStatus;
 }
 
-QString MainController::clientProcessStatus() const
+ServerStatus::Status MainController::hostServerStatus() const
 {
-    QString status = m_processManager->clientStatus();
-    if (status == "running") {
-        return "运行中";
-    } else if (status == "stopped") {
-        return "已停止";
-    } else if (status == "failed") {
-        return "启动失败";
-    } else if (status.startsWith("restarting:")) {
-        int count = status.mid(11).toInt();
-        return QString("重启中(第%1次)").arg(count);
-    }
-    return status;
+    return m_hostServerStatus;
+}
+
+ProcessStatus::Status MainController::clientProcessStatus() const
+{
+    return m_clientProcessStatus;
+}
+
+ServerStatus::Status MainController::clientServerStatus() const
+{
+    return m_clientServerStatus;
 }
 
 QString MainController::nextAccessCodeRefreshTime() const
@@ -331,6 +367,10 @@ void MainController::onHostProcessStarted()
 {
     LOG_INFO("Host process started");
     
+    // Update status
+    m_hostProcessStatus = ProcessStatus::Running;
+    emit hostProcessStatusChanged();
+    
     // Reset retry count on successful start
     m_processManager->resetHostRetryCount();
     
@@ -340,10 +380,13 @@ void MainController::onHostProcessStarted()
     // Send hello to verify communication and connect to signaling server
     QTimer::singleShot(500, this, [this]() {
         m_hostManager->sendHello();
-        checkInitialized();
         
         // Auto-connect to signaling server
         QTimer::singleShot(1000, this, [this]() {
+            // Update server status to Connecting
+            m_hostServerStatus = ServerStatus::Connecting;
+            emit hostServerStatusChanged();
+            
             // Check if we should use saved access code (never refresh mode)
             QString savedAccessCode;
             int interval = core::LocalConfigCenter::instance().accessCodeRefreshInterval();
@@ -364,6 +407,13 @@ void MainController::onHostProcessStarted()
 void MainController::onHostProcessStopped(int exitCode)
 {
     LOG_INFO("Host process stopped with exit code: {}", exitCode);
+    
+    // Update status
+    m_hostProcessStatus = ProcessStatus::NotStarted;
+    m_hostServerStatus = ServerStatus::Disconnected;
+    emit hostProcessStatusChanged();
+    emit hostServerStatusChanged();
+    
     m_hostManager->setMessaging(nullptr);
     // Clear UI state (will be restored after restart)
     m_deviceId.clear();
@@ -375,14 +425,21 @@ void MainController::onHostProcessStopped(int exitCode)
 void MainController::onHostProcessError(const QString& error)
 {
     LOG_WARN("Host process error: {}", error.toStdString());
+    
+    // Update status
+    m_hostProcessStatus = ProcessStatus::Failed;
+    emit hostProcessStatusChanged();
+    
     emit initializationFailed(QString("Host error: %1").arg(error));
 }
 
 void MainController::onHostProcessRestarting(int retryCount, int maxRetries)
 {
     LOG_INFO("Host process restarting, attempt {} of {}", retryCount, maxRetries);
-    updateInitStatus(QString("Host 进程重启中 (%1/%2)...").arg(retryCount).arg(maxRetries));
-    emit hostProcessRestarting(retryCount, maxRetries);
+    
+    // Update status
+    m_hostProcessStatus = ProcessStatus::Restarting;
+    emit hostProcessStatusChanged();
 }
 
 void MainController::onHostStatusChanged()
@@ -394,6 +451,10 @@ void MainController::onClientProcessStarted()
 {
     LOG_INFO("Client process started");
     
+    // Update status
+    m_clientProcessStatus = ProcessStatus::Running;
+    emit clientProcessStatusChanged();
+    
     // Reset retry count on successful start
     m_processManager->resetClientRetryCount();
     
@@ -403,31 +464,81 @@ void MainController::onClientProcessStarted()
     // Send hello to verify communication
     QTimer::singleShot(500, this, [this]() {
         m_clientManager->sendHello();
-        checkInitialized();
     });
 }
 
 void MainController::onClientProcessStopped(int exitCode)
 {
     LOG_INFO("Client process stopped with exit code: {}", exitCode);
+    
+    // Update status
+    m_clientProcessStatus = ProcessStatus::NotStarted;
+    m_clientServerStatus = ServerStatus::Disconnected;
+    emit clientProcessStatusChanged();
+    emit clientServerStatusChanged();
+    
     m_clientManager->setMessaging(nullptr);
 }
 
 void MainController::onClientProcessError(const QString& error)
 {
     LOG_WARN("Client process error: {}", error.toStdString());
+    
+    // Update status
+    m_clientProcessStatus = ProcessStatus::Failed;
+    emit clientProcessStatusChanged();
+    
     emit initializationFailed(QString("Client error: %1").arg(error));
 }
 
 void MainController::onClientProcessRestarting(int retryCount, int maxRetries)
 {
     LOG_INFO("Client process restarting, attempt {} of {}", retryCount, maxRetries);
-    emit clientProcessRestarting(retryCount, maxRetries);
+    
+    // Update status
+    m_clientProcessStatus = ProcessStatus::Restarting;
+    emit clientProcessStatusChanged();
 }
 
 void MainController::onClientStatusChanged()
 {
     emit clientProcessStatusChanged();
+}
+
+void MainController::onClientSignalingStateChanged(const QString& connectionId,
+                                                    const QString& state,
+                                                    int retryCount,
+                                                    int nextRetryIn,
+                                                    const QString& error)
+{
+    Q_UNUSED(retryCount);
+    Q_UNUSED(nextRetryIn);
+    Q_UNUSED(error);
+    
+    LOG_INFO("Client signaling state changed: connection={}, state={}",
+             connectionId.toStdString(), state.toStdString());
+    
+    // If this is the first connection, set it as primary
+    if (m_primaryConnectionId.isEmpty() && !connectionId.isEmpty()) {
+        m_primaryConnectionId = connectionId;
+        LOG_INFO("Set primary connection for client signaling status: {}", connectionId.toStdString());
+    }
+    
+    // Only update global client server status if it's the primary connection
+    if (connectionId == m_primaryConnectionId) {
+        if (state == "connected") {
+            m_clientServerStatus = ServerStatus::Connected;
+        } else if (state == "connecting") {
+            m_clientServerStatus = ServerStatus::Connecting;
+        } else if (state == "disconnected") {
+            m_clientServerStatus = ServerStatus::Disconnected;
+        } else if (state == "failed") {
+            m_clientServerStatus = ServerStatus::Failed;
+        } else if (state == "reconnecting") {
+            m_clientServerStatus = ServerStatus::Reconnecting;
+        }
+        emit clientServerStatusChanged();
+    }
 }
 
 void MainController::onHostReady(const QString& deviceId, const QString& accessCode)
@@ -454,26 +565,6 @@ void MainController::onHostReady(const QString& deviceId, const QString& accessC
         emit deviceIdChanged();
         emit accessCodeChanged();
     });
-}
-
-void MainController::updateInitStatus(const QString& status)
-{
-    if (m_initStatus != status) {
-        m_initStatus = status;
-        emit initStatusChanged();
-    }
-}
-
-void MainController::checkInitialized()
-{
-    // Check if both processes are running
-    if (m_processManager->isHostRunning() && m_processManager->isClientRunning()) {
-        if (!m_isInitialized) {
-            m_isInitialized = true;
-            updateInitStatus("已就绪");
-            emit initializedChanged();
-        }
-    }
 }
 
 QString MainController::getDefaultServerUrl() const

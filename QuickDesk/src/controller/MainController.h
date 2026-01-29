@@ -11,6 +11,7 @@
 #include "../manager/ServerManager.h"
 #include "../manager/HostManager.h"
 #include "../manager/ClientManager.h"
+#include "../common/ProcessStatus.h"
 
 namespace quickdesk {
 
@@ -23,13 +24,17 @@ class ProcessManager;
  */
 class MainController : public QObject {
     Q_OBJECT
-    Q_PROPERTY(bool isInitialized READ isInitialized NOTIFY initializedChanged)
-    Q_PROPERTY(QString initStatus READ initStatus NOTIFY initStatusChanged)
     Q_PROPERTY(ServerManager* serverManager READ serverManager CONSTANT)
     Q_PROPERTY(HostManager* hostManager READ hostManager CONSTANT)
     Q_PROPERTY(ClientManager* clientManager READ clientManager CONSTANT)
-    Q_PROPERTY(QString hostProcessStatus READ hostProcessStatus NOTIFY hostProcessStatusChanged)
-    Q_PROPERTY(QString clientProcessStatus READ clientProcessStatus NOTIFY clientProcessStatusChanged)
+    
+    // Host status
+    Q_PROPERTY(ProcessStatus::Status hostProcessStatus READ hostProcessStatus NOTIFY hostProcessStatusChanged)
+    Q_PROPERTY(ServerStatus::Status hostServerStatus READ hostServerStatus NOTIFY hostServerStatusChanged)
+    
+    // Client status
+    Q_PROPERTY(ProcessStatus::Status clientProcessStatus READ clientProcessStatus NOTIFY clientProcessStatusChanged)
+    Q_PROPERTY(ServerStatus::Status clientServerStatus READ clientServerStatus NOTIFY clientServerStatusChanged)
     
     // Access code auto-refresh info
     Q_PROPERTY(QString nextAccessCodeRefreshTime READ nextAccessCodeRefreshTime NOTIFY nextAccessCodeRefreshTimeChanged)
@@ -96,9 +101,6 @@ public:
     Q_INVOKABLE void copyDeviceInfo();
 
     // Property getters
-    bool isInitialized() const;
-    QString initStatus() const;
-    
     ServerManager* serverManager() const;
     HostManager* hostManager() const;
     ClientManager* clientManager() const;
@@ -115,25 +117,25 @@ public:
     QString signalingError() const;
     QString signalingStatusText() const;
     
-    // Process status
-    QString hostProcessStatus() const;
-    QString clientProcessStatus() const;
+    // Status getters
+    ProcessStatus::Status hostProcessStatus() const;
+    ServerStatus::Status hostServerStatus() const;
+    ProcessStatus::Status clientProcessStatus() const;
+    ServerStatus::Status clientServerStatus() const;
     
     // Access code auto-refresh info
     QString nextAccessCodeRefreshTime() const;
 
 signals:
-    void initializedChanged();
-    void initStatusChanged();
     void initializationFailed(const QString& error);
     void deviceIdChanged();
     void accessCodeChanged();
     void hostConnectionChanged();
     void signalingStateChanged();
     void hostProcessStatusChanged();
+    void hostServerStatusChanged();
     void clientProcessStatusChanged();
-    void hostProcessRestarting(int retryCount, int maxRetries);
-    void clientProcessRestarting(int retryCount, int maxRetries);
+    void clientServerStatusChanged();
     void nextAccessCodeRefreshTimeChanged();
 
 private slots:
@@ -148,7 +150,12 @@ private slots:
     void onClientProcessError(const QString& error);
     void onClientProcessRestarting(int retryCount, int maxRetries);
     void onClientStatusChanged();
-
+    void onClientSignalingStateChanged(const QString& connectionId,
+                                       const QString& state,
+                                       int retryCount,
+                                       int nextRetryIn,
+                                       const QString& error);
+    
     void onHostReady(const QString& deviceId, const QString& accessCode);
 
 private:
@@ -157,10 +164,17 @@ private:
     std::unique_ptr<HostManager> m_hostManager;
     std::unique_ptr<ClientManager> m_clientManager;
 
-    bool m_isInitialized = false;
-    QString m_initStatus = "未初始化";
     QString m_deviceId;
     QString m_accessCode;
+    
+    // Host status
+    ProcessStatus::Status m_hostProcessStatus = ProcessStatus::NotStarted;
+    ServerStatus::Status m_hostServerStatus = ServerStatus::Disconnected;
+    
+    // Client status
+    ProcessStatus::Status m_clientProcessStatus = ProcessStatus::NotStarted;
+    ServerStatus::Status m_clientServerStatus = ServerStatus::Disconnected;
+    QString m_primaryConnectionId;  // Track primary connection for client signaling status
     
     // Access code auto-refresh timer
     QTimer m_accessCodeRefreshTimer;
@@ -169,9 +183,6 @@ private:
     
     void onAccessCodeRefreshTimer();
     void updateAccessCodeRefreshTimer();
-
-    void updateInitStatus(const QString& status);
-    void checkInitialized();
     QString getDefaultServerUrl() const;
 };
 

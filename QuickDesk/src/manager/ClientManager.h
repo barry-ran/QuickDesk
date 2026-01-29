@@ -24,10 +24,16 @@ struct ConnectionInfo {
     QString connectionId;
     QString deviceId;
     QString deviceName;
-    QString state;  // connecting, connected, disconnected, failed
+    QString state;  // Connection state: "connecting", "connected", "disconnected", "failed"
     QString connectedAt;
     int width = 0;
     int height = 0;
+    
+    // Signaling state for this connection
+    QString signalingState = "disconnected";
+    int signalingRetryCount = 0;
+    int signalingNextRetryIn = 0;
+    QString signalingError;
 };
 
 /**
@@ -79,6 +85,12 @@ public:
     ConnectionInfo getConnection(const QString& connectionId) const;
     QStringList connectionIds() const;
     Q_INVOKABLE QString getConnectionState(const QString& connectionId) const;
+    
+    // Get signaling state for a specific connection
+    Q_INVOKABLE QString getSignalingState(const QString& connectionId) const;
+    Q_INVOKABLE int getSignalingRetryCount(const QString& connectionId) const;
+    Q_INVOKABLE int getSignalingNextRetryIn(const QString& connectionId) const;
+    Q_INVOKABLE QString getSignalingError(const QString& connectionId) const;
 
     // Shared memory access
     SharedMemoryManager* sharedMemoryManager() const { return m_sharedMemoryManager.get(); }
@@ -92,6 +104,14 @@ signals:
     void activeConnectionChanged();
     
     void helloResponseReceived(const QString& version);
+    
+    // Signaling state changed for a specific connection
+    void signalingStateChanged(const QString& connectionId,
+                               const QString& state,
+                               int retryCount,
+                               int nextRetryIn,
+                               const QString& error);
+    
     void connectionStateChanged(const QString& connectionId, 
                                 const QString& state,
                                 const QJsonObject& hostInfo);
@@ -115,12 +135,13 @@ private slots:
 private:
     NativeMessaging* m_messaging = nullptr;
     std::unique_ptr<SharedMemoryManager> m_sharedMemoryManager;
-    QMap<QString, ConnectionInfo> m_connections;
+    QMap<QString, ConnectionInfo> m_connections;  // Each connection has its own signaling state
     QString m_activeConnectionId;
     int m_connectionCounter = 0;
 
     QString generateConnectionId();
     void handleHelloResponse(const QJsonObject& message);
+    void handleSignalingStateChanged(const QJsonObject& message);
     void handleConnectToHostResponse(const QJsonObject& message);
     void handleConnectionStateChanged(const QJsonObject& message);
     void handleConnectionListChanged(const QJsonObject& message);

@@ -277,6 +277,38 @@ QString ClientManager::getConnectionState(const QString& connectionId) const
     return "";
 }
 
+QString ClientManager::getSignalingState(const QString& connectionId) const
+{
+    if (m_connections.contains(connectionId)) {
+        return m_connections[connectionId].signalingState;
+    }
+    return "disconnected";
+}
+
+int ClientManager::getSignalingRetryCount(const QString& connectionId) const
+{
+    if (m_connections.contains(connectionId)) {
+        return m_connections[connectionId].signalingRetryCount;
+    }
+    return 0;
+}
+
+int ClientManager::getSignalingNextRetryIn(const QString& connectionId) const
+{
+    if (m_connections.contains(connectionId)) {
+        return m_connections[connectionId].signalingNextRetryIn;
+    }
+    return 0;
+}
+
+QString ClientManager::getSignalingError(const QString& connectionId) const
+{
+    if (m_connections.contains(connectionId)) {
+        return m_connections[connectionId].signalingError;
+    }
+    return QString();
+}
+
 void ClientManager::onMessageReceived(const QJsonObject& message)
 {
     QString type = message["type"].toString();
@@ -287,6 +319,8 @@ void ClientManager::onMessageReceived(const QJsonObject& message)
 
     if (type == "helloResponse") {
         handleHelloResponse(message);
+    } else if (type == "signalingStateChanged") {
+        handleSignalingStateChanged(message);
     } else if (type == "connectToHostResponse") {
         handleConnectToHostResponse(message);
     } else if (type == "connectionStateChanged") {
@@ -340,6 +374,31 @@ void ClientManager::handleHelloResponse(const QJsonObject& message)
     QString version = message["version"].toString();
     LOG_INFO("Client hello response, version: {}", version.toStdString());
     emit helloResponseReceived(version);
+}
+
+void ClientManager::handleSignalingStateChanged(const QJsonObject& message)
+{
+    QString connectionId = message["connectionId"].toString();
+    QString state = message["state"].toString();
+    int retryCount = message["retryCount"].toInt();
+    int nextRetryIn = message["nextRetryIn"].toInt();
+    QString error = message["error"].toString();
+
+    LOG_INFO("Client signaling state changed: connection={}, state={}, retry={}, next={}s, error={}",
+             connectionId.toStdString(), state.toStdString(), retryCount, nextRetryIn, error.toStdString());
+
+    // Update signaling state for this specific connection
+    if (m_connections.contains(connectionId)) {
+        m_connections[connectionId].signalingState = state;
+        m_connections[connectionId].signalingRetryCount = retryCount;
+        m_connections[connectionId].signalingNextRetryIn = nextRetryIn;
+        m_connections[connectionId].signalingError = error;
+        
+        // Emit signal with connection ID
+        emit signalingStateChanged(connectionId, state, retryCount, nextRetryIn, error);
+    } else {
+        LOG_WARN("Signaling state changed for unknown connection: {}", connectionId.toStdString());
+    }
 }
 
 void ClientManager::handleConnectToHostResponse(const QJsonObject& message)
