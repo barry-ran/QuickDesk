@@ -30,6 +30,9 @@ class MainController : public QObject {
     Q_PROPERTY(ClientManager* clientManager READ clientManager CONSTANT)
     Q_PROPERTY(QString hostProcessStatus READ hostProcessStatus NOTIFY hostProcessStatusChanged)
     Q_PROPERTY(QString clientProcessStatus READ clientProcessStatus NOTIFY clientProcessStatusChanged)
+    
+    // Password auto-refresh info
+    Q_PROPERTY(QString nextPasswordRefreshTime READ nextPasswordRefreshTime NOTIFY nextPasswordRefreshTimeChanged)
 
     // Host properties (convenience for QML)
     Q_PROPERTY(QString deviceId READ deviceId NOTIFY deviceIdChanged)
@@ -86,6 +89,11 @@ public:
      * @brief Refresh temporary password
      */
     Q_INVOKABLE void refreshTempPassword();
+    
+    /**
+     * @brief Reset password refresh timer (called after manual refresh)
+     */
+    void resetPasswordRefreshTimer();
 
     /**
      * @brief Copy text to clipboard
@@ -120,6 +128,9 @@ public:
     // Process status
     QString hostProcessStatus() const;
     QString clientProcessStatus() const;
+    
+    // Password auto-refresh info
+    QString nextPasswordRefreshTime() const;
 
 signals:
     void initializedChanged();
@@ -133,6 +144,7 @@ signals:
     void clientProcessStatusChanged();
     void hostProcessRestarting(int retryCount, int maxRetries);
     void clientProcessRestarting(int retryCount, int maxRetries);
+    void nextPasswordRefreshTimeChanged();
 
 private slots:
     void onHostProcessStarted();
@@ -165,6 +177,7 @@ private:
     // Password auto-refresh timer
     QTimer m_passwordRefreshTimer;
     int m_passwordRefreshIntervalMinutes = -1;  // -1 = disabled
+    QDateTime m_nextRefreshTime;  // Next scheduled refresh time
     
     void onPasswordRefreshTimer();
     void updatePasswordRefreshTimer();

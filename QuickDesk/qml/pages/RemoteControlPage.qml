@@ -95,12 +95,25 @@ Item {
                             color: Theme.border
                         }
                         
-                        // Temporary Password
-                        Text {
+                        // Temporary Password Header with Auto-refresh Info
+                        Row {
                             width: parent.width
-                            text: qsTr("Temporary Password")
-                            font.pixelSize: Theme.fontSizeSmall
-                            color: Theme.textSecondary
+                            spacing: Theme.spacingXXLarge
+                            
+                            Text {
+                                text: qsTr("Temporary Password")
+                                font.pixelSize: Theme.fontSizeSmall
+                                color: Theme.textSecondary
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+                            
+                            Text {
+                                text: qsTr("Auto-refresh: ") + (mainController.nextPasswordRefreshTime || qsTr("Never"))
+                                font.pixelSize: Theme.fontSizeSmall - 1
+                                color: Theme.textSecondary
+                                anchors.verticalCenter: parent.verticalCenter
+                                visible: mainController.accessCode
+                            }
                         }
                         
                         Row {

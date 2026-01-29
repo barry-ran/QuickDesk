@@ -9,6 +9,7 @@
 #include <QTimer>
 #include <QClipboard>
 #include <QGuiApplication>
+#include <QDateTime>
 
 namespace quickdesk {
 
@@ -152,6 +153,23 @@ void MainController::disconnectFromRemoteHost(const QString& connectionId)
 void MainController::refreshTempPassword()
 {
     m_hostManager->refreshTempPassword();
+    
+    // Reset auto-refresh timer when user manually refreshes
+    resetPasswordRefreshTimer();
+}
+
+void MainController::resetPasswordRefreshTimer()
+{
+    // Only reset if auto-refresh is enabled
+    if (m_passwordRefreshIntervalMinutes <= 0) {
+        return;
+    }
+    
+    // Restart the timer (will reset the countdown)
+    updatePasswordRefreshTimer();
+    
+    LOG_INFO("Password refresh timer reset after manual refresh, next at {}", 
+             m_nextRefreshTime.toString("MM-dd HH:mm:ss").toStdString());
 }
 
 void MainController::copyToClipboard(const QString& text)
@@ -296,6 +314,20 @@ QString MainController::clientProcessStatus() const
         return QString("重启中(第%1次)").arg(count);
     }
     return status;
+}
+
+QString MainController::nextPasswordRefreshTime() const
+{
+    if (m_passwordRefreshIntervalMinutes <= 0) {
+        return "永不";
+    }
+    
+    if (!m_nextRefreshTime.isValid()) {
+        return "永不";
+    }
+    
+    // Format: "01-29 09:11"
+    return m_nextRefreshTime.toString("MM-dd HH:mm");
 }
 
 void MainController::onHostProcessStarted()
@@ -446,12 +478,20 @@ void MainController::onPasswordRefreshTimer()
     
     // Call refresh password
     m_hostManager->refreshTempPassword();
+    
+    // Update next refresh time
+    if (m_passwordRefreshIntervalMinutes > 0) {
+        m_nextRefreshTime = QDateTime::currentDateTime().addSecs(m_passwordRefreshIntervalMinutes * 60);
+        emit nextPasswordRefreshTimeChanged();
+    }
 }
 
 void MainController::updatePasswordRefreshTimer()
 {
     // Stop existing timer
     m_passwordRefreshTimer.stop();
+    m_nextRefreshTime = QDateTime();
+    emit nextPasswordRefreshTimeChanged();
     
     // -1 means never refresh
     if (m_passwordRefreshIntervalMinutes <= 0) {
@@ -463,8 +503,13 @@ void MainController::updatePasswordRefreshTimer()
     int intervalMs = m_passwordRefreshIntervalMinutes * 60 * 1000;
     m_passwordRefreshTimer.start(intervalMs);
     
-    LOG_INFO("Password auto-refresh timer started: {} minutes ({} ms)", 
-             m_passwordRefreshIntervalMinutes, intervalMs);
+    // Set next refresh time
+    m_nextRefreshTime = QDateTime::currentDateTime().addSecs(m_passwordRefreshIntervalMinutes * 60);
+    emit nextPasswordRefreshTimeChanged();
+    
+    LOG_INFO("Password auto-refresh timer started: {} minutes ({} ms), next at {}", 
+             m_passwordRefreshIntervalMinutes, intervalMs, 
+             m_nextRefreshTime.toString("MM-dd HH:mm:ss").toStdString());
 }
 
 } // namespace quickdesk
