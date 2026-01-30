@@ -10,10 +10,10 @@ import "../pages"
 
 ApplicationWindow {
     id: root
-    width: 800
+    width: 900
     height: 600
-    minimumWidth: 800
-    maximumWidth: 800
+    minimumWidth: 900
+    maximumWidth: 900
     minimumHeight: 600
     maximumHeight: 600
     visible: true
@@ -23,6 +23,8 @@ ApplicationWindow {
     onClosing: function(close) {
         Qt.quit()
     }
+
+    // Example {}
     
     // Remote window management - single window for all connections
     property var remoteWindow: null
@@ -60,13 +62,45 @@ ApplicationWindow {
     function showRemoteWindow(connectionId, deviceId) {
         console.log("showRemoteWindow called:", connectionId, deviceId)
         
+        // Validate connection exists
+        var connectionIds = mainController.clientManager.connectionIds
+        var connectionExists = false
+        for (var i = 0; i < connectionIds.length; i++) {
+            if (connectionIds[i] === connectionId) {
+                connectionExists = true
+                break
+            }
+        }
+        
+        if (!connectionExists) {
+            console.warn("Connection not found:", connectionId)
+            toast.show(qsTr("Connection not found: ") + connectionId, QDToast.Type.Error)
+            return false
+        }
+        
+        // If RemoteWindow exists, check if connection is already there
+        if (remoteWindow) {
+            // Search for existing connection
+            for (var j = 0; j < remoteWindow.connections.length; j++) {
+                if (remoteWindow.connections[j].id === connectionId) {
+                    console.log("Connection already in RemoteWindow, switching to tab:", j)
+                    remoteWindow.currentTabIndex = j
+                    remoteWindow.show()
+                    remoteWindow.raise()
+                    remoteWindow.requestActivate()
+                    return true
+                }
+            }
+        }
+        
         // Create RemoteWindow if not exists
         if (!remoteWindow) {
             var component = Qt.createComponent("RemoteWindow.qml")
             
             if (component.status === Component.Error) {
                 console.error("Error creating RemoteWindow:", component.errorString())
-                return
+                toast.show(qsTr("Failed to create RemoteWindow"), QDToast.Type.Error)
+                return false
             }
             
             if (component.status === Component.Ready) {
@@ -76,7 +110,8 @@ ApplicationWindow {
                 
                 if (!remoteWindow) {
                     console.error("Failed to create RemoteWindow object")
-                    return
+                    toast.show(qsTr("Failed to create RemoteWindow"), QDToast.Type.Error)
+                    return false
                 }
                 
                 // Handle window destruction
@@ -86,7 +121,8 @@ ApplicationWindow {
                 })
             } else {
                 console.error("RemoteWindow component not ready:", component.status)
-                return
+                toast.show(qsTr("RemoteWindow not ready"), QDToast.Type.Error)
+                return false
             }
         }
         
@@ -97,7 +133,32 @@ ApplicationWindow {
             remoteWindow.raise()
             remoteWindow.requestActivate()
             console.log("Added connection to remote window:", connectionId)
+            return true
         }
+        
+        return false
+    }
+    
+    // Unified function to disconnect from remote host
+    // This ensures consistent behavior across all disconnect actions:
+    // - Clicking disconnect in connection list
+    // - Clicking tab close in RemoteWindow
+    // - Clicking disconnect in floating tool button
+    function disconnectFromRemoteHost(connectionId) {
+        console.log("MainWindow: Disconnect requested for:", connectionId)
+        
+        // If RemoteWindow exists, find the connection and close it properly
+        if (remoteWindow) {
+            // Find the connection index
+            for (var i = 0; i < remoteWindow.connections.length; i++) {
+                if (remoteWindow.connections[i].id === connectionId) {
+                    console.log("Found connection at index:", i, "- calling RemoteWindow.closeConnection()")
+                    remoteWindow.closeConnection(i)
+                    return
+                }
+            }
+            console.log("Connection not found in RemoteWindow, disconnecting directly")
+        }        
     }
     
     // Main layout with navigation and status bar
@@ -168,6 +229,16 @@ ApplicationWindow {
                                 root.showRemoteWindow(connId, deviceId)
                             })
                         }
+                    }
+                    onViewConnectionRequested: function(connectionId) {
+                        console.log("View connection requested:", connectionId)
+                        // Show remote window for existing connection
+                        root.showRemoteWindow(connectionId, connectionId)
+                    }
+                    onDisconnectRequested: function(connectionId) {
+                        console.log("Disconnect requested from RemoteControlPage:", connectionId)
+                        // Use unified disconnect function
+                        root.disconnectFromRemoteHost(connectionId)
                     }
                 }
                 
@@ -329,5 +400,14 @@ ApplicationWindow {
                 }
             }
         }
+    }
+    
+    // Toast for error messages
+    QDToast {
+        id: toast
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: 50
+        z: 9999
     }
 }

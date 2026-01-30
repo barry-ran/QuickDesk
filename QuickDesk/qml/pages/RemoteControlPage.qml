@@ -12,25 +12,38 @@ Item {
     // Signal for connection request
     signal connectRequested(string deviceId, string password)
     
+    // Signal for viewing existing connection
+    signal viewConnectionRequested(string connectionId)
+    
+    // Signal for disconnecting from remote host (unified)
+    signal disconnectRequested(string connectionId)
+    
     Rectangle {
         anchors.fill: parent
         color: Theme.background
         
-        // 居中容器，限制最大宽度
-        Item {
-            anchors.centerIn: parent
-            width: Math.min(parent.width - Theme.spacingXLarge * 2, 300)
-            height: parent.height
+        // 2x2 Grid Layout
+        GridLayout {
+            anchors.fill: parent
+            anchors.margins: Theme.spacingLarge
+            columns: 2
+            rows: 2
+            columnSpacing: Theme.spacingLarge
+            rowSpacing: Theme.spacingLarge
             
-            Column {
-                anchors.top: parent.top
-                anchors.horizontalCenter: parent.horizontalCenter
-                anchors.topMargin: Theme.spacingXLarge
-                width: parent.width
-                spacing: Theme.spacingLarge
+            // ========== Row 1: Left (Host Info) and Right (Connected Clients) ==========
+            
+            // Host Information Card (Row 1, Col 1)
+            ColumnLayout {
+                Layout.row: 0
+                Layout.column: 0
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                Layout.preferredWidth: parent.width / 2
+                Layout.minimumHeight: 200
+                spacing: Theme.spacingSmall
                 
                 Text {
-                    anchors.horizontalCenter: parent.horizontalCenter
                     text: qsTr("Host Information")
                     font.pixelSize: Theme.fontSizeLarge
                     font.weight: Font.DemiBold
@@ -38,8 +51,8 @@ Item {
                 }
                 
                 QDCard {
-                    width: parent.width
-                    implicitHeight: cardColumn.implicitHeight + Theme.spacingLarge * 2
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
                     
                     Column {
                         id: cardColumn
@@ -167,9 +180,39 @@ Item {
                         }
                     }
                 }
+            }
+            
+            // Connected Clients List (Row 1, Col 2)
+            ConnectionListPanel {
+                Layout.row: 0
+                Layout.column: 1
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                Layout.preferredWidth: parent.width / 2
+                Layout.minimumWidth: 200
+                Layout.minimumHeight: 200
+                mainController: root.mainController
+                panelType: "clients"
+                
+                onViewConnectionRequested: function(connectionId) {
+                    console.log("View connection requested:", connectionId)
+                    root.viewConnectionRequested(connectionId)
+                }
+            }
+            
+            // ========== Row 2: Left (Connect to Remote) and Right (My Remote Connections) ==========
+            
+            // Connect to Remote Card (Row 2, Col 1)
+            ColumnLayout {
+                Layout.row: 1
+                Layout.column: 0
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                Layout.preferredWidth: parent.width / 2
+                Layout.minimumHeight: 200
+                spacing: Theme.spacingSmall
                 
                 Text {
-                    anchors.horizontalCenter: parent.horizontalCenter
                     text: qsTr("Connect to Remote")
                     font.pixelSize: Theme.fontSizeLarge
                     font.weight: Font.DemiBold
@@ -177,8 +220,8 @@ Item {
                 }
                 
                 QDCard {
-                    width: parent.width
-                    implicitHeight: connectCardColumn.implicitHeight + Theme.spacingLarge * 2
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
                     
                     Column {
                         id: connectCardColumn
@@ -310,6 +353,32 @@ Item {
                             }
                         }
                     }
+                }
+            }
+            
+            // My Remote Connections List (Row 2, Col 2)
+            ConnectionListPanel {
+                Layout.row: 1
+                Layout.column: 1
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                Layout.preferredWidth: parent.width / 2
+                Layout.minimumWidth: 200
+                Layout.minimumHeight: 200
+                mainController: root.mainController
+                panelType: "connections"
+                
+                onViewConnectionRequested: function(connectionId) {
+                    console.log("View connection requested:", connectionId)
+                    // Emit signal to parent (MainWindow) to show remote window
+                    // MainWindow will handle validation and error messages
+                    root.viewConnectionRequested(connectionId)
+                }
+                
+                onDisconnectRequested: function(connectionId) {
+                    console.log("Disconnect requested:", connectionId)
+                    // Forward to MainWindow for unified handling
+                    root.disconnectRequested(connectionId)
                 }
             }
         }

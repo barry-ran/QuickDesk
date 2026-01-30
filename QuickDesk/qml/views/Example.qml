@@ -2,7 +2,7 @@
 import QtQuick
 import QtQuick.Controls as QQC
 import QtQuick.Layouts
-import "component"
+import "../component"
 
 Window {
     width: 1200
