@@ -58,6 +58,36 @@ ApplicationWindow {
         console.log("MainWindow.qml unload finish")
     }
     
+    // Unified function to show or switch to a device connection
+    // This handles both connecting to a new device and viewing existing connections
+    function showOrSwitchToDevice(deviceId, connectionId) {
+        console.log("showOrSwitchToDevice called - deviceId:", deviceId, "connectionId:", connectionId)
+        
+        // Step 1: Check if RemoteWindow exists and has a connection to this device
+        if (remoteWindow) {
+            for (var i = 0; i < remoteWindow.connections.length; i++) {
+                if (remoteWindow.connections[i].deviceId === deviceId) {
+                    console.log("Already connected to device:", deviceId, "- switching to existing tab:", i)
+                    remoteWindow.currentTabIndex = i
+                    remoteWindow.show()
+                    remoteWindow.raise()
+                    remoteWindow.requestActivate()
+                    return true
+                }
+            }
+        }
+        
+        // Step 2: If connectionId provided, show that specific connection
+        if (connectionId) {
+            return showRemoteWindow(connectionId, deviceId)
+        }
+        
+        // Step 3: Device not connected and no connectionId provided
+        console.warn("Device not connected and no connectionId provided:", deviceId)
+        toast.show(qsTr("Device not connected: ") + deviceId, QDToast.Type.Error)
+        return false
+    }
+    
     // Function to create or show remote window
     function showRemoteWindow(connectionId, deviceId) {
         console.log("showRemoteWindow called:", connectionId, deviceId)
@@ -217,11 +247,28 @@ ApplicationWindow {
                 
                 // Remote Control Page
                 RemoteControlPage {
+                    id: remoteControlPage
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     mainController: root.mainController
+                    
+                    onShowToast: function(message, toastType) {
+                        toast.show(message, toastType)
+                    }
+                    
                     onConnectRequested: function(deviceId, password) {
                         console.log("Connect requested:", deviceId)
+                        
+                        // Check if already connected to this device
+                        if (root.showOrSwitchToDevice(deviceId, null)) {
+                            // Already connected, reset connecting state and show toast
+                            remoteControlPage.resetConnectingState()
+                            toast.show(qsTr("Already connected, switched to existing window"), QDToast.Type.Info)
+                            return
+                        }
+                        
+                        // Not connected yet, create new connection
+                        toast.show(qsTr("Connecting..."), QDToast.Type.Info)
                         var connId = root.mainController.connectToRemoteHost(deviceId, password)
                         if (connId) {
                             // Create remote window after a short delay to allow connection to establish
@@ -232,8 +279,27 @@ ApplicationWindow {
                     }
                     onViewConnectionRequested: function(connectionId) {
                         console.log("View connection requested:", connectionId)
-                        // Show remote window for existing connection
-                        root.showRemoteWindow(connectionId, connectionId)
+                        
+                        // Try to get deviceId from existing connection in RemoteWindow
+                        var deviceId = null
+                        if (root.remoteWindow) {
+                            for (var i = 0; i < root.remoteWindow.connections.length; i++) {
+                                if (root.remoteWindow.connections[i].id === connectionId) {
+                                    deviceId = root.remoteWindow.connections[i].deviceId
+                                    break
+                                }
+                            }
+                        }
+                        
+                        // If not found, show error
+                        if (!deviceId) {
+                            console.error("Cannot find deviceId for connection:", connectionId)
+                            toast.show(qsTr("Cannot find device for connection: ") + connectionId, QDToast.Type.Error)
+                            return
+                        }
+                        
+                        // Use unified function to show or switch to device
+                        root.showOrSwitchToDevice(deviceId, connectionId)
                     }
                     onDisconnectRequested: function(connectionId) {
                         console.log("Disconnect requested from RemoteControlPage:", connectionId)
@@ -247,6 +313,10 @@ ApplicationWindow {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     mainController: root.mainController
+                    
+                    onShowToast: function(message, toastType) {
+                        toast.show(message, toastType)
+                    }
                 }
             }
         }

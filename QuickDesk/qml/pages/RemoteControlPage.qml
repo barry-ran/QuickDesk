@@ -18,6 +18,16 @@ Item {
     // Signal for disconnecting from remote host (unified)
     signal disconnectRequested(string connectionId)
     
+    // Signal for showing toast (unified toast in MainWindow)
+    signal showToast(string message, int toastType)
+    
+    // Function to reset connecting state (called when duplicate connection detected)
+    function resetConnectingState() {
+        if (connectBtn) {
+            connectBtn.resetConnectingState()
+        }
+    }
+    
     Rectangle {
         anchors.fill: parent
         color: Theme.background
@@ -92,7 +102,7 @@ Item {
                                 anchors.verticalCenter: parent.verticalCenter
                                 onClicked: {
                                     mainController.copyToClipboard(mainController.deviceId)
-                                    toast.show(qsTr("Device ID copied"), QDToast.Type.Success)
+                                    root.showToast(qsTr("Device ID copied"), QDToast.Type.Success)
                                 }
                                 
                                 QDToolTip {
@@ -169,7 +179,7 @@ Item {
                                 anchors.verticalCenter: parent.verticalCenter
                                 onClicked: {
                                     mainController.copyToClipboard(mainController.accessCode)
-                                    toast.show(qsTr("Access Code copied"), QDToast.Type.Success)
+                                    root.showToast(qsTr("Access Code copied"), QDToast.Type.Success)
                                 }
                                 
                                 QDToolTip {
@@ -308,6 +318,7 @@ Item {
                         
                         // Connect button
                         QDButton {
+                            id: connectBtn
                             width: parent.width
                             text: qsTr("Connect")
                             buttonType: QDButton.Type.Primary
@@ -317,18 +328,23 @@ Item {
                             
                             property bool connectingState: false
                             
+                            // Function to reset connecting state
+                            function resetConnectingState() {
+                                connectingState = false
+                            }
+                            
                             onClicked: {
                                 console.log("Connect clicked, deviceId:", remoteDeviceIdInput.text)
                                 
                                 // Validate device ID (9 digits)
                                 if (remoteDeviceIdInput.text.length !== 9) {
-                                    toast.show(qsTr("Device ID must be 9 digits"), QDToast.Type.Error)
+                                    root.showToast(qsTr("Device ID must be 9 digits"), QDToast.Type.Error)
                                     return
                                 }
                                 
                                 // Validate password
                                 if (remotePasswordInput.text.length === 0) {
-                                    toast.show(qsTr("Please enter access password"), QDToast.Type.Error)
+                                    root.showToast(qsTr("Please enter access password"), QDToast.Type.Error)
                                     return
                                 }
                                 
@@ -336,10 +352,8 @@ Item {
                                 connectingState = true
                                 
                                 // Emit signal to MainWindow which will create the remote window
-                                connectRequested(remoteDeviceIdInput.text, remotePasswordInput.text)
-                                
                                 console.log("Connection requested, waiting for window creation")
-                                toast.show(qsTr("Connecting..."), QDToast.Type.Info)
+                                root.connectRequested(remoteDeviceIdInput.text, remotePasswordInput.text)
                             }
                             
                             // Reset connecting state after timeout
@@ -398,7 +412,7 @@ Item {
             }
             
             if (state === "connected") {
-                toast.show(qsTr("Connected successfully"), QDToast.Type.Success)
+                root.showToast(qsTr("Connected successfully"), QDToast.Type.Success)
                 // Window is already created by MainWindow.showRemoteWindow()
                 
                 // Clear input fields after successful connection
@@ -406,15 +420,15 @@ Item {
                 remotePasswordInput.text = ""
             } else if (state === "failed") {
                 var errorMsg = hostInfo.error || qsTr("Connection failed")
-                toast.show(qsTr("Connection failed: ") + errorMsg, QDToast.Type.Error)
+                root.showToast(qsTr("Connection failed: ") + errorMsg, QDToast.Type.Error)
             } else if (state === "disconnected") {
-                toast.show(qsTr("Disconnected"), QDToast.Type.Info)
+                root.showToast(qsTr("Disconnected"), QDToast.Type.Info)
             }
         }
         
         function onErrorOccurred(connectionId, code, message) {
             console.log("Connection error:", connectionId, code, message)
-            toast.show(qsTr("Error: ") + message, QDToast.Type.Error)
+            root.showToast(qsTr("Error: ") + message, QDToast.Type.Error)
             
             // Reset connecting state
             var connectBtn = remoteDeviceIdInput.parent.parent.children[3]
@@ -433,19 +447,14 @@ Item {
         }
     }
     
-    // Toast notification
-    QDToast {
-        id: toast
-    }
-    
     // Connect to refresh access code result
     Connections {
         target: mainController.hostManager
         function onRefreshAccessCodeResult(success, errorCode, errorMessage) {
             if (success) {
-                toast.show(qsTr("Access code refreshed successfully"), QDToast.Type.Success)
+                root.showToast(qsTr("Access code refreshed successfully"), QDToast.Type.Success)
             } else {
-                toast.show(qsTr("Refresh failed: ") + errorMessage, QDToast.Type.Error)
+                root.showToast(qsTr("Refresh failed: ") + errorMessage, QDToast.Type.Error)
             }
         }
     }

@@ -10,11 +10,11 @@ Item {
     // Controller reference passed from MainWindow
     property var mainController
     
+    // Signal for showing toast (unified toast in MainWindow)
+    signal showToast(string message, int toastType)
+    
     // Server list model for Repeater
     property var serverListModel: []
-    
-    // Toast reference for nested components
-    //property alias toast: toast
     
     // Config ViewModel
     ConfigViewModel {
@@ -25,7 +25,7 @@ Item {
     function removeServerAt(index, url) {
         if (mainController) {
             mainController.turnServerManager.removeServer(index)
-            toast.show(qsTr("Server removed. Restart to apply changes."), QDToast.Type.Info)
+            root.showToast(qsTr("Server removed. Restart to apply changes."), QDToast.Type.Info)
         }
     }
     
@@ -294,12 +294,12 @@ Item {
                                         
                                         // Basic validation
                                         if (!url.startsWith("ws://") && !url.startsWith("wss://")) {
-                                            toast.show(qsTr("Server URL must start with ws:// or wss://"), QDToast.Type.Error)
+                                            root.showToast(qsTr("Server URL must start with ws:// or wss://"), QDToast.Type.Error)
                                             return
                                         }
                                         
                                         mainController.serverManager.serverUrl = url
-                                        toast.show(qsTr("Server URL updated. Restart to apply changes."), QDToast.Type.Success)
+                                        root.showToast(qsTr("Server URL updated. Restart to apply changes."), QDToast.Type.Success)
                                     }
                                 }
                             }
@@ -430,7 +430,7 @@ Item {
                                         turnPasswordField.text = ""
                                         toast.show(qsTr("TURN server added. Restart to apply changes."), QDToast.Type.Success)
                                     } else {
-                                        toast.show(qsTr("Invalid server URL format"), QDToast.Type.Error)
+                                        root.showToast(qsTr("Invalid server URL format"), QDToast.Type.Error)
                                     }
                                 }
                             }
@@ -466,9 +466,9 @@ Item {
                                     if (!mainController) return
                                     if (mainController.turnServerManager.addStunServer(stunUrlField.text)) {
                                         stunUrlField.text = ""
-                                        toast.show(qsTr("STUN server added. Restart to apply changes."), QDToast.Type.Success)
+                                        root.showToast(qsTr("STUN server added. Restart to apply changes."), QDToast.Type.Success)
                                     } else {
-                                        toast.show(qsTr("Invalid server URL format"), QDToast.Type.Error)
+                                        root.showToast(qsTr("Invalid server URL format"), QDToast.Type.Error)
                                     }
                                 }
                             }
@@ -649,10 +649,5 @@ Item {
                 Item { width: 1; height: Theme.spacingXLarge }
             }
         }
-    }
-    
-    // Toast notification
-    QDToast {
-        id: toast
     }
 }
