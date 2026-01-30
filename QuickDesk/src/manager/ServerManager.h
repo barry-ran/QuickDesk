@@ -5,7 +5,6 @@
 #define QUICKDESK_MANAGER_SERVERMANAGER_H
 
 #include <QObject>
-#include <QSettings>
 
 namespace quickdesk {
 

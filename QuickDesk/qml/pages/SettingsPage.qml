@@ -25,7 +25,7 @@ Item {
     function removeServerAt(index, url) {
         if (mainController) {
             mainController.turnServerManager.removeServer(index)
-            toast.show(qsTr("Server removed: ") + url, QDToast.Type.Info)
+            toast.show(qsTr("Server removed. Restart to apply changes."), QDToast.Type.Info)
         }
     }
     
@@ -218,6 +218,103 @@ Item {
                         width: parent.width
                         spacing: Theme.spacingMedium
                         
+                        // Signaling Server Section
+                        Column {
+                            width: parent.width
+                            spacing: Theme.spacingSmall
+                            
+                            Text {
+                                text: qsTr("Signaling Server")
+                                font.pixelSize: Theme.fontSizeLarge
+                                font.weight: Font.DemiBold
+                                color: Theme.text
+                            }
+                            
+                            Text {
+                                text: qsTr("Configure the signaling server address for remote connections.")
+                                font.pixelSize: Theme.fontSizeSmall
+                                color: Theme.textSecondary
+                                wrapMode: Text.WordWrap
+                                width: parent.width
+                            }
+                            
+                            // Current server URL display
+                            QDCard {
+                                width: parent.width
+                                height: 50
+                                
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.margins: Theme.spacingMedium
+                                    spacing: Theme.spacingMedium
+                                    
+                                    Column {
+                                        Layout.fillWidth: true
+                                        spacing: 2
+                                        
+                                        Text {
+                                            text: qsTr("Current:")
+                                            font.pixelSize: Theme.fontSizeSmall
+                                            color: Theme.textSecondary
+                                        }
+                                        
+                                        Text {
+                                            text: mainController ? mainController.serverManager.serverUrl : ""
+                                            font.pixelSize: Theme.fontSizeMedium
+                                            color: Theme.text
+                                            elide: Text.ElideMiddle
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            // Update server URL
+                            Row {
+                                width: parent.width
+                                spacing: Theme.spacingSmall
+                                
+                                QDTextField {
+                                    id: signalingServerUrlField
+                                    width: parent.width - updateServerBtn.width - parent.spacing
+                                    placeholderText: qsTr("ws://your-server.com:8000")
+                                }
+                                
+                                QDButton {
+                                    id: updateServerBtn
+                                    text: qsTr("Update")
+                                    iconText: FluentIconGlyph.saveGlyph
+                                    buttonType: QDButton.Type.Primary
+                                    enabled: signalingServerUrlField.text.length > 0 && 
+                                            signalingServerUrlField.text !== (mainController ? mainController.serverManager.serverUrl : "")
+                                    
+                                    onClicked: {
+                                        if (!mainController) return
+                                        
+                                        let url = signalingServerUrlField.text.trim()
+                                        
+                                        // Basic validation
+                                        if (!url.startsWith("ws://") && !url.startsWith("wss://")) {
+                                            toast.show(qsTr("Server URL must start with ws:// or wss://"), QDToast.Type.Error)
+                                            return
+                                        }
+                                        
+                                        mainController.serverManager.serverUrl = url
+                                        toast.show(qsTr("Server URL updated. Restart to apply changes."), QDToast.Type.Success)
+                                    }
+                                }
+                            }
+                        }
+                        
+                        Rectangle { width: parent.width; height: 1; color: Theme.border }
+                        
+                        // TURN/STUN Servers Section
+                        Text {
+                            text: qsTr("TURN/STUN Servers")
+                            font.pixelSize: Theme.fontSizeLarge
+                            font.weight: Font.DemiBold
+                            color: Theme.text
+                        }
+                        
                         // Server list
                         Column {
                             width: parent.width
@@ -331,7 +428,7 @@ Item {
                                         turnUrlField.text = ""
                                         turnUsernameField.text = ""
                                         turnPasswordField.text = ""
-                                        toast.show(qsTr("TURN server added successfully"), QDToast.Type.Success)
+                                        toast.show(qsTr("TURN server added. Restart to apply changes."), QDToast.Type.Success)
                                     } else {
                                         toast.show(qsTr("Invalid server URL format"), QDToast.Type.Error)
                                     }
@@ -369,7 +466,7 @@ Item {
                                     if (!mainController) return
                                     if (mainController.turnServerManager.addStunServer(stunUrlField.text)) {
                                         stunUrlField.text = ""
-                                        toast.show(qsTr("STUN server added successfully"), QDToast.Type.Success)
+                                        toast.show(qsTr("STUN server added. Restart to apply changes."), QDToast.Type.Success)
                                     } else {
                                         toast.show(qsTr("Invalid server URL format"), QDToast.Type.Error)
                                     }

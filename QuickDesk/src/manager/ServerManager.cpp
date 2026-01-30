@@ -2,6 +2,7 @@
 
 #include "ServerManager.h"
 #include "infra/log/log.h"
+#include "../core/localconfigcenter.h"
 #include <QCoreApplication>
 
 namespace quickdesk {
@@ -34,21 +35,14 @@ QString ServerManager::status() const
 
 void ServerManager::loadSettings()
 {
-    QSettings settings(QCoreApplication::organizationName(),
-                       QCoreApplication::applicationName());
-    
-    m_serverUrl = settings.value("server/url", "ws://localhost:8000").toString();
-    
-    LOG_INFO("Loaded server URL: {}", m_serverUrl.toStdString());
+    m_serverUrl = core::LocalConfigCenter::instance().signalingServerUrl();
+    LOG_INFO("Loaded signaling server URL: {}", m_serverUrl.toStdString());
 }
 
 void ServerManager::saveSettings()
 {
-    QSettings settings(QCoreApplication::organizationName(),
-                       QCoreApplication::applicationName());
-    
-    settings.setValue("server/url", m_serverUrl);
-    settings.sync();
+    core::LocalConfigCenter::instance().setSignalingServerUrl(m_serverUrl);
+    LOG_INFO("Saved signaling server URL: {}", m_serverUrl.toStdString());
 }
 
 void ServerManager::updateStatus(const QString& status)
