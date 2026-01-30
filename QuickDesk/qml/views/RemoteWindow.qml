@@ -294,7 +294,24 @@ Window {
         
         function onConnectionStateChanged(connectionId, state, hostInfo) {
             console.log("Remote window: connection state changed:", connectionId, state)
+            
+            // Update connection state
             remoteWindow.updateConnectionState(connectionId, state, 0)
+            
+            // Auto-close tab when connection is disconnected or failed
+            if (state === "disconnected" || state === "failed") {
+                // Find the connection index and close it
+                for (var i = 0; i < remoteWindow.connections.length; i++) {
+                    if (remoteWindow.connections[i].id === connectionId) {
+                        console.log("Auto-closing tab for", state, "connection:", connectionId, "at index:", i)
+                        // Use Qt.callLater to avoid modifying array during iteration
+                        Qt.callLater(function() {
+                            remoteWindow.closeConnection(i)
+                        })
+                        break
+                    }
+                }
+            }
         }
     }
 }
