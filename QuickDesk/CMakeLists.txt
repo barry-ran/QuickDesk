@@ -161,6 +161,7 @@ qt_add_qml_module(QuickDesk
         qml/quickdeskcomponent/RemoteTabBar.qml
         qml/quickdeskcomponent/FloatingToolButton.qml
         qml/quickdeskcomponent/ConnectionListPanel.qml
+        qml/quickdeskcomponent/RemoteDeviceSelector.qml
     RESOURCES
         res/font/SegoeFluentIcons.ttf
         qml/component/qmldir

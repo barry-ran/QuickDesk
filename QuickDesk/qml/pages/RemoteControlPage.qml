@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import "../component"
+import "../quickdeskcomponent"
 
 Item {
     id: root
@@ -239,7 +240,7 @@ Item {
                         anchors.margins: Theme.spacingLarge
                         spacing: Theme.spacingMedium
                         
-                        // Device ID input
+                        // Device ID input with history
                         Column {
                             width: parent.width
                             spacing: 4
@@ -250,27 +251,40 @@ Item {
                                 color: Theme.textSecondary
                             }
                             
-                            QDTextField {
-                                id: remoteDeviceIdInput
+                            RemoteDeviceSelector {
+                                id: remoteDeviceSelector
                                 width: parent.width
                                 placeholderText: qsTr("Enter 9-digit device ID")
-                                validator: RegularExpressionValidator { 
-                                    regularExpression: /^\d{0,9}$/
+                                
+                                deviceList: mainController && mainController.remoteDeviceManager ? 
+                                           mainController.remoteDeviceManager.deviceList : []
+                                
+                                // When user selects a device from history
+                                onDeviceSelected: function(deviceId) {
+                                    console.log("Device selected from history:", deviceId)
+                                    // Auto-fill password
+                                    var savedPassword = mainController.remoteDeviceManager.getDevicePassword(deviceId)
+                                    if (savedPassword) {
+                                        remotePasswordInput.text = savedPassword
+                                    }
                                 }
                                 
-                                // Error state
-                                property bool hasError: text.length > 0 && text.length !== 9
-                                
-                                Rectangle {
-                                    anchors.bottom: parent.bottom
-                                    width: parent.width
-                                    height: 1
-                                    color: parent.hasError ? Theme.error : "transparent"
+                                // When user deletes a device from history
+                                onDeviceDeleted: function(deviceId) {
+                                    console.log("Deleting device from history:", deviceId)
+                                    mainController.remoteDeviceManager.removeDevice(deviceId)
+                                    root.showToast(qsTr("Device removed from history"), 1) // Info type
+                                    
+                                    // Clear input if the deleted device was currently entered
+                                    if (remoteDeviceSelector.deviceId === deviceId) {
+                                        remoteDeviceSelector.deviceId = ""
+                                        remotePasswordInput.text = ""
+                                    }
                                 }
                             }
                             
                             Text {
-                                visible: remoteDeviceIdInput.hasError
+                                visible: remoteDeviceSelector.deviceId.length > 0 && remoteDeviceSelector.deviceId.length !== 9
                                 text: qsTr("Device ID must be 9 digits")
                                 font.pixelSize: Theme.fontSizeSmall - 1
                                 color: Theme.error
@@ -302,7 +316,7 @@ Item {
                                     
                                     QDIconButton {
                                         id: showPasswordBtn
-                                        iconSource: checked ? FluentIconGlyph.passwordKeyHideGlyph : FluentIconGlyph.passwordKeyShowGlyph
+                                        iconSource: checked ? FluentIconGlyph.redEyeGlyph : FluentIconGlyph.viewGlyph
                                         buttonSize: QDIconButton.Size.Small
                                         buttonStyle: QDIconButton.Style.Transparent
                                         checkable: true
@@ -322,7 +336,7 @@ Item {
                             width: parent.width
                             text: qsTr("Connect")
                             buttonType: QDButton.Type.Primary
-                            enabled: remoteDeviceIdInput.text.length === 9 && 
+                            enabled: remoteDeviceSelector.deviceId.length === 9 && 
                                      remotePasswordInput.text.length > 0 &&
                                      !connectingState
                             
@@ -334,17 +348,20 @@ Item {
                             }
                             
                             onClicked: {
-                                console.log("Connect clicked, deviceId:", remoteDeviceIdInput.text)
+                                var deviceId = remoteDeviceSelector.deviceId
+                                var password = remotePasswordInput.text
+                                
+                                console.log("Connect clicked, deviceId:", deviceId)
                                 
                                 // Validate device ID (9 digits)
-                                if (remoteDeviceIdInput.text.length !== 9) {
-                                    root.showToast(qsTr("Device ID must be 9 digits"), QDToast.Type.Error)
+                                if (deviceId.length !== 9) {
+                                    root.showToast(qsTr("Device ID must be 9 digits"), 2) // Error type
                                     return
                                 }
                                 
                                 // Validate password
-                                if (remotePasswordInput.text.length === 0) {
-                                    root.showToast(qsTr("Please enter access password"), QDToast.Type.Error)
+                                if (password.length === 0) {
+                                    root.showToast(qsTr("Please enter access password"), 2) // Error type
                                     return
                                 }
                                 
@@ -353,7 +370,7 @@ Item {
                                 
                                 // Emit signal to MainWindow which will create the remote window
                                 console.log("Connection requested, waiting for window creation")
-                                root.connectRequested(remoteDeviceIdInput.text, remotePasswordInput.text)
+                                root.connectRequested(deviceId, password)
                             }
                             
                             // Reset connecting state after timeout
@@ -405,33 +422,30 @@ Item {
         function onConnectionStateChanged(connectionId, state, hostInfo) {
             console.log("Connection state changed:", connectionId, state)
             
-            // Reset connecting state
-            var connectBtn = remoteDeviceIdInput.parent.parent.children[3]
+            // Reset connecting state (use id reference)
             if (connectBtn) {
                 connectBtn.connectingState = false
             }
             
             if (state === "connected") {
-                root.showToast(qsTr("Connected successfully"), QDToast.Type.Success)
+                root.showToast(qsTr("Connected successfully"), 0) // Success type
                 // Window is already created by MainWindow.showRemoteWindow()
                 
-                // Clear input fields after successful connection
-                remoteDeviceIdInput.text = ""
-                remotePasswordInput.text = ""
+                // Keep device ID and password for convenience (user feedback)
+                // User can manually clear if needed
             } else if (state === "failed") {
                 var errorMsg = hostInfo.error || qsTr("Connection failed")
-                root.showToast(qsTr("Connection failed: ") + errorMsg, QDToast.Type.Error)
+                root.showToast(qsTr("Connection failed: ") + errorMsg, 2) // Error type
             } else if (state === "disconnected") {
-                root.showToast(qsTr("Disconnected"), QDToast.Type.Info)
+                root.showToast(qsTr("Disconnected"), 1) // Info type
             }
         }
         
         function onErrorOccurred(connectionId, code, message) {
             console.log("Connection error:", connectionId, code, message)
-            root.showToast(qsTr("Error: ") + message, QDToast.Type.Error)
+            root.showToast(qsTr("Error: ") + message, 2) // Error type
             
-            // Reset connecting state
-            var connectBtn = remoteDeviceIdInput.parent.parent.children[3]
+            // Reset connecting state (use id reference)
             if (connectBtn) {
                 connectBtn.connectingState = false
             }

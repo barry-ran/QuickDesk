@@ -108,84 +108,91 @@ Controls.Button {
     
     // ============ Content ============
     
-    contentItem: Row {
-        spacing: Theme.spacingSmall
+    contentItem: Item {
+        implicitWidth: contentRow.implicitWidth
+        implicitHeight: contentRow.implicitHeight
         
-        // Loading spinner
-        Item {
-            visible: control.loading
-            width: visible ? iconSize : 0
-            height: iconSize
-            anchors.verticalCenter: parent.verticalCenter
+        Row {
+            id: contentRow
+            anchors.centerIn: parent
+            spacing: Theme.spacingSmall
             
-            Rectangle {
-                id: spinner
-                width: iconSize
-                height: iconSize
-                color: "transparent"
-                border.width: 2
-                border.color: {
-                    if (buttonType === QDButton.Type.Secondary || buttonType === QDButton.Type.Ghost) {
-                        return Theme.primary
+            // Loading spinner
+            Item {
+                visible: control.loading
+                width: visible ? control.iconSize : 0
+                height: control.iconSize
+                anchors.verticalCenter: parent.verticalCenter
+                
+                Rectangle {
+                    id: spinner
+                    width: control.iconSize
+                    height: control.iconSize
+                    color: "transparent"
+                    border.width: 2
+                    border.color: {
+                        if (control.buttonType === QDButton.Type.Secondary || control.buttonType === QDButton.Type.Ghost) {
+                            return Theme.primary
+                        }
+                        return Theme.textOnPrimary
+                    }
+                    radius: control.iconSize / 2
+                    
+                    Rectangle {
+                        width: control.iconSize / 4
+                        height: control.iconSize / 4
+                        radius: width / 2
+                        color: parent.border.color
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+                    
+                    RotationAnimation on rotation {
+                        running: control.loading
+                        loops: Animation.Infinite
+                        from: 0
+                        to: 360
+                        duration: 1000
+                    }
+                }
+            }
+            
+            // Icon
+            Text {
+                visible: control.iconText !== "" && !control.loading
+                text: control.iconText
+                font.family: "Segoe Fluent Icons"
+                font.pixelSize: control.iconSize
+                color: {
+                    if (!control.enabled) {
+                        return Theme.textDisabled
+                    }
+                    if (control.buttonType === QDButton.Type.Secondary || control.buttonType === QDButton.Type.Ghost) {
+                        return Theme.text
                     }
                     return Theme.textOnPrimary
                 }
-                radius: iconSize / 2
-                
-                Rectangle {
-                    width: iconSize / 4
-                    height: iconSize / 4
-                    radius: width / 2
-                    color: parent.border.color
-                    anchors.right: parent.right
-                    anchors.verticalCenter: parent.verticalCenter
-                }
-                
-                RotationAnimation on rotation {
-                    running: control.loading
-                    loops: Animation.Infinite
-                    from: 0
-                    to: 360
-                    duration: 1000
-                }
+                anchors.verticalCenter: parent.verticalCenter
             }
-        }
-        
-        // Icon
-        Text {
-            visible: iconText !== "" && !control.loading
-            text: iconText
-            font.family: "Segoe Fluent Icons"
-            font.pixelSize: iconSize
-            color: {
-                if (!control.enabled) {
-                    return Theme.textDisabled
+            
+            // Text
+            Text {
+                visible: control.text !== ""
+                text: control.text
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fontSizeMedium
+                font.weight: Font.DemiBold
+                color: {
+                    if (!control.enabled) {
+                        return Theme.textDisabled
+                    }
+                    if (control.buttonType === QDButton.Type.Secondary || control.buttonType === QDButton.Type.Ghost) {
+                        return Theme.text
+                    }
+                    return Theme.textOnPrimary
                 }
-                if (buttonType === QDButton.Type.Secondary || buttonType === QDButton.Type.Ghost) {
-                    return Theme.text
-                }
-                return Theme.textOnPrimary
+                anchors.verticalCenter: parent.verticalCenter
             }
-            anchors.verticalCenter: parent.verticalCenter
-        }
-        
-        // Text
-        Text {
-            visible: control.text !== ""
-            text: control.text
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.fontSizeMedium
-            font.weight: Font.DemiBold
-            color: {
-                if (!control.enabled) {
-                    return Theme.textDisabled
-                }
-                if (buttonType === QDButton.Type.Secondary || buttonType === QDButton.Type.Ghost) {
-                    return Theme.text
-                }
-                return Theme.textOnPrimary
-            }
-            anchors.verticalCenter: parent.verticalCenter
         }
     }
     
