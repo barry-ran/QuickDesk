@@ -136,6 +136,12 @@ signals:
                             int width, int height,
                             int hotspotX, int hotspotY,
                             const QByteArray& data);
+    
+    // Performance statistics update
+    void performanceStatsUpdated(const QString& connectionId,
+                                 int totalLatencyMs,
+                                 double bandwidthKbps,
+                                 double frameRate);
 
 private slots:
     void onMessageReceived(const QJsonObject& message);
@@ -167,6 +173,7 @@ private:
     void handleDisconnectFromHostResponse(const QJsonObject& message);
     void handleDisconnectAllResponse(const QJsonObject& message);
     void handleCursorShapeChanged(const QJsonObject& message);
+    void handlePerformanceStatsUpdate(const QJsonObject& message);
     
     void sendMouseEvent(const QString& connectionId, const QString& eventType,
                         int x, int y, int button, int wheelDelta);

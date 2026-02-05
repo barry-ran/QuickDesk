@@ -401,6 +401,8 @@ void ClientManager::onMessageReceived(const QJsonObject& message)
         handleDisconnectAllResponse(message);
     } else if (type == "cursorShapeChanged") {
         handleCursorShapeChanged(message);
+    } else if (type == "performanceStatsUpdate") {
+        handlePerformanceStatsUpdate(message);
     } else if (type == "setFramerateResponse" || type == "setResolutionResponse" || type == "setFramerateBoostResponse" || type == "setBitrateResponse") {
         // Acknowledgement responses - just log success/failure
         bool success = message["success"].toBool();
@@ -744,6 +746,17 @@ void ClientManager::handleCursorShapeChanged(const QJsonObject& message)
     //           connectionId.toStdString(), width, height, hotspotX, hotspotY, data.size());
     
     emit cursorShapeChanged(connectionId, width, height, hotspotX, hotspotY, data);
+}
+
+void ClientManager::handlePerformanceStatsUpdate(const QJsonObject& message)
+{
+    QString connectionId = message["connectionId"].toString();
+    int totalLatencyMs = message["totalLatencyMs"].toInt();
+    double bandwidthKbps = message["bandwidthKbps"].toDouble();
+    double frameRate = message["frameRate"].toDouble();
+    
+    // Emit signal to update UI
+    emit performanceStatsUpdated(connectionId, totalLatencyMs, bandwidthKbps, frameRate);
 }
 
 void ClientManager::sendMouseEvent(const QString& connectionId, const QString& eventType,
