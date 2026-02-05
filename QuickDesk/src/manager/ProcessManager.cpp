@@ -517,7 +517,18 @@ bool ProcessManager::startProcess(QProcess* process, const QString& exePath,
     connect(process, &QProcess::readyReadStandardError, this, [process, processName]() {
         QByteArray err = process->readAllStandardError();
         if (!err.isEmpty()) {
-            LOG_INFO("[{} stderr] {}", processName.toStdString(), err.toStdString());
+            // Add clear prefix to distinguish subprocess logs
+            QString prefix = QString("========== BEGIN %1 PROCESS OUTPUT ==========").arg(processName.toUpper());
+            LOG_INFO("{}", prefix.toStdString());
+            
+            // Split by newline and output each line separately
+            QString errStr = QString::fromUtf8(err);
+            QStringList lines = errStr.split('\n', Qt::SkipEmptyParts);
+            for (const QString& lineErr : lines) {
+                LOG_INFO("{}: {}", processName.toStdString(), lineErr.toStdString());
+            }
+            
+            LOG_INFO("========== END %1 PROCESS OUTPUT ==========", processName.toStdString());
         }
     });
 
