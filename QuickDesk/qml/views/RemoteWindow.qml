@@ -19,6 +19,7 @@ Window {
     property var clientManager: null
     property var connections: [] // Array of connection objects: [{id, deviceId, name, state}]
     property int currentTabIndex: 0
+    property bool hasAutoResized: false  // Only auto-resize once on first frame
     
     // Performance stats stored separately to avoid triggering Repeater rebuild
     // Map: connectionId -> {frameWidth, frameHeight, frameRate, ping, originalWidth, originalHeight}
@@ -192,6 +193,125 @@ Window {
         connections = []
     }
     
+    // Core resize logic — resize window to best fit the given remote desktop resolution
+    // Can be called manually at any time (e.g. from toolbar "Fit Window" button)
+    function resizeToFit(fw, fh) {
+        if (fw <= 0 || fh <= 0) return
+
+        var scr = remoteWindow.screen
+        if (!scr) {
+            console.warn("resizeToFit: screen not available")
+            return false
+        }
+
+        // Available screen space (leave margin for taskbar, etc.)
+        var maxWidth = scr.desktopAvailableWidth * 0.92
+        var maxHeight = scr.desktopAvailableHeight * 0.92
+
+        // Account for tab bar height
+        var tabBarH = tabBar.height > 0 ? tabBar.height : 36
+        var contentMaxHeight = maxHeight - tabBarH
+
+        // Calculate scale factor (never upscale)
+        var scale = Math.min(maxWidth / fw, contentMaxHeight / fh, 1.0)
+
+        var newWidth  = Math.round(fw * scale)
+        var newHeight = Math.round(fh * scale) + tabBarH
+
+        // Center on screen
+        remoteWindow.width  = newWidth
+        remoteWindow.height = newHeight
+        remoteWindow.x = Math.round((scr.width  - newWidth)  / 2) + scr.virtualX
+        remoteWindow.y = Math.round((scr.height - newHeight) / 2) + scr.virtualY
+
+        console.log("Resized window to", newWidth + "x" + newHeight,
+                     "for remote desktop", fw + "x" + fh,
+                     "(scale:", scale.toFixed(3) + ")",
+                     "screen:", scr.width + "x" + scr.height,
+                     "available:", scr.desktopAvailableWidth + "x" + scr.desktopAvailableHeight)
+        return true
+    }
+
+    // Auto-resize window to best fit the remote desktop resolution (called once on first frame)
+    // Triggered from onStatsVersionChanged (at window level, not inside Repeater delegate)
+    function autoResizeToFit(fw, fh) {
+        console.log("autoResizeToFit called:", fw + "x" + fh,
+                     "hasAutoResized:", hasAutoResized,
+                     "screen:", remoteWindow.screen ? "valid" : "null")
+
+        if (fw <= 0 || fh <= 0) return
+        if (hasAutoResized) return
+
+        if (!remoteWindow.screen) {
+            // Screen not ready — retry via Timer
+            console.log("autoResizeToFit: screen not ready, scheduling retry")
+            retryResizeTimer.pendingWidth = fw
+            retryResizeTimer.pendingHeight = fh
+            retryResizeTimer.retryCount = 0
+            retryResizeTimer.start()
+            return
+        }
+
+        // Mark AFTER screen check so retries work
+        hasAutoResized = true
+        resizeToFit(fw, fh)
+    }
+
+    // When frame dimensions change (statsVersion incremented), try auto-resize
+    // Using Qt.callLater ensures execution on a clean call stack,
+    // avoiding issues with nested signal handler / delegate destruction races.
+    onStatsVersionChanged: {
+        if (hasAutoResized) return
+        if (connections.length === 0) return
+
+        var connId = currentTabIndex >= 0 && currentTabIndex < connections.length
+                     ? connections[currentTabIndex].id : ""
+        if (!connId) return
+
+        var s = getPerformanceStats(connId)
+        if (s && s.frameWidth > 0 && s.frameHeight > 0) {
+            var w = s.frameWidth
+            var h = s.frameHeight
+            Qt.callLater(function() {
+                autoResizeToFit(w, h)
+            })
+        }
+    }
+
+    // When switching tabs, check if the new tab's resolution differs significantly
+    // from the current window size, and show a toast hint if so.
+    onCurrentTabIndexChanged: {
+        if (connections.length <= 1) return  // No need for single tab
+        if (currentTabIndex < 0 || currentTabIndex >= connections.length) return
+
+        var connId = connections[currentTabIndex].id
+        var s = getPerformanceStats(connId)
+        if (!s || s.frameWidth <= 0 || s.frameHeight <= 0) return
+
+        // Use Qt.callLater so the StackLayout transition completes first
+        var fw = s.frameWidth
+        var fh = s.frameHeight
+        Qt.callLater(function() {
+            var tabBarH = tabBar.height > 0 ? tabBar.height : 36
+            var contentWidth = remoteWindow.width
+            var contentHeight = remoteWindow.height - tabBarH
+
+            if (contentWidth <= 0 || contentHeight <= 0) return
+
+            // Calculate how well the current window fits the remote desktop
+            var scaleX = contentWidth / fw
+            var scaleY = contentHeight / fh
+            var scale = Math.min(scaleX, scaleY)
+
+            // If scale is significantly off (< 0.7 or > 1.4), suggest resize
+            if (scale < 0.7 || scale > 1.4) {
+                toast.show(qsTr("Remote resolution") + " " + fw + "x" + fh +
+                           " " + qsTr("differs from window. Use toolbar \"Fit Window\" to adjust."),
+                           QDToast.Type.Info)
+            }
+        })
+    }
+
     // Update connection state
     function updateConnectionState(connectionId, state, ping) {
         // Update state in connections array (only if state changed)
@@ -320,6 +440,19 @@ Window {
                         remoteWindow.closeConnection(i)
                         break
                     }
+                }
+            }
+            
+            onFitToRemoteDesktopRequested: {
+                // Get current tab's frame dimensions and resize window
+                var connId = remoteWindow.currentTabIndex >= 0 && remoteWindow.currentTabIndex < remoteWindow.connections.length
+                    ? remoteWindow.connections[remoteWindow.currentTabIndex].id : ""
+                if (!connId) return
+
+                var s = remoteWindow.getPerformanceStats(connId)
+                if (s && s.frameWidth > 0 && s.frameHeight > 0) {
+                    console.log("Manual fit window to remote desktop:", s.frameWidth + "x" + s.frameHeight)
+                    remoteWindow.resizeToFit(s.frameWidth, s.frameHeight)
                 }
             }
             

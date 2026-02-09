@@ -158,7 +158,11 @@ QVideoFrame SharedMemoryManager::readVideoFrame(const QString& connectionId)
                     // Create QVideoFrameFormat for YUV420P
                     QVideoFrameFormat format(QSize(static_cast<int>(width), static_cast<int>(height)),
                                             QVideoFrameFormat::Format_YUV420P);
-                    
+                    // Set correct color space for HD content (>= 720p uses BT.709)
+                    // H.264 hardware encoder outputs BT.709 limited range by default
+                    format.setColorSpace(QVideoFrameFormat::ColorSpace_BT709);
+                    format.setColorRange(QVideoFrameFormat::ColorRange_Video);
+
                     // 🚀 Use custom YUVPlanarVideoBuffer to control stride (Qt 6.8)
                     auto planarBuffer = std::make_unique<YUVPlanarVideoBuffer>(format);
                     

@@ -28,6 +28,7 @@ Item {
     
     // Signals
     signal disconnectRequested(string connectionId)
+    signal fitToRemoteDesktopRequested()
     signal showToast(string message, var toastType)
     
     // Apply framerate boost mode
@@ -377,6 +378,18 @@ Item {
                 bitrateMenu.x = menuX
                 bitrateMenu.y = menuY
                 bitrateMenu.open()
+            }
+        }
+        
+        // Fit window to remote desktop resolution
+        QDMenuItem {
+            text: qsTr("Fit Window")
+            iconText: FluentIconGlyph.fullScreenGlyph
+            enabled: root.videoInfo && root.videoInfo.frameWidth > 0 && root.videoInfo.frameHeight > 0
+            onTriggered: {
+                console.log("Fit window to remote desktop requested for:", root.connectionId)
+                root.fitToRemoteDesktopRequested()
+                root.showToast(qsTr("Window resized to fit remote desktop"), QDToast.Type.Success)
             }
         }
         
