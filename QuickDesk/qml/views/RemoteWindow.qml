@@ -20,21 +20,26 @@ Window {
     property var connections: [] // Array of connection objects: [{id, deviceId, name, state}]
     property int currentTabIndex: 0
     property bool hasAutoResized: false  // Only auto-resize once on first frame
+    property bool showVideoStats: false  // Toggle video stats overlay
     
     // Performance stats stored separately to avoid triggering Repeater rebuild
-    // Map: connectionId -> {frameWidth, frameHeight, frameRate, ping, originalWidth, originalHeight}
+    // Map: connectionId -> { frameWidth, frameHeight, frameRate, ping,
+    //   originalWidth, originalHeight, captureMs, encodeMs, decodeMs, paintMs,
+    //   totalLatencyMs, roundTripMs, bandwidthKbps, packetRate, codec,
+    //   frameQuality, encodedRectWidth, encodedRectHeight }
     property var performanceStatsMap: ({})
     property int statsVersion: 0  // Increment to notify changes
     
     // Get performance stats for a connection
     function getPerformanceStats(connectionId) {
         return performanceStatsMap[connectionId] || {
-            frameWidth: 0, 
-            frameHeight: 0, 
-            frameRate: 0, 
-            ping: 0,
-            originalWidth: 0, 
-            originalHeight: 0
+            frameWidth: 0, frameHeight: 0, frameRate: 0, ping: 0,
+            originalWidth: 0, originalHeight: 0,
+            captureMs: 0, encodeMs: 0, decodeMs: 0, paintMs: 0,
+            totalLatencyMs: 0, roundTripMs: 0,
+            bandwidthKbps: 0, packetRate: 0,
+            codec: "", frameQuality: -1,
+            encodedRectWidth: 0, encodedRectHeight: 0
         }
     }
     
@@ -120,12 +125,13 @@ Window {
         // Initialize performance stats
         var newStatsMap = Object.assign({}, performanceStatsMap)
         newStatsMap[connectionId] = {
-            frameWidth: 0, 
-            frameHeight: 0, 
-            frameRate: 0, 
-            ping: 0,
-            originalWidth: 0, 
-            originalHeight: 0
+            frameWidth: 0, frameHeight: 0, frameRate: 0, ping: 0,
+            originalWidth: 0, originalHeight: 0,
+            captureMs: 0, encodeMs: 0, decodeMs: 0, paintMs: 0,
+            totalLatencyMs: 0, roundTripMs: 0,
+            bandwidthKbps: 0, packetRate: 0,
+            codec: "", frameQuality: -1,
+            encodedRectWidth: 0, encodedRectHeight: 0
         }
         performanceStatsMap = newStatsMap
         
@@ -456,8 +462,30 @@ Window {
                 }
             }
             
+            onToggleVideoStats: {
+                remoteWindow.showVideoStats = !remoteWindow.showVideoStats
+            }
+            
             onShowToast: function(message, toastType) {
                 toast.show(message, toastType)
+            }
+        }
+        
+        // Video Stats Overlay — semi-transparent panel with detailed stats
+        VideoStatsOverlay {
+            id: videoStatsOverlay
+            anchors.left: parent.left
+            anchors.top: parent.top
+            anchors.margins: Theme.spacingMedium
+            z: 999
+            visible: remoteWindow.showVideoStats && remoteWindow.connections.length > 0
+            
+            stats: {
+                // Force re-evaluation when statsVersion changes
+                var _version = remoteWindow.statsVersion
+                var connId = remoteWindow.currentTabIndex >= 0 && remoteWindow.currentTabIndex < remoteWindow.connections.length
+                    ? remoteWindow.connections[remoteWindow.currentTabIndex].id : ""
+                return connId ? remoteWindow.getPerformanceStats(connId) : null
             }
         }
     }
@@ -489,18 +517,43 @@ Window {
         }
     }
     
-    // Monitor performance stats updates
+    // Monitor performance stats updates (detailed stats from C++ PerformanceTracker)
     Connections {
         target: remoteWindow.clientManager
         
-        function onPerformanceStatsUpdated(connectionId, totalLatencyMs, bandwidthKbps, frameRate) {
-            // Update connection latency value
+        function onPerformanceStatsUpdated(connectionId, detailedStats) {
+            var totalLatencyMs = detailedStats.totalLatencyMs || 0
+            var frameRate = detailedStats.frameRate || 0
+            
+            // Update connection latency value (for tab bar display)
             remoteWindow.updateConnectionState(connectionId, "", totalLatencyMs)
             
-            // Update frameRate from PerformanceTracker
-            var stats = remoteWindow.getPerformanceStats(connectionId)
-            if (stats && stats.frameWidth > 0 && stats.frameHeight > 0) {
-                remoteWindow.updatePerformanceStats(connectionId, stats.frameWidth, stats.frameHeight, frameRate, totalLatencyMs)
+            // Update frameRate and merge detailed stats
+            var existing = remoteWindow.getPerformanceStats(connectionId)
+            if (existing && existing.frameWidth > 0 && existing.frameHeight > 0) {
+                remoteWindow.updatePerformanceStats(connectionId,
+                    existing.frameWidth, existing.frameHeight, frameRate, totalLatencyMs)
+            }
+            
+            // Merge detailed timing/codec stats into performanceStatsMap
+            var current = remoteWindow.performanceStatsMap[connectionId]
+            if (current) {
+                var newStatsMap = Object.assign({}, remoteWindow.performanceStatsMap)
+                newStatsMap[connectionId] = Object.assign({}, current, {
+                    captureMs:         detailedStats.captureMs || 0,
+                    encodeMs:          detailedStats.encodeMs || 0,
+                    decodeMs:          detailedStats.decodeMs || 0,
+                    paintMs:           detailedStats.paintMs || 0,
+                    totalLatencyMs:    totalLatencyMs,
+                    roundTripMs:       detailedStats.roundTripMs || 0,
+                    bandwidthKbps:     detailedStats.bandwidthKbps || 0,
+                    packetRate:        detailedStats.packetRate || 0,
+                    codec:             detailedStats.codec || "",
+                    frameQuality:      detailedStats.frameQuality !== undefined ? detailedStats.frameQuality : -1,
+                    encodedRectWidth:  detailedStats.encodedRectWidth || 0,
+                    encodedRectHeight: detailedStats.encodedRectHeight || 0
+                })
+                remoteWindow.performanceStatsMap = newStatsMap
             }
         }
     }

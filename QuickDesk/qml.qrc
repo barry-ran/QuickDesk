@@ -52,6 +52,8 @@
         <file>qml/component/QDTextArea.qml</file>
         <file>qml/component/QDSearchBox.qml</file>
         <file>qml/component/QDNavigationView.qml</file>
+        <file>qml/component/QDText.qml</file>
+        <file>qml/component/QDLabel.qml</file>
         <file>qml/component/qmldir</file>
         <file>qml/quickdeskcomponent/RemoteDesktopView.qml</file>
         <file>qml/quickdeskcomponent/RemoteTab.qml</file>
@@ -59,5 +61,6 @@
         <file>qml/quickdeskcomponent/FloatingToolButton.qml</file>
         <file>qml/quickdeskcomponent/ConnectionListPanel.qml</file>
         <file>qml/quickdeskcomponent/RemoteDeviceSelector.qml</file>
+        <file>qml/quickdeskcomponent/VideoStatsOverlay.qml</file>
     </qresource>
 </RCC>

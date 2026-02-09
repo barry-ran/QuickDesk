@@ -3,6 +3,8 @@ module component
 singleton Theme 1.0 Theme.qml
 singleton FluentIconGlyph 1.0 FluentIconGlyph.qml
 
+QDText 1.0 QDText.qml
+QDLabel 1.0 QDLabel.qml
 QDButton 1.0 QDButton.qml
 QDTextField 1.0 QDTextField.qml
 QDCheckBox 1.0 QDCheckBox.qml

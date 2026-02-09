@@ -763,12 +763,26 @@ void ClientManager::handleCursorShapeChanged(const QJsonObject& message)
 void ClientManager::handlePerformanceStatsUpdate(const QJsonObject& message)
 {
     QString connectionId = message["connectionId"].toString();
-    int totalLatencyMs = message["totalLatencyMs"].toInt();
-    double bandwidthKbps = message["bandwidthKbps"].toDouble();
-    double frameRate = message["frameRate"].toDouble();
     
-    // Emit signal to update UI
-    emit performanceStatsUpdated(connectionId, totalLatencyMs, bandwidthKbps, frameRate);
+    QVariantMap stats;
+    // Timing breakdown (ms)
+    stats["captureMs"]      = message["captureMs"].toDouble();
+    stats["encodeMs"]       = message["encodeMs"].toDouble();
+    stats["decodeMs"]       = message["decodeMs"].toDouble();
+    stats["paintMs"]        = message["paintMs"].toDouble();
+    stats["totalLatencyMs"] = message["totalLatencyMs"].toDouble();
+    stats["roundTripMs"]    = message["roundTripMs"].toDouble();
+    // Throughput
+    stats["bandwidthKbps"]  = message["bandwidthKbps"].toDouble();
+    stats["frameRate"]      = message["frameRate"].toDouble();
+    stats["packetRate"]     = message["packetRate"].toDouble();
+    // Codec info
+    stats["codec"]              = message["codec"].toString("Unknown");
+    stats["frameQuality"]       = message["frameQuality"].toInt(-1);
+    stats["encodedRectWidth"]   = message["encodedRectWidth"].toInt();
+    stats["encodedRectHeight"]  = message["encodedRectHeight"].toInt();
+    
+    emit performanceStatsUpdated(connectionId, stats);
 }
 
 void ClientManager::sendMouseEvent(const QString& connectionId, const QString& eventType,

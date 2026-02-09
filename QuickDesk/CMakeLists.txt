@@ -182,12 +182,15 @@ qt_add_qml_module(QuickDesk
         qml/component/QDTextArea.qml
         qml/component/QDSearchBox.qml
         qml/component/QDNavigationView.qml
+        qml/component/QDText.qml
+        qml/component/QDLabel.qml
         qml/quickdeskcomponent/RemoteDesktopView.qml
         qml/quickdeskcomponent/RemoteTab.qml
         qml/quickdeskcomponent/RemoteTabBar.qml
         qml/quickdeskcomponent/FloatingToolButton.qml
         qml/quickdeskcomponent/ConnectionListPanel.qml
         qml/quickdeskcomponent/RemoteDeviceSelector.qml
+        qml/quickdeskcomponent/VideoStatsOverlay.qml
     RESOURCES
         res/font/SegoeFluentIcons.ttf
         qml/component/qmldir

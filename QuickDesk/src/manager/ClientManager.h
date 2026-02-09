@@ -10,6 +10,7 @@
 #include <QList>
 #include <QMap>
 #include <QStringList>
+#include <QVariantMap>
 #include <memory>
 
 #include "SharedMemoryManager.h"
@@ -140,11 +141,9 @@ signals:
                             int hotspotX, int hotspotY,
                             const QByteArray& data);
     
-    // Performance statistics update
+    // Detailed performance statistics update (QVariantMap keys match JSON field names)
     void performanceStatsUpdated(const QString& connectionId,
-                                 int totalLatencyMs,
-                                 double bandwidthKbps,
-                                 double frameRate);
+                                 const QVariantMap& stats);
 
 private slots:
     void onMessageReceived(const QJsonObject& message);

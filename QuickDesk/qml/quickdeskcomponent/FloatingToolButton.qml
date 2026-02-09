@@ -29,6 +29,7 @@ Item {
     // Signals
     signal disconnectRequested(string connectionId)
     signal fitToRemoteDesktopRequested()
+    signal toggleVideoStats()
     signal showToast(string message, var toastType)
     
     // Apply framerate boost mode
@@ -390,6 +391,15 @@ Item {
                 console.log("Fit window to remote desktop requested for:", root.connectionId)
                 root.fitToRemoteDesktopRequested()
                 root.showToast(qsTr("Window resized to fit remote desktop"), QDToast.Type.Success)
+            }
+        }
+        
+        // Toggle video stats overlay
+        QDMenuItem {
+            text: qsTr("Video Stats")
+            iconText: FluentIconGlyph.diagnosticGlyph
+            onTriggered: {
+                root.toggleVideoStats()
             }
         }
         
