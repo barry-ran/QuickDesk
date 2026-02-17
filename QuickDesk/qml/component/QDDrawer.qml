@@ -1,7 +1,7 @@
 // Fluent Design Drawer Component
 import QtQuick
 import QtQuick.Controls as Controls
-import Qt5Compat.GraphicalEffects
+import QtQuick.Effects
 
 Controls.Drawer {
     id: control
@@ -34,13 +34,12 @@ Controls.Drawer {
         
         // Shadow effect
         layer.enabled: true
-        layer.effect: DropShadow {
-            horizontalOffset: control.edge === Qt.LeftEdge ? 4 : -4
-            verticalOffset: 0
-            radius: 16
-            samples: 33
-            color: Qt.rgba(0, 0, 0, 0.3)
-            transparentBorder: true
+        layer.effect: MultiEffect {
+            shadowEnabled: true
+            shadowHorizontalOffset: control.edge === Qt.LeftEdge ? 4 : -4
+            shadowVerticalOffset: 0
+            shadowBlur: 1.0
+            shadowColor: Qt.rgba(0, 0, 0, 0.3)
         }
         
         // Border

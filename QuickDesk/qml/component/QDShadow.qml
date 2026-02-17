@@ -1,23 +1,35 @@
-// Shadow effect component using DropShadow
+// Shadow effect component using MultiEffect (Qt6)
+// Applies shadow as layer.effect on the target item.
 import QtQuick
-import Qt5Compat.GraphicalEffects
+import QtQuick.Effects
 
 Item {
     id: root
-    
-    property alias target: dropShadow.source
+    visible: false
+
+    property Item target
     property int shadowSize: 8
     property color shadowColor: Qt.rgba(0, 0, 0, 0.3)
     property int radius: 8
-    
-    DropShadow {
-        id: dropShadow
-        anchors.fill: parent
-        horizontalOffset: 0
-        verticalOffset: 2
-        radius: root.shadowSize
-        samples: root.shadowSize * 2 + 1
-        color: root.shadowColor
-        transparentBorder: true
+
+    Component.onCompleted: _applyEffect()
+    onTargetChanged: _applyEffect()
+
+    function _applyEffect() {
+        if (target) {
+            target.layer.enabled = true
+            target.layer.effect = effectComponent.createObject(root)
+        }
+    }
+
+    Component {
+        id: effectComponent
+        MultiEffect {
+            shadowEnabled: true
+            shadowHorizontalOffset: 0
+            shadowVerticalOffset: 2
+            shadowBlur: Math.min(root.shadowSize / 16.0, 1.0)
+            shadowColor: root.shadowColor
+        }
     }
 }

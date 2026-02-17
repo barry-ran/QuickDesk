@@ -2,7 +2,7 @@
 import QtQuick
 import QtQuick.Controls as Controls
 import QtQuick.Layouts
-import Qt5Compat.GraphicalEffects
+import QtQuick.Effects
 import "../component"
 
 Item {
@@ -127,15 +127,14 @@ Item {
             border.color: Theme.border
             radius: Theme.radiusMedium
             
-            // DropShadow effect
+            // Shadow effect
             layer.enabled: true
-            layer.effect: DropShadow {
-                horizontalOffset: 0
-                verticalOffset: 4
-                radius: 16
-                samples: 33
-                color: Qt.rgba(0, 0, 0, 0.2)
-                transparentBorder: true
+            layer.effect: MultiEffect {
+                shadowEnabled: true
+                shadowHorizontalOffset: 0
+                shadowVerticalOffset: 4
+                shadowBlur: 1.0
+                shadowColor: Qt.rgba(0, 0, 0, 0.2)
             }
         }
         
