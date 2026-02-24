@@ -133,7 +133,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
     )
 else()
     execute_process(
-        COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/scripts/lrelease.sh
+        COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/scripts/lrelease.sh ${CMAKE_PREFIX_PATH}/bin
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
         RESULT_VARIABLE result
         OUTPUT_VARIABLE output
