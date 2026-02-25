@@ -138,6 +138,7 @@ qt_add_qml_module(QuickDesk
         qml/views/Example.qml
         qml/pages/RemoteControlPage.qml
         qml/pages/SettingsPage.qml
+        qml/pages/AboutPage.qml
         qml/component/Theme.qml
         qml/component/FluentIconGlyph.qml
         qml/component/QDButton.qml

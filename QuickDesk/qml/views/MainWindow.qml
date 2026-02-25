@@ -256,7 +256,8 @@ ApplicationWindow {
             
             menuItems: [
                 { icon: FluentIconGlyph.remoteGlyph, text: qsTr("Remote Control") },
-                { icon: FluentIconGlyph.settingsGlyph, text: qsTr("Settings") }
+                { icon: FluentIconGlyph.settingsGlyph, text: qsTr("Settings") },
+                { icon: FluentIconGlyph.infoGlyph, text: qsTr("About") }
             ]
             
             header: Item {
@@ -376,6 +377,12 @@ ApplicationWindow {
                     onShowToast: function(message, toastType) {
                         toast.show(message, toastType)
                     }
+                }
+                
+                // About Page
+                AboutPage {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
                 }
             }
         }

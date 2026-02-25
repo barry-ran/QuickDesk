@@ -6,6 +6,7 @@
         <file>qml/views/Example.qml</file>
         <file>qml/pages/RemoteControlPage.qml</file>
         <file>qml/pages/SettingsPage.qml</file>
+        <file>qml/pages/AboutPage.qml</file>
         <file>qml/component/FluentIconGlyph.qml</file>
         <file>qml/component/Theme.qml</file>
         <file>qml/component/QDButton.qml</file>
