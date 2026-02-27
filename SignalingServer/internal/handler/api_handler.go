@@ -1,10 +1,15 @@
 package handler
 
 import (
+	"crypto/hmac"
+	"crypto/sha1"
+	"encoding/base64"
+	"fmt"
 	"log"
 	"net/http"
 	"quickdesk/signaling/internal/config"
 	"quickdesk/signaling/internal/service"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -130,6 +135,44 @@ func (h *APIHandler) GetDeviceStatus(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"device_id": deviceID,
 		"online":    online,
+	})
+}
+
+// GetIceConfig handles GET /api/v1/ice-config
+// Returns ICE server configuration with time-limited TURN credentials (coturn REST API style).
+func (h *APIHandler) GetIceConfig(c *gin.Context) {
+	ice := h.config.Ice
+	ttl := ice.CredentialTTL
+	if ttl <= 0 {
+		ttl = 86400
+	}
+
+	iceServers := []gin.H{}
+
+	if len(ice.TurnURLs) > 0 && ice.AuthSecret != "" {
+		expiry := time.Now().Unix() + int64(ttl)
+		username := fmt.Sprintf("%d:%s", expiry, generateRandomHex(4))
+
+		mac := hmac.New(sha1.New, []byte(ice.AuthSecret))
+		mac.Write([]byte(username))
+		credential := base64.StdEncoding.EncodeToString(mac.Sum(nil))
+
+		iceServers = append(iceServers, gin.H{
+			"urls":       ice.TurnURLs,
+			"username":   username,
+			"credential": credential,
+		})
+	}
+
+	if len(ice.StunURLs) > 0 {
+		iceServers = append(iceServers, gin.H{
+			"urls": ice.StunURLs,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"iceServers":       iceServers,
+		"lifetimeDuration": fmt.Sprintf("%d.000s", ttl),
 	})
 }
 

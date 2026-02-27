@@ -3,14 +3,23 @@ package config
 import (
 	"fmt"
 	"log"
+	"strings"
 
 	"github.com/spf13/viper"
 )
+
+type IceConfig struct {
+	TurnURLs      []string
+	AuthSecret    string // shared secret with coturn (use-auth-secret mode)
+	CredentialTTL int    // TURN credential TTL in seconds
+	StunURLs      []string
+}
 
 type Config struct {
 	Server   ServerConfig   `mapstructure:"server"`
 	Database DatabaseConfig `mapstructure:"database"`
 	Redis    RedisConfig    `mapstructure:"redis"`
+	Ice      IceConfig
 }
 
 type ServerConfig struct {
@@ -50,6 +59,11 @@ func Load() *Config {
 	viper.SetDefault("REDIS_PORT", 6379)
 	viper.SetDefault("REDIS_PASSWORD", "")
 
+	viper.SetDefault("TURN_URLS", "")
+	viper.SetDefault("TURN_AUTH_SECRET", "")
+	viper.SetDefault("TURN_CREDENTIAL_TTL", 86400)
+	viper.SetDefault("STUN_URLS", "")
+
 	// Read config file (optional, will use defaults if not exists)
 	if err := viper.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
@@ -78,9 +92,12 @@ func Load() *Config {
 		},
 	}
 
-	log.Printf("Loaded config: Server=%s:%d, DB=%s:%d/%s",
+	cfg.Ice = parseIceConfig()
+
+	log.Printf("Loaded config: Server=%s:%d, DB=%s:%d/%s, ICE TURN=%d STUN=%d TTL=%ds",
 		cfg.Server.Host, cfg.Server.Port,
-		cfg.Database.Host, cfg.Database.Port, cfg.Database.DBName)
+		cfg.Database.Host, cfg.Database.Port, cfg.Database.DBName,
+		len(cfg.Ice.TurnURLs), len(cfg.Ice.StunURLs), cfg.Ice.CredentialTTL)
 
 	return cfg
 }
@@ -92,4 +109,30 @@ func (c *DatabaseConfig) DSN() string {
 
 func (c *RedisConfig) Addr() string {
 	return fmt.Sprintf("%s:%d", c.Host, c.Port)
+}
+
+func parseIceConfig() IceConfig {
+	ice := IceConfig{
+		CredentialTTL: viper.GetInt("TURN_CREDENTIAL_TTL"),
+		AuthSecret:    viper.GetString("TURN_AUTH_SECRET"),
+	}
+	if urls := viper.GetString("TURN_URLS"); urls != "" {
+		ice.TurnURLs = splitAndTrim(urls)
+	}
+	if urls := viper.GetString("STUN_URLS"); urls != "" {
+		ice.StunURLs = splitAndTrim(urls)
+	}
+	return ice
+}
+
+func splitAndTrim(s string) []string {
+	parts := strings.Split(s, ",")
+	result := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			result = append(result, p)
+		}
+	}
+	return result
 }

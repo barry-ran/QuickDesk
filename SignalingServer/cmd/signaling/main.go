@@ -65,6 +65,9 @@ func main() {
 		
 		// Authentication
 		v1.POST("/auth/verify", apiHandler.VerifyPassword)
+
+		// ICE server configuration (time-limited TURN credentials)
+		v1.GET("/ice-config", apiHandler.GetIceConfig)
 	}
 
 	// WebSocket routes
