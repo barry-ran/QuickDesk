@@ -7,6 +7,7 @@ class ConfigViewModel : public QObject {
     Q_PROPERTY(int darkTheme READ darkTheme WRITE setDarkTheme NOTIFY darkThemeChanged)
     Q_PROPERTY(QString language READ language WRITE setLanguage NOTIFY languageChanged)
     Q_PROPERTY(int accessCodeRefreshInterval READ accessCodeRefreshInterval WRITE setAccessCodeRefreshInterval NOTIFY accessCodeRefreshIntervalChanged)
+    Q_PROPERTY(QString preferredVideoCodec READ preferredVideoCodec WRITE setPreferredVideoCodec NOTIFY preferredVideoCodecChanged)
 
 public:
     ConfigViewModel(QObject* parent = nullptr);
@@ -20,9 +21,13 @@ public:
     
     int accessCodeRefreshInterval();
     void setAccessCodeRefreshInterval(int value);
+    
+    QString preferredVideoCodec();
+    void setPreferredVideoCodec(const QString& value);
 
 signals:
     void darkThemeChanged(int value);
     void languageChanged(const QString& value);
     void accessCodeRefreshIntervalChanged(int value);
+    void preferredVideoCodecChanged(const QString& value);
 };

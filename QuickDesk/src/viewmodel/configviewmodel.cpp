@@ -8,6 +8,7 @@ ConfigViewModel::ConfigViewModel(QObject* parent)
     connect(&core::LocalConfigCenter::instance(), &core::LocalConfigCenter::signalDarkThemeChanged, this, &ConfigViewModel::darkThemeChanged);
     connect(&core::LocalConfigCenter::instance(), &core::LocalConfigCenter::signalLanguageChanged, this, &ConfigViewModel::languageChanged);
     connect(&core::LocalConfigCenter::instance(), &core::LocalConfigCenter::signalAccessCodeRefreshIntervalChanged, this, &ConfigViewModel::accessCodeRefreshIntervalChanged);
+    connect(&core::LocalConfigCenter::instance(), &core::LocalConfigCenter::signalPreferredVideoCodecChanged, this, &ConfigViewModel::preferredVideoCodecChanged);
 }
 
 ConfigViewModel::~ConfigViewModel()
@@ -42,4 +43,14 @@ int ConfigViewModel::accessCodeRefreshInterval()
 void ConfigViewModel::setAccessCodeRefreshInterval(int value)
 {
     core::LocalConfigCenter::instance().setAccessCodeRefreshInterval(value);
+}
+
+QString ConfigViewModel::preferredVideoCodec()
+{
+    return core::LocalConfigCenter::instance().preferredVideoCodec();
+}
+
+void ConfigViewModel::setPreferredVideoCodec(const QString& value)
+{
+    core::LocalConfigCenter::instance().setPreferredVideoCodec(value);
 }

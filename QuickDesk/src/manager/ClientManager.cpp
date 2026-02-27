@@ -3,6 +3,7 @@
 
 #include "ClientManager.h"
 #include "NativeMessaging.h"
+#include "core/localconfigcenter.h"
 #include "infra/log/log.h"
 #include <QUuid>
 #include <QJsonArray>
@@ -63,13 +64,18 @@ QString ClientManager::connectToHost(const QString& deviceId,
     conn.rtcState = RtcStatus::Connecting;
     m_connections[connectionId] = conn;
 
-    // Send connect message
     QJsonObject message;
     message["type"] = "connectToHost";
     message["connectionId"] = connectionId;
     message["deviceId"] = deviceId;
     message["accessCode"] = accessCode;
     message["serverUrl"] = serverUrl;
+    
+    // Always send the latest video codec preference from settings
+    QString videoCodec = core::LocalConfigCenter::instance().preferredVideoCodec();
+    if (!videoCodec.isEmpty()) {
+        message["preferredVideoCodec"] = videoCodec;
+    }
     
     if (!m_iceConfig.isEmpty()) {
         message["iceConfig"] = m_iceConfig;
@@ -141,7 +147,8 @@ void ClientManager::disconnectAll()
     emit connectionListChanged();
 }
 
-void ClientManager::sendHello(const QString& deviceId)
+void ClientManager::sendHello(const QString& deviceId,
+                              const QString& preferredVideoCodec)
 {
     if (!m_messaging || !m_messaging->isReady()) {
         emit errorOccurred("", "NOT_READY", "Client process is not ready");
@@ -150,9 +157,11 @@ void ClientManager::sendHello(const QString& deviceId)
 
     QJsonObject message;
     message["type"] = "hello";
-    // Send local device_id so client process can use it for signaling identification
     if (!deviceId.isEmpty()) {
         message["deviceId"] = deviceId;
+    }
+    if (!preferredVideoCodec.isEmpty()) {
+        message["preferredVideoCodec"] = preferredVideoCodec;
     }
     m_messaging->sendMessage(message);
 }

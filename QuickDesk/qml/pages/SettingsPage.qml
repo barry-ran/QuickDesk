@@ -503,13 +503,6 @@ Item {
                                     color: Theme.text
                                 }
                                 
-                                Text {
-                                    id: restartTipText
-                                    text: qsTr("(Effective after restart)")
-                                    font.pixelSize: Theme.fontSizeSmall
-                                    color: Theme.textSecondary
-                                    visible: false
-                                }
                             }
                             
                             QDComboBox {
@@ -533,12 +526,70 @@ Item {
                                 
                                 onActivated: {
                                     LanguageManage.setCurrentLanguage(selectedValue)
-                                    restartTipText.visible = true
+                                    root.showToast(qsTr("Language updated. Restart to apply changes."), QDToast.Type.Info)
                                 }
                                 
                                 function indexOfValue(value) {
                                     for (let i = 0; i < languageModel.count; i++) {
                                         if (languageModel.get(i).value === value) {
+                                            return i
+                                        }
+                                    }
+                                    return 0
+                                }
+                            }
+                        }
+                        
+                        Rectangle { width: parent.width; height: 1; color: Theme.border }
+                        
+                        // Video Codec
+                        Row {
+                            width: parent.width
+                            spacing: Theme.spacingMedium
+                            
+                            Column {
+                                width: parent.width - codecCombo.width - parent.spacing
+                                spacing: Theme.spacingXSmall
+                                
+                                Text {
+                                    text: qsTr("Video Codec")
+                                    font.pixelSize: Theme.fontSizeMedium
+                                    color: Theme.text
+                                }
+                                
+                                Text {
+                                    text: qsTr("Preferred video codec for remote connections")
+                                    font.pixelSize: Theme.fontSizeSmall
+                                    color: Theme.textSecondary
+                                    wrapMode: Text.WordWrap
+                                    width: parent.width
+                                }
+                            }
+                            
+                            QDComboBox {
+                                id: codecCombo
+                                model: ListModel {
+                                    id: codecModel
+                                    ListElement { text: "H264"; value: "H264" }
+                                    ListElement { text: "VP8";  value: "VP8" }
+                                    ListElement { text: "VP9";  value: "VP9" }
+                                    ListElement { text: "AV1";  value: "AV1" }
+                                }
+                                textRole: "text"
+                                valueRole: "value"
+                                
+                                Component.onCompleted: {
+                                    currentIndex = indexOfValue(configViewModel.preferredVideoCodec)
+                                }
+                                
+                                onActivated: {
+                                    configViewModel.preferredVideoCodec = currentValue
+                                    root.showToast(qsTr("Video codec updated. Effective on next connection."), QDToast.Type.Info)
+                                }
+                                
+                                function indexOfValue(value) {
+                                    for (let i = 0; i < codecModel.count; i++) {
+                                        if (codecModel.get(i).value === value) {
                                             return i
                                         }
                                     }

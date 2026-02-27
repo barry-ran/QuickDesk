@@ -465,26 +465,27 @@ void MainController::onClientProcessStarted()
     QJsonObject iceConfig = m_turnServerManager->getEffectiveIceConfig();
     m_clientManager->setIceConfig(iceConfig);
     
-    // Send hello to verify communication and pass local device_id for signaling identification
+    // Send hello to verify communication and pass local device_id + preferred video codec
     // Wait for Host's device_id to be ready before sending
     QTimer::singleShot(500, this, [this]() {
+        QString videoCodec = core::LocalConfigCenter::instance().preferredVideoCodec();
         QString localDeviceId = m_hostManager->deviceId();
         if (localDeviceId.isEmpty()) {
             LOG_WARN("Client hello: Host device_id not ready yet, waiting for deviceIdChanged signal");
-            // Connect to deviceIdChanged signal to send hello when device_id is ready
             QMetaObject::Connection* conn = new QMetaObject::Connection();
-            *conn = connect(m_hostManager.get(), &HostManager::deviceIdChanged, this, [this, conn]() {
+            *conn = connect(m_hostManager.get(), &HostManager::deviceIdChanged, this, [this, conn, videoCodec]() {
                 QString deviceId = m_hostManager->deviceId();
                 if (!deviceId.isEmpty()) {
                     LOG_INFO("Client hello: Received device_id from Host: {}", deviceId.toStdString());
-                    m_clientManager->sendHello(deviceId);
+                    m_clientManager->sendHello(deviceId, videoCodec);
                     disconnect(*conn);
                     delete conn;
                 }
             });
         } else {
-            LOG_INFO("Client hello: Using device_id: {}", localDeviceId.toStdString());
-            m_clientManager->sendHello(localDeviceId);
+            LOG_INFO("Client hello: Using device_id: {}, videoCodec: {}", 
+                     localDeviceId.toStdString(), videoCodec.toStdString());
+            m_clientManager->sendHello(localDeviceId, videoCodec);
         }
     });
 }
