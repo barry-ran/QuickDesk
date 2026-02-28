@@ -25,7 +25,7 @@ echo "---------------------------------------------------------------"
 echo "install dmgbuild"
 echo "---------------------------------------------------------------"
 
-pip3 install -r "$script_path/package/requirements.txt"
+python3 -m pip install -r "$script_path/package/requirements.txt"
 if [ $? -ne 0 ]; then
     echo "[!] pip install failed"
     cd "$old_cd"
