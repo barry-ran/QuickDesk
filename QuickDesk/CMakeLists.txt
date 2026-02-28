@@ -17,6 +17,7 @@ set(MANAGER_SOURCES
     src/manager/ClientManager.cpp
     src/manager/SharedMemoryManager.cpp
     src/manager/RemoteDeviceManager.cpp
+    src/manager/PresetManager.cpp
 )
 
 set(MANAGER_HEADERS
@@ -28,6 +29,7 @@ set(MANAGER_HEADERS
     src/manager/ClientManager.h
     src/manager/SharedMemoryManager.h
     src/manager/RemoteDeviceManager.h
+    src/manager/PresetManager.h
 )
 
 set(CONTROLLER_SOURCES

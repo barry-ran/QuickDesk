@@ -53,6 +53,16 @@ ApplicationWindow {
         onAccessCodeChanged: {
             console.log("Access Code changed:", mainControllerObj.accessCode)
         }
+        
+        onPresetLoadFailed: function(error) {
+            presetFailedMessageBox.message = error
+            presetFailedMessageBox.show()
+        }
+        
+        onForceUpgradeRequired: function(minVersion) {
+            forceUpgradeMessageBox.message = qsTr("Current version is too old. Minimum required version: %1. Please upgrade to continue using.").arg(minVersion)
+            forceUpgradeMessageBox.show()
+        }
     }
     
     // Listen to connection state changes to save device credentials
@@ -245,14 +255,10 @@ ApplicationWindow {
         anchors.fill: parent
         spacing: 0
         
-        // Announcement bar - test data, will be replaced with server-preset data later
         QDAnnouncementBar {
             id: announcementBar
             Layout.fillWidth: true
-            text: qsTr("System maintenance notice: servers will be upgraded on Feb 28 at 22:00 (UTC+8), expected downtime approximately 2 hours. During this period remote connections may be interrupted. Please save your work in advance. ") +
-                  "<a href='https://quickdesk.example.com/notice'>" + qsTr("View details") + "</a>" +
-                  qsTr(" | New version v2.1.0 is now available with improved performance and stability. ") +
-                  "<a href='https://quickdesk.example.com/download'>" + qsTr("Download now") + "</a>"
+            text: mainController.presetManager ? mainController.presetManager.announcement : ""
             onLinkActivated: function(link) {
                 Qt.openUrlExternally(link)
             }
@@ -274,12 +280,7 @@ ApplicationWindow {
                 { icon: FluentIconGlyph.infoGlyph, text: qsTr("About") }
             ]
             
-            // Test data - will be replaced with server-preset data later
-            property var footerLinks: [
-                { icon: "e8f2", text: qsTr("QQ Group: 123456789"), url: "https://qm.qq.com/q/example" },
-                { icon: "e897", text: qsTr("Help Documentation"), url: "https://quickdesk.example.com/docs" },
-                { icon: "e719", text: qsTr("Purchase License"), url: "https://quickdesk.example.com/pricing" }
-            ]
+            property var footerLinks: mainController.presetManager ? mainController.presetManager.links : []
             
             showFooter: footerLinks.length > 0
             
@@ -626,5 +627,21 @@ ApplicationWindow {
         anchors.bottom: parent.bottom
         anchors.bottomMargin: 50
         z: 9999
+    }
+    
+    QDMessageBox {
+        id: presetFailedMessageBox
+        messageType: QDMessageBox.Type.Error
+        title: qsTr("Server Connection Error")
+        buttons: QDMessageBox.Buttons.Ok
+        onClosed: Qt.quit()
+    }
+    
+    QDMessageBox {
+        id: forceUpgradeMessageBox
+        messageType: QDMessageBox.Type.Warning
+        title: qsTr("Upgrade Required")
+        buttons: QDMessageBox.Buttons.Ok
+        onClosed: Qt.quit()
     }
 }

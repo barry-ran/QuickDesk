@@ -76,8 +76,9 @@ Rectangle {
             }
 
             SequentialAnimation {
+                id: scrollAnimation
                 running: scrollArea.needsScroll && control.visible
-                paused: scrollArea.hovered
+                paused: running && scrollArea.hovered
                 loops: Animation.Infinite
 
                 PauseAnimation { duration: 2000 }

@@ -13,6 +13,7 @@
 #include "../manager/ClientManager.h"
 #include "../manager/TurnServerManager.h"
 #include "../manager/RemoteDeviceManager.h"
+#include "../manager/PresetManager.h"
 #include "../common/ProcessStatus.h"
 
 namespace quickdesk {
@@ -31,6 +32,7 @@ class MainController : public QObject {
     Q_PROPERTY(ClientManager* clientManager READ clientManager CONSTANT)
     Q_PROPERTY(TurnServerManager* turnServerManager READ turnServerManager CONSTANT)
     Q_PROPERTY(RemoteDeviceManager* remoteDeviceManager READ remoteDeviceManager CONSTANT)
+    Q_PROPERTY(PresetManager* presetManager READ presetManager CONSTANT)
     
     // Host status
     Q_PROPERTY(ProcessStatus::Status hostProcessStatus READ hostProcessStatus NOTIFY hostProcessStatusChanged)
@@ -110,6 +112,7 @@ public:
     ClientManager* clientManager() const;
     TurnServerManager* turnServerManager() const;
     RemoteDeviceManager* remoteDeviceManager() const;
+    PresetManager* presetManager() const;
 
     // Host convenience properties
     QString deviceId() const;
@@ -143,6 +146,8 @@ signals:
     void clientProcessStatusChanged();
     void clientServerStatusChanged();
     void nextAccessCodeRefreshTimeChanged();
+    void presetLoadFailed(const QString& error);
+    void forceUpgradeRequired(const QString& minVersion);
 
 private slots:
     void onHostProcessStarted();
@@ -169,6 +174,7 @@ private:
     std::unique_ptr<HostManager> m_hostManager;
     std::unique_ptr<ClientManager> m_clientManager;
     std::unique_ptr<RemoteDeviceManager> m_remoteDeviceManager;
+    std::unique_ptr<PresetManager> m_presetManager;
 
     QString m_deviceId;
     QString m_accessCode;

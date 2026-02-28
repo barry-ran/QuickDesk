@@ -21,6 +21,7 @@ MainController::MainController(QObject* parent)
     , m_hostManager(std::make_unique<HostManager>(this))
     , m_clientManager(std::make_unique<ClientManager>(this))
     , m_remoteDeviceManager(std::make_unique<RemoteDeviceManager>(this))
+    , m_presetManager(std::make_unique<PresetManager>(m_serverManager.get(), this))
 {
     // Connect ProcessManager signals
     connect(m_processManager.get(), &ProcessManager::hostProcessStarted,
@@ -128,6 +129,12 @@ MainController::MainController(QObject* parent)
         LOG_INFO("Saved access code for 'never refresh' mode: {}", currentCode.toStdString()); 
     });
     
+    // Forward PresetManager signals
+    connect(m_presetManager.get(), &PresetManager::presetLoadFailed,
+            this, &MainController::presetLoadFailed);
+    connect(m_presetManager.get(), &PresetManager::forceUpgradeRequired,
+            this, &MainController::forceUpgradeRequired);
+
     // Setup access code auto-refresh timer
     connect(&m_accessCodeRefreshTimer, &QTimer::timeout,
             this, &MainController::onAccessCodeRefreshTimer);
@@ -167,6 +174,9 @@ void MainController::initialize()
     QString logDir = infra::ApplicationContext::instance().logPath();
     m_processManager->setLogDir(logDir);
 
+    // Start preset manager (polls server for preset config)
+    m_presetManager->start();
+
     // Start Host process (status will be managed by ProcessManager)
     if (!m_processManager->startHostProcess()) {
         emit initializationFailed("Failed to start Host process");
@@ -182,6 +192,7 @@ void MainController::shutdown()
 {
     LOG_INFO("MainController::shutdown()");
     
+    m_presetManager->stop();
     m_hostManager->disconnectFromServer();
     m_clientManager->disconnectAll();
     
@@ -270,6 +281,11 @@ TurnServerManager* MainController::turnServerManager() const
 RemoteDeviceManager* MainController::remoteDeviceManager() const
 {
     return m_remoteDeviceManager.get();
+}
+
+PresetManager* MainController::presetManager() const
+{
+    return m_presetManager.get();
 }
 
 QString MainController::deviceId() const
