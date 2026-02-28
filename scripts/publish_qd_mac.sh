@@ -43,7 +43,7 @@ echo
 
 qt_mac_path="$ENV_QT_PATH/macos"
 publish_path="$script_path/../publish/$build_mode"
-release_path="$script_path/../output/x64/$build_mode"
+release_path="$script_path/../output/arm64/$build_mode"
 src_out_path="$script_path/../../src/out/$build_mode"
 
 echo "[*] Qt macOS path: $qt_mac_path"
