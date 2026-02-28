@@ -245,6 +245,19 @@ ApplicationWindow {
         anchors.fill: parent
         spacing: 0
         
+        // Announcement bar - test data, will be replaced with server-preset data later
+        QDAnnouncementBar {
+            id: announcementBar
+            Layout.fillWidth: true
+            text: qsTr("System maintenance notice: servers will be upgraded on Feb 28 at 22:00 (UTC+8), expected downtime approximately 2 hours. During this period remote connections may be interrupted. Please save your work in advance. ") +
+                  "<a href='https://quickdesk.example.com/notice'>" + qsTr("View details") + "</a>" +
+                  qsTr(" | New version v2.1.0 is now available with improved performance and stability. ") +
+                  "<a href='https://quickdesk.example.com/download'>" + qsTr("Download now") + "</a>"
+            onLinkActivated: function(link) {
+                Qt.openUrlExternally(link)
+            }
+        }
+        
         // Navigation and content area
         QDNavigationView {
             id: navigationView
@@ -254,13 +267,21 @@ ApplicationWindow {
             isExpanded: true
             collapsedWidth: 48
             expandedWidth: 200
-            showFooter: false  // Hide footer and separator
             
             menuItems: [
                 { icon: FluentIconGlyph.remoteGlyph, text: qsTr("Remote Control") },
                 { icon: FluentIconGlyph.settingsGlyph, text: qsTr("Settings") },
                 { icon: FluentIconGlyph.infoGlyph, text: qsTr("About") }
             ]
+            
+            // Test data - will be replaced with server-preset data later
+            property var footerLinks: [
+                { icon: "e8f2", text: qsTr("QQ Group: 123456789"), url: "https://qm.qq.com/q/example" },
+                { icon: "e897", text: qsTr("Help Documentation"), url: "https://quickdesk.example.com/docs" },
+                { icon: "e719", text: qsTr("Purchase License"), url: "https://quickdesk.example.com/pricing" }
+            ]
+            
+            showFooter: footerLinks.length > 0
             
             header: Item {
                 width: parent.width
@@ -287,8 +308,69 @@ ApplicationWindow {
                 }
             }
             
-            footer: Item {
-                // Empty footer - component will auto-hide separator and footer area
+            footer: Column {
+                width: parent.width
+                padding: Theme.spacingXSmall
+                spacing: 2
+                
+                Repeater {
+                    model: navigationView.footerLinks
+                    
+                    delegate: Rectangle {
+                        required property var modelData
+                        
+                        width: parent.width - parent.padding * 2
+                        height: 36
+                        radius: Theme.radiusSmall
+                        color: linkMouseArea.containsMouse ? Theme.surfaceHover : "transparent"
+                        
+                        Behavior on color {
+                            ColorAnimation { duration: Theme.animationDurationFast }
+                        }
+                        
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: Theme.spacingMedium
+                            anchors.rightMargin: Theme.spacingMedium
+                            spacing: Theme.spacingMedium
+                            
+                            Text {
+                                visible: modelData.icon !== undefined && modelData.icon !== ""
+                                text: modelData.icon ? String.fromCharCode(parseInt(modelData.icon, 16)) : ""
+                                font.family: "Segoe Fluent Icons"
+                                font.pixelSize: 14
+                                color: Theme.primary
+                            }
+                            
+                            Text {
+                                visible: navigationView.isExpanded
+                                text: modelData.text || ""
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.fontSizeSmall
+                                color: Theme.textSecondary
+                                Layout.fillWidth: true
+                                elide: Text.ElideRight
+                            }
+                        }
+                        
+                        MouseArea {
+                            id: linkMouseArea
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                if (modelData.url) {
+                                    Qt.openUrlExternally(modelData.url)
+                                }
+                            }
+                        }
+                        
+                        QDToolTip {
+                            visible: linkMouseArea.containsMouse && modelData.url
+                            text: modelData.url || ""
+                        }
+                    }
+                }
             }
             
             content: StackLayout {

@@ -48,3 +48,4 @@ QDDateTimePicker 1.0 QDDateTimePicker.qml
 QDTextArea 1.0 QDTextArea.qml
 QDSearchBox 1.0 QDSearchBox.qml
 QDNavigationView 1.0 QDNavigationView.qml
+QDAnnouncementBar 1.0 QDAnnouncementBar.qml

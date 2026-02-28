@@ -52,6 +52,7 @@
         <file>qml/component/QDTextArea.qml</file>
         <file>qml/component/QDSearchBox.qml</file>
         <file>qml/component/QDNavigationView.qml</file>
+        <file>qml/component/QDAnnouncementBar.qml</file>
         <file>qml/component/QDText.qml</file>
         <file>qml/component/QDLabel.qml</file>
         <file>qml/component/qmldir</file>

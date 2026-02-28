@@ -188,6 +188,7 @@ qt_add_qml_module(QuickDesk
         qml/component/QDTextArea.qml
         qml/component/QDSearchBox.qml
         qml/component/QDNavigationView.qml
+        qml/component/QDAnnouncementBar.qml
         qml/component/QDText.qml
         qml/component/QDLabel.qml
         qml/quickdeskcomponent/RemoteDesktopView.qml
