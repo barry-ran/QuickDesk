@@ -57,7 +57,7 @@ Remote Desktop
 - **Full Computer Use Toolkit**: 20+ MCP tools — screenshot, click, type, drag, scroll, hotkeys, clipboard, and more
 - **Real-Time Visibility**: AI operations are displayed in the QuickDesk GUI in real time — the user sees every mouse move and keystroke, and can intervene at any time
 - **Multi-Device AI Orchestration**: AI can connect to and control multiple remote machines simultaneously — batch automation, cross-device workflows, fleet management
-- **Guided Prompts**: Built-in MCP prompt templates teach AI agents best practices for remote desktop operation
+- **Guided Prompts**: 9 built-in MCP prompt templates covering remote operation, server health check, batch automation, system diagnosis, screen analysis, multi-device orchestration, and SOP documentation
 
 ### High-Performance Foundation
 
@@ -107,7 +107,7 @@ Remote Desktop
 - Built-in MCP Server — AI agents connect via standard protocol, works with Cursor, Claude Desktop, and any MCP client
 - 20+ remote control tools: screenshot, mouse click/drag/scroll, keyboard type/hotkey, key press/release, clipboard read/write, screen size query
 - MCP Resources: real-time device status, connection info, host details
-- MCP Prompts: built-in operation guide templates (remote desktop operation, find-and-click, run command)
+- 9 MCP Prompts: operation guide, server health check, batch automation, system diagnosis, screen analysis, multi-device orchestration, SOP documentation
 - Real-time event streaming: connection state changes, clipboard updates, performance stats
 - Background automation mode: `show_window=false` for headless batch operations
 - Screenshot scaling: adjustable resolution for faster AI processing

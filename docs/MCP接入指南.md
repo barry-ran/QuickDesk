@@ -149,13 +149,48 @@ Resources 提供只读的实时系统状态数据。
 
 ## MCP Prompts（提示词模板）
 
-Prompts 是内置的指令模板，教 AI Agent 如何高效操作远程桌面。
+Prompts 是内置的指令模板，教 AI Agent 如何高效完成特定场景的任务。
 
-| Prompt | 说明 |
-|--------|------|
-| `operate_remote_desktop` | 完整指南：截图→分析→操作→验证循环、坐标系、所有可用工具。 |
-| `find_and_click` | 定位并点击特定 UI 元素的分步指令。参数：`element_description`、`connection_id`。 |
-| `run_command` | 打开终端并运行命令的分步指令。参数：`command`、`connection_id`。 |
+### 通用操作
+
+| Prompt | 说明 | 参数 |
+|--------|------|------|
+| `operate_remote_desktop` | 完整指南：截图→分析→操作→验证循环、坐标系、所有可用工具。 | （无） |
+| `find_and_click` | 定位并点击特定 UI 元素的分步指令。 | `element_description`、`connection_id` |
+| `run_command` | 打开终端运行命令的分步指令。 | `command`、`connection_id` |
+
+### 运维与自动化
+
+| Prompt | 说明 | 参数 |
+|--------|------|------|
+| `server_health_check` | 全面的服务器健康检查 — CPU、内存、磁盘、进程、服务、错误日志。生成结构化健康报告。 | `connection_id` |
+| `batch_operation` | 在多台设备上依次执行同一任务的指南，含错误处理和汇总报告。 | `task_description` |
+
+### 故障诊断
+
+| Prompt | 说明 | 参数 |
+|--------|------|------|
+| `diagnose_system_issue` | 系统问题的系统性诊断（性能缓慢、崩溃、网络问题、磁盘满），含根因分析和修复建议。 | `issue_description`、`connection_id` |
+
+### 屏幕理解
+
+| Prompt | 说明 | 参数 |
+|--------|------|------|
+| `analyze_screen_content` | 深度分析屏幕内容 — 操作系统识别、打开的应用、文本提取、UI 元素清单、敏感信息安全扫描。 | `connection_id` |
+
+### 多设备编排
+
+| Prompt | 说明 | 参数 |
+|--------|------|------|
+| `multi_device_workflow` | 编排跨多台远程设备的复杂工作流，含依赖管理和跨设备数据传输。 | `task_description` |
+
+### 操作文档化
+
+| Prompt | 说明 | 参数 |
+|--------|------|------|
+| `document_procedure` | 观察或执行操作流程，自动生成标准操作规程（SOP）文档，含分步指令、截图和故障排除。 | `procedure_name`、`connection_id` |
+
+完整使用示例请参阅 [典型场景 Demo](典型场景Demo.md)。
 
 ## 坐标系统
 

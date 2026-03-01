@@ -163,6 +163,34 @@ struct RunCommandArgs {
     connection_id: String,
 }
 
+#[derive(Deserialize, JsonSchema)]
+struct ConnectionIdArg {
+    /// Connection ID of the remote desktop
+    connection_id: String,
+}
+
+#[derive(Deserialize, JsonSchema)]
+struct DiagnoseIssueArgs {
+    /// Description of the problem to diagnose, e.g. "computer is very slow", "internet not working", "application crashes"
+    issue_description: String,
+    /// Connection ID of the remote desktop
+    connection_id: String,
+}
+
+#[derive(Deserialize, JsonSchema)]
+struct MultiDeviceTaskArgs {
+    /// Description of the task to perform across devices, e.g. "check disk usage on all servers", "install security updates"
+    task_description: String,
+}
+
+#[derive(Deserialize, JsonSchema)]
+struct DocumentProcedureArgs {
+    /// Description of the procedure to document, e.g. "how to deploy the application", "how to configure the firewall"
+    procedure_name: String,
+    /// Connection ID of the remote desktop
+    connection_id: String,
+}
+
 // ---- MCP Server ----
 
 #[derive(Clone)]
@@ -640,6 +668,361 @@ impl QuickDeskMcpServer {
                 - If the command requires elevated privileges, you may need to run as administrator.\n\
                 - Use `get_clipboard` after selecting output text (Ctrl+A in terminal, then Ctrl+C) to get the text content.",
                 args.command, args.connection_id, args.command
+            ),
+        )])
+    }
+
+    /// Guide for performing a server health check — checking CPU, memory, disk usage, services, and logs.
+    #[prompt(name = "server_health_check")]
+    async fn server_health_check(
+        &self,
+        params: Parameters<ConnectionIdArg>,
+    ) -> Result<Vec<PromptMessage>, ErrorData> {
+        let conn = params.0.connection_id;
+        Ok(vec![PromptMessage::new_text(
+            PromptMessageRole::User,
+            format!(
+                "Perform a comprehensive health check on the remote server.\n\
+                Connection ID: {conn}\n\
+                \n\
+                ## Procedure\n\
+                \n\
+                1. **Take a screenshot** to observe the current desktop state.\n\
+                2. **Open a terminal** (Win+R → cmd / PowerShell, or Ctrl+Alt+T on Linux).\n\
+                3. **Detect OS type** from the screenshot (Windows / Linux / macOS).\n\
+                4. **Run the following checks** (adapt commands to the detected OS):\n\
+                \n\
+                ### Windows\n\
+                ```\n\
+                systeminfo | findstr /C:\"OS\" /C:\"Memory\"\n\
+                wmic cpu get loadpercentage\n\
+                wmic logicaldisk get size,freespace,caption\n\
+                tasklist /FI \"STATUS eq running\" | sort /R /+65\n\
+                net start\n\
+                Get-EventLog -LogName System -Newest 20 -EntryType Error\n\
+                ```\n\
+                \n\
+                ### Linux\n\
+                ```\n\
+                uname -a\n\
+                uptime\n\
+                free -h\n\
+                df -h\n\
+                top -bn1 | head -20\n\
+                systemctl --failed\n\
+                journalctl -p err --since \"1 hour ago\" --no-pager | tail -30\n\
+                ```\n\
+                \n\
+                5. **For each command**: type it with `keyboard_type`, press Enter, wait, then screenshot the output.\n\
+                6. **Copy important output** using Ctrl+A, Ctrl+C in the terminal, then `get_clipboard` to capture text.\n\
+                7. **Compile a summary report** with:\n\
+                   - OS version and uptime\n\
+                   - CPU load (normal / warning / critical)\n\
+                   - Memory usage (used / total / percentage)\n\
+                   - Disk usage per partition (flag any above 80%)\n\
+                   - Top 5 processes by resource usage\n\
+                   - Failed services (if any)\n\
+                   - Recent error log entries\n\
+                   - Overall health verdict: HEALTHY / WARNING / CRITICAL\n\
+                \n\
+                ## Tips\n\
+                - Run one command at a time and verify output before proceeding.\n\
+                - If a command fails, try an alternative (e.g. `Get-Process` instead of `tasklist`).\n\
+                - For long output, scroll up or use `| more` / `| head` to paginate."
+            ),
+        )])
+    }
+
+    /// Guide for batch operations across multiple remote devices — install software, run scripts, collect status.
+    #[prompt(name = "batch_operation")]
+    async fn batch_operation(
+        &self,
+        params: Parameters<MultiDeviceTaskArgs>,
+    ) -> Result<Vec<PromptMessage>, ErrorData> {
+        let task = params.0.task_description;
+        Ok(vec![PromptMessage::new_text(
+            PromptMessageRole::User,
+            format!(
+                "Perform the following batch operation across multiple remote devices: \"{task}\"\n\
+                \n\
+                ## Workflow\n\
+                \n\
+                1. **Discover devices**: Call `get_host_info` to get the local device info. If you have a list of device IDs and access codes, proceed to step 2.\n\
+                2. **Plan the operation**: Break down \"{task}\" into specific steps for each device.\n\
+                3. **Connect to each device** sequentially using `connect_device`. Use `show_window=false` for efficiency during batch jobs.\n\
+                4. **For each device**:\n\
+                   a. Take a screenshot to verify the connection.\n\
+                   b. Execute the required steps (commands, clicks, etc.).\n\
+                   c. Take a screenshot to verify success.\n\
+                   d. Record the result (success / failure / warnings).\n\
+                   e. Disconnect with `disconnect_device` when done.\n\
+                5. **Compile a batch report**:\n\
+                   - Device ID → Result (success/failure)\n\
+                   - Any errors or warnings per device\n\
+                   - Summary: X/Y devices completed successfully\n\
+                \n\
+                ## Best Practices\n\
+                - Process devices one at a time to avoid confusion.\n\
+                - If a device fails, log the error and continue with the next device.\n\
+                - Use `show_window=false` for background automation — no GUI windows will open.\n\
+                - For identical operations, prepare the command sequence once, then repeat for each device.\n\
+                - After completing all devices, present a summary table to the user.\n\
+                \n\
+                ## Error Handling\n\
+                - If connection fails: skip the device, record \"connection failed\".\n\
+                - If a command fails: screenshot the error, try once more, then skip and record.\n\
+                - If the operation is destructive (uninstall, delete, format), ask the user for confirmation before proceeding."
+            ),
+        )])
+    }
+
+    /// Guide for diagnosing system issues on the remote desktop — slow performance, crashes, network problems, etc.
+    #[prompt(name = "diagnose_system_issue")]
+    async fn diagnose_system_issue(
+        &self,
+        params: Parameters<DiagnoseIssueArgs>,
+    ) -> Result<Vec<PromptMessage>, ErrorData> {
+        let args = params.0;
+        Ok(vec![PromptMessage::new_text(
+            PromptMessageRole::User,
+            format!(
+                "Diagnose the following issue on the remote desktop: \"{}\"\n\
+                Connection ID: {}\n\
+                \n\
+                ## Diagnostic Procedure\n\
+                \n\
+                1. **Screenshot** the current state of the desktop.\n\
+                2. **Gather system info** — open a terminal and run:\n\
+                   - **Windows**: `systeminfo`, `tasklist`, `ipconfig /all`, `netstat -an`\n\
+                   - **Linux**: `uname -a`, `top -bn1`, `free -h`, `df -h`, `ip addr`, `ss -tlnp`\n\
+                3. **Analyze based on symptom type**:\n\
+                \n\
+                ### Slow Performance\n\
+                - Check CPU usage: identify processes using >50% CPU\n\
+                - Check memory: look for high usage or swapping\n\
+                - Check disk: look for full partitions or high I/O\n\
+                - Recommend: kill unnecessary processes, free memory, clear disk space\n\
+                \n\
+                ### Application Crash\n\
+                - Check event logs: `Event Viewer` (Windows) or `journalctl` (Linux)\n\
+                - Look for crash dumps or error messages\n\
+                - Check if the application can be restarted\n\
+                - Check for updates or known issues\n\
+                \n\
+                ### Network Issues\n\
+                - `ping 8.8.8.8` — check basic connectivity\n\
+                - `nslookup google.com` — check DNS\n\
+                - `tracert` / `traceroute` — identify network path issues\n\
+                - Check firewall rules and proxy settings\n\
+                \n\
+                ### Disk Full\n\
+                - Find large files: `dir /s /o-s` (Windows) or `du -sh /* | sort -rh` (Linux)\n\
+                - Check temp folders, log files, recycle bin\n\
+                - Recommend cleanup actions\n\
+                \n\
+                4. **Screenshot** all diagnostic output for evidence.\n\
+                5. **Compile diagnosis report**:\n\
+                   - Problem summary\n\
+                   - Root cause (identified or suspected)\n\
+                   - Evidence (what commands/observations led to the conclusion)\n\
+                   - Recommended fix (with specific steps)\n\
+                   - Risk level of the fix\n\
+                \n\
+                6. **Ask the user** before applying any fix. Present the diagnosis and recommended action, wait for confirmation.\n\
+                \n\
+                ## Tips\n\
+                - Start broad (system overview) then narrow down.\n\
+                - Always screenshot before and after any remediation.\n\
+                - For destructive actions (killing processes, deleting files), explicitly ask for user confirmation.\n\
+                - If unsure, suggest the user consult a professional.",
+                args.issue_description, args.connection_id
+            ),
+        )])
+    }
+
+    /// Guide for analyzing and describing the current screen content in detail — OCR, UI understanding, content extraction.
+    #[prompt(name = "analyze_screen_content")]
+    async fn analyze_screen_content(
+        &self,
+        params: Parameters<ConnectionIdArg>,
+    ) -> Result<Vec<PromptMessage>, ErrorData> {
+        let conn = params.0.connection_id;
+        Ok(vec![PromptMessage::new_text(
+            PromptMessageRole::User,
+            format!(
+                "Analyze and describe the current screen content of the remote desktop in detail.\n\
+                Connection ID: {conn}\n\
+                \n\
+                ## Procedure\n\
+                \n\
+                1. **Take a full-resolution screenshot** (do NOT use max_width, we need maximum detail).\n\
+                2. **Get screen size** with `get_screen_size` for context.\n\
+                3. **Provide a structured analysis**:\n\
+                \n\
+                ### Desktop Overview\n\
+                - What OS is running? (identify from taskbar, dock, or desktop)\n\
+                - What applications are open? (window titles, taskbar items)\n\
+                - What is the active/focused window?\n\
+                \n\
+                ### Active Window Content\n\
+                - Application name and window title\n\
+                - Visible text content (read all text you can see)\n\
+                - UI state (dialogs, menus, forms — what's filled in, what's selected)\n\
+                - Error messages or notifications visible\n\
+                \n\
+                ### Key Elements Inventory\n\
+                For each important UI element visible, provide:\n\
+                - Description (e.g. \"Save button\", \"username text field\", \"error dialog\")\n\
+                - Approximate coordinates (x, y)\n\
+                - Current state (enabled/disabled, checked/unchecked, text content)\n\
+                \n\
+                ### Notifications & Alerts\n\
+                - System tray notifications\n\
+                - Toast messages\n\
+                - Dialog boxes or popups\n\
+                - Error indicators (red icons, warning triangles)\n\
+                \n\
+                ### Security Scan\n\
+                - Flag any visible sensitive information:\n\
+                  - Passwords shown in plaintext\n\
+                  - API keys or tokens\n\
+                  - Personal data (emails, phone numbers, addresses)\n\
+                  - Financial information\n\
+                - If sensitive content is found, warn the user immediately.\n\
+                \n\
+                ## Output Format\n\
+                Present the analysis in a clear, structured format. Use headers and bullet points.\n\
+                For any text you can read on screen, quote it exactly.\n\
+                For UI elements, provide coordinates so the user or AI can interact with them later."
+            ),
+        )])
+    }
+
+    /// Guide for orchestrating a task across multiple remote devices simultaneously.
+    #[prompt(name = "multi_device_workflow")]
+    async fn multi_device_workflow(
+        &self,
+        params: Parameters<MultiDeviceTaskArgs>,
+    ) -> Result<Vec<PromptMessage>, ErrorData> {
+        let task = params.0.task_description;
+        Ok(vec![PromptMessage::new_text(
+            PromptMessageRole::User,
+            format!(
+                "Orchestrate the following workflow across multiple remote devices: \"{task}\"\n\
+                \n\
+                ## Multi-Device Orchestration Framework\n\
+                \n\
+                ### Phase 1: Planning\n\
+                1. Parse the task description to identify:\n\
+                   - Which devices are involved (device IDs / access codes)\n\
+                   - What operations each device needs\n\
+                   - Dependencies between operations (does device B need output from device A?)\n\
+                   - The correct execution order\n\
+                \n\
+                ### Phase 2: Connection\n\
+                1. Connect to all required devices using `connect_device`.\n\
+                   - Use `show_window=false` for background automation.\n\
+                   - Track each `connection_id` with its device identity.\n\
+                2. Verify each connection with a screenshot.\n\
+                3. Call `get_screen_size` for each device to understand their coordinate spaces.\n\
+                \n\
+                ### Phase 3: Execution\n\
+                Execute operations following the dependency order:\n\
+                \n\
+                **Independent tasks** (no cross-device dependencies):\n\
+                - Execute on each device sequentially.\n\
+                - Screenshot → Act → Verify for each step on each device.\n\
+                \n\
+                **Cross-device tasks** (e.g. copy data from A to B):\n\
+                - On source device: select content, copy to clipboard.\n\
+                - Use `get_clipboard` to retrieve the data.\n\
+                - On target device: use `set_clipboard` to set the data, then paste.\n\
+                - Screenshot both devices to verify.\n\
+                \n\
+                **Coordinated tasks** (e.g. test client-server communication):\n\
+                - Set up the server side first.\n\
+                - Screenshot to confirm it's ready.\n\
+                - Then perform the client side action.\n\
+                - Screenshot both sides to verify.\n\
+                \n\
+                ### Phase 4: Reporting\n\
+                Compile a cross-device report:\n\
+                - Per-device status: what was done, what succeeded, what failed\n\
+                - Cross-device verification: did the overall workflow achieve its goal?\n\
+                - Any issues that need manual attention\n\
+                \n\
+                ## Tips\n\
+                - Always include the correct `connection_id` in every tool call — mixing up devices is the most common error.\n\
+                - Name or label your connections clearly (e.g. \"conn_server\", \"conn_client\") in your reasoning.\n\
+                - If a cross-device operation fails, check both devices for error state.\n\
+                - Disconnect all devices when the workflow is complete."
+            ),
+        )])
+    }
+
+    /// Guide for documenting an operational procedure by observing and recording each step performed on the remote desktop.
+    #[prompt(name = "document_procedure")]
+    async fn document_procedure(
+        &self,
+        params: Parameters<DocumentProcedureArgs>,
+    ) -> Result<Vec<PromptMessage>, ErrorData> {
+        let args = params.0;
+        Ok(vec![PromptMessage::new_text(
+            PromptMessageRole::User,
+            format!(
+                "Document the following procedure on the remote desktop: \"{}\"\n\
+                Connection ID: {}\n\
+                \n\
+                ## Documentation Workflow\n\
+                \n\
+                You will observe (or perform) the procedure step-by-step and generate a Standard Operating Procedure (SOP) document.\n\
+                \n\
+                ### For Each Step\n\
+                1. **Screenshot** the screen BEFORE the action.\n\
+                2. **Describe** what action is about to be taken and why.\n\
+                3. **Perform** the action (click, type, etc.).\n\
+                4. **Screenshot** the screen AFTER the action.\n\
+                5. **Record** the step in this format:\n\
+                   - Step number\n\
+                   - Action description (what to do)\n\
+                   - Expected result (what should happen)\n\
+                   - Actual result (what happened)\n\
+                   - Screenshot reference (before/after)\n\
+                \n\
+                ### SOP Output Format\n\
+                \n\
+                ```\n\
+                # Procedure: {}\n\
+                \n\
+                ## Prerequisites\n\
+                - [List required access, software, credentials]\n\
+                \n\
+                ## Steps\n\
+                \n\
+                ### Step 1: [Action Title]\n\
+                **Action**: [Detailed description of what to do]\n\
+                **Expected Result**: [What should happen]\n\
+                **Screenshot**: [Before → After]\n\
+                **Notes**: [Any warnings, tips, or edge cases]\n\
+                \n\
+                ### Step 2: ...\n\
+                \n\
+                ## Troubleshooting\n\
+                - [Common issues and how to resolve them]\n\
+                \n\
+                ## Summary\n\
+                - Total steps: N\n\
+                - Estimated time: X minutes\n\
+                - Difficulty: Easy / Medium / Hard\n\
+                ```\n\
+                \n\
+                ### Tips\n\
+                - Be verbose — someone unfamiliar with the system should be able to follow the SOP.\n\
+                - Include exact coordinates or UI element descriptions for click targets.\n\
+                - Note any delays or waiting periods between steps.\n\
+                - If a step can fail, document the failure mode and recovery action.\n\
+                - Use `get_clipboard` to capture exact text output from terminals.",
+                args.procedure_name, args.connection_id, args.procedure_name
             ),
         )])
     }

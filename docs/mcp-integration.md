@@ -149,13 +149,48 @@ Resources provide read-only real-time data about system state.
 
 ## MCP Prompts
 
-Prompts are instruction templates that teach AI agents best practices.
+Prompts are instruction templates that teach AI agents best practices for specific scenarios.
 
-| Prompt | Description |
-|--------|-------------|
-| `operate_remote_desktop` | Complete guide for the screenshot→analyze→act→verify loop, coordinate system, and all available tools. |
-| `find_and_click` | Step-by-step instructions for locating and clicking a specific UI element. Parameters: `element_description`, `connection_id`. |
-| `run_command` | Step-by-step instructions for opening a terminal and running a command. Parameters: `command`, `connection_id`. |
+### General Operation
+
+| Prompt | Description | Parameters |
+|--------|-------------|------------|
+| `operate_remote_desktop` | Complete guide for the screenshot→analyze→act→verify loop, coordinate system, and all available tools. | (none) |
+| `find_and_click` | Step-by-step instructions for locating and clicking a specific UI element. | `element_description`, `connection_id` |
+| `run_command` | Step-by-step instructions for opening a terminal and running a command. | `command`, `connection_id` |
+
+### DevOps & Automation
+
+| Prompt | Description | Parameters |
+|--------|-------------|------------|
+| `server_health_check` | Comprehensive server health check — CPU, memory, disk, processes, services, error logs. Generates a structured health report. | `connection_id` |
+| `batch_operation` | Guide for executing the same task across multiple devices sequentially, with error handling and summary reporting. | `task_description` |
+
+### Troubleshooting
+
+| Prompt | Description | Parameters |
+|--------|-------------|------------|
+| `diagnose_system_issue` | Systematic diagnosis of system problems (slow performance, crashes, network issues, disk full) with root cause analysis and remediation suggestions. | `issue_description`, `connection_id` |
+
+### Screen Intelligence
+
+| Prompt | Description | Parameters |
+|--------|-------------|------------|
+| `analyze_screen_content` | Deep analysis of screen content — OS detection, open applications, text extraction, UI element inventory, and security scan for exposed sensitive information. | `connection_id` |
+
+### Multi-Device
+
+| Prompt | Description | Parameters |
+|--------|-------------|------------|
+| `multi_device_workflow` | Orchestrate complex workflows across multiple remote devices with dependency management and cross-device data transfer. | `task_description` |
+
+### Documentation
+
+| Prompt | Description | Parameters |
+|--------|-------------|------------|
+| `document_procedure` | Observe or perform a procedure and generate a Standard Operating Procedure (SOP) document with step-by-step instructions, screenshots, and troubleshooting. | `procedure_name`, `connection_id` |
+
+See [Demo Scenarios](demo-scenarios.md) for complete usage examples of each prompt.
 
 ## Coordinate System
 
