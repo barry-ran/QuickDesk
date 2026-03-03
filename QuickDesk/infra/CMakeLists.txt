@@ -9,7 +9,20 @@ set(QD_TARGET_SOURCES
     log/log.cpp    
     http/httprequest.h
     http/httprequest.cpp
+    autostart/autostartmanager.h
+    autostart/autostartmanager.cpp
+    autostart/autostartmanagerplatform.h
 )
+if (WIN32)
+    list(APPEND QD_TARGET_SOURCES
+        autostart/autostartmanagerplatformwin.cpp
+    )
+endif()
+if (APPLE)
+    list(APPEND QD_TARGET_SOURCES
+        autostart/autostartmanagerplatformmac.mm
+    )
+endif()
 source_group(${QD_TARGET_NAME} FILES ${QD_TARGET_SOURCES})
 
 # object库类似gn的source set，可以在多个target中使用，不会重复编译
@@ -30,3 +43,8 @@ target_link_libraries(${QD_TARGET_NAME} PRIVATE
     base
     spdlog::spdlog
 )
+if (APPLE)
+    target_link_libraries(${QD_TARGET_NAME} PRIVATE
+        "-framework CoreServices"
+    )
+endif()

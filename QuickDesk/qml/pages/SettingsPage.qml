@@ -630,6 +630,44 @@ Item {
                                 }
                             }
                         }
+                        
+                        Rectangle { width: parent.width; height: 1; color: Theme.border }
+                        
+                        // Auto Start
+                        Row {
+                            width: parent.width
+                            spacing: Theme.spacingMedium
+                            
+                            Column {
+                                width: parent.width - autoStartSwitch.width - parent.spacing
+                                spacing: Theme.spacingXSmall
+                                anchors.verticalCenter: parent.verticalCenter
+                                
+                                Text {
+                                    text: qsTr("Launch at Startup")
+                                    font.pixelSize: Theme.fontSizeMedium
+                                    color: Theme.text
+                                }
+                                
+                                Text {
+                                    text: qsTr("Automatically start the application when you log in")
+                                    font.pixelSize: Theme.fontSizeSmall
+                                    color: Theme.textSecondary
+                                    wrapMode: Text.WordWrap
+                                    width: parent.width
+                                }
+                            }
+                            
+                            QDSwitch {
+                                id: autoStartSwitch
+                                anchors.verticalCenter: parent.verticalCenter
+                                checked: configViewModel.autoStart
+                                
+                                onToggled: {
+                                    configViewModel.autoStart = checked
+                                }
+                            }
+                        }
                     }
                 }
                 

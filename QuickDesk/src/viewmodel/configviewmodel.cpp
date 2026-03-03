@@ -1,6 +1,7 @@
 #include "configviewmodel.h"
 
 #include "core/localconfigcenter.h"
+#include "infra/autostart/autostartmanager.h"
 
 ConfigViewModel::ConfigViewModel(QObject* parent)
     : QObject(parent)
@@ -53,4 +54,18 @@ QString ConfigViewModel::preferredVideoCodec()
 void ConfigViewModel::setPreferredVideoCodec(const QString& value)
 {
     core::LocalConfigCenter::instance().setPreferredVideoCodec(value);
+}
+
+bool ConfigViewModel::autoStart()
+{
+    return infra::AutoStartManager::isAutoStartEnabled();
+}
+
+void ConfigViewModel::setAutoStart(bool value)
+{
+    if (autoStart() == value) {
+        return;
+    }
+    infra::AutoStartManager::setAutoStartEnabled(value);
+    Q_EMIT autoStartChanged(value);
 }
