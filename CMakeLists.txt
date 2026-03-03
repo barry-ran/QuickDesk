@@ -108,7 +108,7 @@ if (NOT MSVC)
     add_compile_options(-Wall -Wextra -pedantic -Werror)
 
     # disable some warning
-    add_compile_options(-Wno-unknown-warning-option -Wno-nested-anon-types -Wno-c++17-extensions -Wno-overloaded-virtual -Wno-variadic-macro-arguments-omitted -Wno-gnu-zero-variadic-macro-arguments)
+    add_compile_options(-Wno-unknown-warning-option -Wno-nested-anon-types -Wno-c++17-extensions -Wno-overloaded-virtual -Wno-variadic-macro-arguments-omitted -Wno-gnu-zero-variadic-macro-arguments -Wno-deprecated-declarations)
 endif()
 
 # 开启qml import trace(这里设置无效，需要在项目配置设置该环境变量)
