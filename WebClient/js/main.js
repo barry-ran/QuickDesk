@@ -1,13 +1,12 @@
 /**
- * main.js - QuickDesk Web Client 入口
+ * main.js - QuickDesk Web Client entry
  *
- * 管理导航、连接历史、ICE 服务器设置
- * 远程桌面连接通过 window.open 在新 tab 中打开
+ * Navigation, connection history, settings.
+ * Remote desktop sessions open in new tabs via window.open.
  */
 
 import { ConnectionHistory } from './storage/connection-history.js';
-import { IceServerStorage } from './storage/ice-server-storage.js';
-import { BUILTIN_STUN_URLS } from './ice-config-fetcher.js';
+import { t, applyI18n, getLocale, setLocale, getSupportedLocales } from './i18n.js';
 
 class QuickDeskApp {
     constructor() {
@@ -15,17 +14,30 @@ class QuickDeskApp {
     }
 
     init() {
+        this._initLangSelector();
+        applyI18n();
+
         this._initNavigation();
         this._initConnectForm();
         this._initSettings();
         this._renderHistory();
-        this._renderBuiltinStun();
-        this._renderUserServers();
 
         this._loadSavedServerUrl();
         this._applyUrlParams();
 
         window.addEventListener('message', (e) => this._onMessage(e));
+    }
+
+    // ==================== Language ====================
+
+    _initLangSelector() {
+        const select = document.getElementById('langSelect');
+        if (!select) return;
+        select.value = getLocale();
+        select.addEventListener('change', () => {
+            setLocale(select.value);
+            location.reload();
+        });
     }
 
     // ==================== Navigation ====================
@@ -103,7 +115,7 @@ class QuickDeskApp {
         const accessCode = document.getElementById('accessCode')?.value?.trim();
 
         if (!deviceId || !accessCode) {
-            this._showToast('请输入设备 ID 和访问码', 'error');
+            this._showToast(t('connect.inputRequired'), 'error');
             return;
         }
 
@@ -125,7 +137,7 @@ class QuickDeskApp {
             window.open(remoteUrl, `quickdesk_${deviceId}`);
         }
 
-        this._showToast(`正在连接 ${deviceId}...`, 'info');
+        this._showToast(t('connect.connecting', { deviceId }), 'info');
     }
 
     // ==================== Connection History ====================
@@ -139,7 +151,7 @@ class QuickDeskApp {
             container.innerHTML = `
                 <div class="empty-state">
                     <div class="empty-icon">📋</div>
-                    <p>暂无历史连接记录</p>
+                    <p>${t('history.empty')}</p>
                 </div>`;
             return;
         }
@@ -154,12 +166,12 @@ class QuickDeskApp {
                     <div class="history-device">${this._escapeHtml(device.deviceId)}</div>
                     <div class="history-meta">
                         ${ConnectionHistory.formatTime(device.lastConnected)}
-                        · 连接 ${device.connectCount || 1} 次
+                        · ${t('history.connectCount', { count: device.connectCount || 1 })}
                     </div>
                 </div>
                 <div class="history-actions">
-                    <button class="icon-btn" data-action="fill" title="填充">↗</button>
-                    <button class="icon-btn danger" data-action="delete" title="删除">✕</button>
+                    <button class="icon-btn" data-action="fill" title="${t('history.fill')}">↗</button>
+                    <button class="icon-btn danger" data-action="delete" title="${t('history.delete')}">✕</button>
                 </div>`;
 
             item.querySelector('[data-action="fill"]').addEventListener('click', (e) => {
@@ -171,7 +183,7 @@ class QuickDeskApp {
                 e.stopPropagation();
                 ConnectionHistory.remove(device.deviceId);
                 this._renderHistory();
-                this._showToast('已删除历史记录', 'info');
+                this._showToast(t('history.deleted'), 'info');
             });
 
             item.addEventListener('click', () => this._fillFromHistory(device));
@@ -193,11 +205,23 @@ class QuickDeskApp {
         }
     }
 
-    // ==================== Settings: ICE Servers ====================
+    // ==================== Settings ====================
 
     _initSettings() {
-        document.getElementById('addTurnBtn')?.addEventListener('click', () => this._addTurnServer());
-        document.getElementById('addStunBtn')?.addEventListener('click', () => this._addStunServer());
+        const settingsServerUrl = document.getElementById('settingsServerUrl');
+        const connectServerUrl = document.getElementById('serverUrl');
+        if (settingsServerUrl) {
+            const saved = localStorage.getItem('quickdesk_signaling_url') || '';
+            settingsServerUrl.value = saved || (connectServerUrl?.value || '');
+            settingsServerUrl.addEventListener('change', () => {
+                const url = settingsServerUrl.value.trim();
+                if (url) {
+                    localStorage.setItem('quickdesk_signaling_url', url);
+                    if (connectServerUrl) connectServerUrl.value = url;
+                    this._showToast(t('settings.signalingServerSaved'), 'info');
+                }
+            });
+        }
 
         const codecSelect = document.getElementById('videoCodecSelect');
         if (codecSelect) {
@@ -205,107 +229,8 @@ class QuickDeskApp {
             codecSelect.value = saved;
             codecSelect.addEventListener('change', () => {
                 localStorage.setItem('quickdesk_video_codec', codecSelect.value);
-                this._showToast(`视频编码器已设置为 ${codecSelect.value}，下次连接时生效`, 'info');
+                this._showToast(t('settings.codecChanged', { codec: codecSelect.value }), 'info');
             });
-        }
-    }
-
-    _renderBuiltinStun() {
-        const container = document.getElementById('builtinStunList');
-        if (!container) return;
-
-        container.innerHTML = '';
-        for (const url of BUILTIN_STUN_URLS) {
-            const item = document.createElement('div');
-            item.className = 'server-item';
-            item.innerHTML = `
-                <span class="server-type-badge stun">STUN</span>
-                <span class="server-url">${this._escapeHtml(url)}</span>
-                <span class="builtin-badge">内置</span>`;
-            container.appendChild(item);
-        }
-    }
-
-    _renderUserServers() {
-        const container = document.getElementById('userServerList');
-        const noServers = document.getElementById('noUserServers');
-        if (!container) return;
-
-        const servers = IceServerStorage.getAll();
-        container.innerHTML = '';
-
-        if (servers.length === 0) {
-            if (noServers) noServers.style.display = '';
-            return;
-        }
-
-        if (noServers) noServers.style.display = 'none';
-
-        servers.forEach((server, index) => {
-            const url = Array.isArray(server.urls) ? server.urls[0] : server.urls;
-            const isTurn = url && (url.startsWith('turn:') || url.startsWith('turns:'));
-            const item = document.createElement('div');
-            item.className = 'server-item';
-            item.innerHTML = `
-                <span class="server-type-badge ${isTurn ? 'turn' : 'stun'}">${isTurn ? 'TURN' : 'STUN'}</span>
-                <span class="server-url">${this._escapeHtml(url)}</span>
-                <button class="icon-btn danger" title="删除">✕</button>`;
-
-            item.querySelector('.icon-btn').addEventListener('click', () => {
-                IceServerStorage.removeAt(index);
-                this._renderUserServers();
-                this._showToast('服务器已删除', 'info');
-            });
-
-            container.appendChild(item);
-        });
-    }
-
-    _addTurnServer() {
-        const url = document.getElementById('turnUrl')?.value?.trim();
-        const username = document.getElementById('turnUsername')?.value?.trim();
-        const password = document.getElementById('turnPassword')?.value?.trim();
-
-        if (!url || !username || !password) {
-            this._showToast('请填写完整的 TURN 服务器信息', 'error');
-            return;
-        }
-
-        if (!url.startsWith('turn:') && !url.startsWith('turns:')) {
-            this._showToast('TURN 服务器 URL 必须以 turn: 或 turns: 开头', 'error');
-            return;
-        }
-
-        if (IceServerStorage.addTurnServer(url, username, password)) {
-            document.getElementById('turnUrl').value = '';
-            document.getElementById('turnUsername').value = '';
-            document.getElementById('turnPassword').value = '';
-            this._renderUserServers();
-            this._showToast('TURN 服务器已添加', 'success');
-        } else {
-            this._showToast('添加失败，该服务器可能已存在', 'error');
-        }
-    }
-
-    _addStunServer() {
-        const url = document.getElementById('stunUrl')?.value?.trim();
-
-        if (!url) {
-            this._showToast('请输入 STUN 服务器 URL', 'error');
-            return;
-        }
-
-        if (!url.startsWith('stun:') && !url.startsWith('stuns:')) {
-            this._showToast('STUN 服务器 URL 必须以 stun: 或 stuns: 开头', 'error');
-            return;
-        }
-
-        if (IceServerStorage.addStunServer(url)) {
-            document.getElementById('stunUrl').value = '';
-            this._renderUserServers();
-            this._showToast('STUN 服务器已添加', 'success');
-        } else {
-            this._showToast('添加失败，该服务器可能已存在', 'error');
         }
     }
 

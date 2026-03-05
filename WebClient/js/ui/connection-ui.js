@@ -1,9 +1,10 @@
 /**
- * connection-ui.js - 连接页面 UI 逻辑
+ * connection-ui.js - Connection page UI logic
  * 
- * 参照 RemoteControlPage.qml
- * 设备ID/访问码输入、连接状态显示、服务器地址配置
+ * Device ID/access code input, connection status display, server URL config.
  */
+
+import { t } from '../i18n.js';
 
 export class ConnectionUI extends EventTarget {
     constructor() {
@@ -11,9 +12,6 @@ export class ConnectionUI extends EventTarget {
         this._elements = {};
     }
 
-    /**
-     * 初始化 UI 绑定
-     */
     init() {
         this._elements = {
             serverUrl: document.getElementById('serverUrl'),
@@ -28,7 +26,6 @@ export class ConnectionUI extends EventTarget {
             logContainer: document.getElementById('logContainer'),
         };
 
-        // 回车键支持
         this._elements.deviceId?.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') this._elements.accessCode?.focus();
         });
@@ -40,28 +37,23 @@ export class ConnectionUI extends EventTarget {
         this._elements.connectBtn?.addEventListener('click', () => this._onConnect());
         this._elements.disconnectBtn?.addEventListener('click', () => this._onDisconnect());
 
-        // 加载保存的服务器地址
         const savedUrl = localStorage.getItem('quickdesk_signaling_url');
         if (savedUrl && this._elements.serverUrl) {
             this._elements.serverUrl.value = savedUrl;
         }
     }
 
-    /**
-     * 连接按钮点击
-     * @private
-     */
+    /** @private */
     _onConnect() {
         const serverUrl = this._elements.serverUrl?.value?.trim() || 'ws://localhost:8000';
         const deviceId = this._elements.deviceId?.value?.trim();
         const accessCode = this._elements.accessCode?.value?.trim();
 
         if (!deviceId || !accessCode) {
-            this.addLog('请输入设备 ID 和访问码', 'error');
+            this.addLog(t('connui.inputRequired'), 'error');
             return;
         }
 
-        // 保存服务器地址
         localStorage.setItem('quickdesk_signaling_url', serverUrl);
 
         this.setConnecting();
@@ -70,54 +62,36 @@ export class ConnectionUI extends EventTarget {
         }));
     }
 
-    /**
-     * 断开按钮点击
-     * @private
-     */
+    /** @private */
     _onDisconnect() {
         this.dispatchEvent(new CustomEvent('disconnect'));
     }
 
-    /**
-     * 设置连接中状态
-     */
     setConnecting() {
-        this._setStatus('connecting', '连接中...');
+        this._setStatus('connecting', t('connui.connecting'));
         if (this._elements.connectBtn) this._elements.connectBtn.disabled = true;
         if (this._elements.disconnectBtn) this._elements.disconnectBtn.disabled = false;
     }
 
-    /**
-     * 设置已连接状态
-     */
     setConnected() {
-        this._setStatus('connected', '已连接');
+        this._setStatus('connected', t('connui.connected'));
         if (this._elements.connectBtn) this._elements.connectBtn.disabled = true;
         if (this._elements.disconnectBtn) this._elements.disconnectBtn.disabled = false;
     }
 
-    /**
-     * 设置断开状态
-     */
     setDisconnected(reason = '') {
-        this._setStatus('disconnected', reason || '未连接');
+        this._setStatus('disconnected', reason || t('connui.disconnected'));
         if (this._elements.connectBtn) this._elements.connectBtn.disabled = false;
         if (this._elements.disconnectBtn) this._elements.disconnectBtn.disabled = true;
     }
 
-    /**
-     * 设置失败状态
-     */
     setFailed(reason = '') {
-        this._setStatus('failed', reason || '连接失败');
+        this._setStatus('failed', reason || t('connui.failed'));
         if (this._elements.connectBtn) this._elements.connectBtn.disabled = false;
         if (this._elements.disconnectBtn) this._elements.disconnectBtn.disabled = true;
     }
 
-    /**
-     * 设置状态
-     * @private
-     */
+    /** @private */
     _setStatus(status, text) {
         if (this._elements.statusDot) {
             this._elements.statusDot.className = `status-dot ${status}`;
@@ -127,26 +101,19 @@ export class ConnectionUI extends EventTarget {
         }
     }
 
-    /**
-     * 切换到远程桌面视图
-     */
     showRemotePage() {
         if (this._elements.connectPage) this._elements.connectPage.style.display = 'none';
         if (this._elements.remotePage) this._elements.remotePage.style.display = 'flex';
     }
 
-    /**
-     * 切换到连接页面
-     */
     showConnectPage() {
         if (this._elements.connectPage) this._elements.connectPage.style.display = 'flex';
         if (this._elements.remotePage) this._elements.remotePage.style.display = 'none';
     }
 
     /**
-     * 添加日志
      * @param {string} message 
-     * @param {string} [level='info'] - info, success, error, warning
+     * @param {string} [level='info']
      */
     addLog(message, level = 'info') {
         const container = this._elements.logContainer;
@@ -160,15 +127,11 @@ export class ConnectionUI extends EventTarget {
         container.appendChild(entry);
         container.scrollTop = container.scrollHeight;
 
-        // 限制日志条目数量
         while (container.children.length > 500) {
             container.removeChild(container.firstChild);
         }
     }
 
-    /**
-     * 清理
-     */
     destroy() {
         // nothing to clean up
     }

@@ -1,13 +1,15 @@
 /**
- * floating-toolbar.js - 浮动工具栏
+ * floating-toolbar.js - Floating toolbar
  * 
- * 参照 FloatingToolButton.qml 实现一致的菜单结构
- * 可拖拽浮动按钮 + 下拉菜单（含子菜单）
+ * Matches FloatingToolButton.qml menu structure.
+ * Draggable floating button + dropdown menu (with submenus).
  */
+
+import { t } from '../i18n.js';
 
 export class FloatingToolbar extends EventTarget {
     /**
-     * @param {HTMLElement} container - 容器元素
+     * @param {HTMLElement} container
      */
     constructor(container) {
         super();
@@ -22,7 +24,7 @@ export class FloatingToolbar extends EventTarget {
         this.settings = {
             targetFramerate: 30,
             framerateBoostMode: 'office',
-            preferredMinBitrate: 10485760, // 10 MiB (10*1024*1024) bps
+            preferredMinBitrate: 10485760,
             audioEnabled: true,
             statsVisible: false,
         };
@@ -48,9 +50,7 @@ export class FloatingToolbar extends EventTarget {
         }
     }
 
-    /**
-     * @private
-     */
+    /** @private */
     _create() {
         this._element = document.createElement('div');
         this._element.className = 'floating-btn';
@@ -99,32 +99,30 @@ export class FloatingToolbar extends EventTarget {
         });
     }
 
-    /**
-     * @private
-     */
+    /** @private */
     _buildMenu() {
         this._menuElement.innerHTML = '';
 
         const items = [
-            { text: 'Smart Boost', icon: '⚡', hasSubmenu: true, action: 'submenu-boost' },
-            { text: 'Target Framerate', icon: '🎯', hasSubmenu: true, action: 'submenu-framerate' },
-            { text: 'Resolution', icon: '🖥️', hasSubmenu: true, action: 'submenu-resolution' },
-            { text: 'Bitrate', icon: '📶', hasSubmenu: true, action: 'submenu-bitrate' },
+            { textKey: 'menu.smartBoost', icon: '⚡', hasSubmenu: true, action: 'submenu-boost' },
+            { textKey: 'menu.targetFramerate', icon: '🎯', hasSubmenu: true, action: 'submenu-framerate' },
+            { textKey: 'menu.resolution', icon: '🖥️', hasSubmenu: true, action: 'submenu-resolution' },
+            { textKey: 'menu.bitrate', icon: '📶', hasSubmenu: true, action: 'submenu-bitrate' },
             { type: 'separator' },
-            { text: 'Fit Window', icon: '⛶', action: 'fitWindow' },
-            { text: 'Video Stats', icon: '📊', action: 'toggleStats' },
-            { text: '', icon: '🔊', action: 'toggleAudio', id: 'audioMenuItem' },
-            { text: 'Screenshot', icon: '📷', action: 'screenshot' },
-            { text: 'Logs', icon: '📋', action: 'toggleLogs' },
+            { textKey: 'menu.fitWindow', icon: '⛶', action: 'fitWindow' },
+            { textKey: 'menu.videoStats', icon: '📊', action: 'toggleStats' },
+            { textKey: '', icon: '🔊', action: 'toggleAudio', id: 'audioMenuItem' },
+            { textKey: 'menu.screenshot', icon: '📷', action: 'screenshot' },
+            { textKey: 'menu.logs', icon: '📋', action: 'toggleLogs' },
             { type: 'separator', id: 'actionSeparator', hidden: true },
-            { text: 'Send Ctrl+Alt+Del', icon: '⌨', action: 'sendAttentionSequence', id: 'sasMenuItem', hidden: true },
-            { text: 'Lock Screen', icon: '🔒', action: 'lockWorkstation', id: 'lockMenuItem', hidden: true },
+            { textKey: 'menu.sendCAD', icon: '⌨', action: 'sendAttentionSequence', id: 'sasMenuItem', hidden: true },
+            { textKey: 'menu.lockScreen', icon: '🔒', action: 'lockWorkstation', id: 'lockMenuItem', hidden: true },
             { type: 'separator', id: 'uploadSeparator', hidden: true },
-            { text: 'Upload File', icon: '📤', action: 'uploadFile', id: 'uploadMenuItem', hidden: true },
-            { text: 'Download from Host', icon: '📥', action: 'downloadFile', id: 'downloadMenuItem', hidden: true },
-            { text: 'Transfers', icon: '📊', action: 'showTransfers', id: 'transfersMenuItem', hidden: true },
+            { textKey: 'menu.uploadFile', icon: '📤', action: 'uploadFile', id: 'uploadMenuItem', hidden: true },
+            { textKey: 'menu.downloadFile', icon: '📥', action: 'downloadFile', id: 'downloadMenuItem', hidden: true },
+            { textKey: 'menu.transfers', icon: '📊', action: 'showTransfers', id: 'transfersMenuItem', hidden: true },
             { type: 'separator' },
-            { text: 'Disconnect', icon: '✕', action: 'disconnect', destructive: true },
+            { textKey: 'menu.disconnect', icon: '✕', action: 'disconnect', destructive: true },
         ];
 
         for (const item of items) {
@@ -142,12 +140,11 @@ export class FloatingToolbar extends EventTarget {
             if (item.id) el.id = item.id;
             if (item.hidden) el.style.display = 'none';
 
-            let label = item.text;
             if (item.action === 'toggleAudio') {
-                label = this.settings.audioEnabled ? 'Mute Audio' : 'Unmute Audio';
+                const label = this.settings.audioEnabled ? t('menu.muteAudio') : t('menu.unmuteAudio');
                 el.innerHTML = `<span class="menu-icon">${this.settings.audioEnabled ? '🔊' : '🔇'}</span><span class="menu-text">${label}</span>`;
             } else {
-                el.innerHTML = `<span class="menu-icon">${item.icon}</span><span class="menu-text">${label}</span>`;
+                el.innerHTML = `<span class="menu-icon">${item.icon}</span><span class="menu-text">${t(item.textKey)}</span>`;
             }
 
             if (item.hasSubmenu) {
@@ -165,20 +162,16 @@ export class FloatingToolbar extends EventTarget {
         this._createSubmenus();
     }
 
-    /**
-     * @private
-     */
+    /** @private */
     _createSubmenus() {
         this._submenus = {};
 
-        // Smart Boost
         this._submenus.boost = this._createSubmenu([
-            { text: 'Off', value: 'off', checkGroup: 'boost' },
-            { text: 'Office', value: 'office', checkGroup: 'boost' },
-            { text: 'Gaming', value: 'gaming', checkGroup: 'boost' },
+            { text: t('menu.off'), value: 'off', checkGroup: 'boost' },
+            { text: t('menu.office'), value: 'office', checkGroup: 'boost' },
+            { text: t('menu.gaming'), value: 'gaming', checkGroup: 'boost' },
         ]);
 
-        // Target Framerate
         this._submenus.framerate = this._createSubmenu([
             { text: '60 FPS', value: 60, checkGroup: 'framerate' },
             { text: '30 FPS', value: 30, checkGroup: 'framerate' },
@@ -186,9 +179,8 @@ export class FloatingToolbar extends EventTarget {
             { text: '5 FPS', value: 5, checkGroup: 'framerate' },
         ]);
 
-        // Resolution
         this._submenus.resolution = this._createSubmenu([
-            { text: 'Original', value: 'original', id: 'resOriginal' },
+            { text: t('menu.original'), value: 'original', id: 'resOriginal' },
             { type: 'separator' },
             { text: '3840 × 2160 (4K)', value: '3840x2160' },
             { text: '2560 × 1440 (2K)', value: '2560x1440' },
@@ -199,7 +191,6 @@ export class FloatingToolbar extends EventTarget {
             { text: '1024 × 768', value: '1024x768' },
         ]);
 
-        // Bitrate
         this._submenus.bitrate = this._createSubmenu([
             { text: '100 MiB', value: 104857600, checkGroup: 'bitrate' },
             { text: '50 MiB', value: 52428800, checkGroup: 'bitrate' },
@@ -209,9 +200,7 @@ export class FloatingToolbar extends EventTarget {
         ]);
     }
 
-    /**
-     * @private
-     */
+    /** @private */
     _createSubmenu(items) {
         const submenu = document.createElement('div');
         submenu.className = 'floating-submenu';
@@ -248,9 +237,7 @@ export class FloatingToolbar extends EventTarget {
         return submenu;
     }
 
-    /**
-     * @private
-     */
+    /** @private */
     _isChecked(item) {
         if (!item.checkGroup) return false;
         switch (item.checkGroup) {
@@ -261,9 +248,7 @@ export class FloatingToolbar extends EventTarget {
         return false;
     }
 
-    /**
-     * @private
-     */
+    /** @private */
     _updateSubmenuChecks(submenu) {
         submenu.querySelectorAll('.menu-item[data-check-group]').forEach(el => {
             const group = el.dataset.checkGroup;
@@ -279,9 +264,7 @@ export class FloatingToolbar extends EventTarget {
         });
     }
 
-    /**
-     * @private
-     */
+    /** @private */
     _handleMenuClick(action, triggerEl) {
         this._closeActiveSubmenu();
 
@@ -294,8 +277,8 @@ export class FloatingToolbar extends EventTarget {
                 const origItem = submenu.querySelector('#resOriginal .menu-text');
                 if (origItem) {
                     origItem.textContent = this._originalWidth > 0
-                        ? `Original (${this._originalWidth}×${this._originalHeight})`
-                        : 'Original';
+                        ? `${t('menu.original')} (${this._originalWidth}×${this._originalHeight})`
+                        : t('menu.original');
                 }
             }
 
@@ -325,8 +308,8 @@ export class FloatingToolbar extends EventTarget {
                 const menuItem = this._menuElement.querySelector('#audioMenuItem');
                 if (menuItem) {
                     const icon = this.settings.audioEnabled ? '🔊' : '🔇';
-                    const text = this.settings.audioEnabled ? 'Mute Audio' : 'Unmute Audio';
-                    menuItem.innerHTML = `<span class="menu-icon">${icon}</span><span class="menu-text">${text}</span>`;
+                    const label = this.settings.audioEnabled ? t('menu.muteAudio') : t('menu.unmuteAudio');
+                    menuItem.innerHTML = `<span class="menu-icon">${icon}</span><span class="menu-text">${label}</span>`;
                 }
                 this.dispatchEvent(new CustomEvent('settingChange', {
                     detail: { setting: 'audio', value: this.settings.audioEnabled }
@@ -360,9 +343,7 @@ export class FloatingToolbar extends EventTarget {
         }
     }
 
-    /**
-     * @private
-     */
+    /** @private */
     _handleSubmenuClick(item, submenu) {
         switch (item.checkGroup || '') {
             case 'boost':
@@ -384,7 +365,6 @@ export class FloatingToolbar extends EventTarget {
                 }));
                 break;
             default:
-                // Resolution items (no checkGroup)
                 this.dispatchEvent(new CustomEvent('settingChange', {
                     detail: { setting: 'resolution', value: item.value }
                 }));
@@ -395,9 +375,7 @@ export class FloatingToolbar extends EventTarget {
 
     // ==================== Submenu positioning ====================
 
-    /**
-     * @private
-     */
+    /** @private */
     _showSubmenu(submenu, triggerEl) {
         this._activeSubmenu = submenu;
         submenu.style.display = 'block';
@@ -409,13 +387,11 @@ export class FloatingToolbar extends EventTarget {
         let left = menuRect.right + 4 - containerRect.left;
         let top = triggerRect.top - containerRect.top;
 
-        // If goes off right edge, show on left side
         if (left + submenu.offsetWidth > containerRect.width) {
             left = menuRect.left - containerRect.left - submenu.offsetWidth - 4;
         }
         if (left < 0) left = 4;
 
-        // If goes off bottom
         if (top + submenu.offsetHeight > containerRect.height) {
             top = containerRect.height - submenu.offsetHeight - 4;
         }
@@ -425,9 +401,7 @@ export class FloatingToolbar extends EventTarget {
         submenu.style.top = `${top}px`;
     }
 
-    /**
-     * @private
-     */
+    /** @private */
     _closeActiveSubmenu() {
         if (this._activeSubmenu) {
             this._activeSubmenu.style.display = 'none';
@@ -537,10 +511,21 @@ export class FloatingToolbar extends EventTarget {
         if (transfersItem) {
             const textEl = transfersItem.querySelector('.menu-text');
             if (textEl) {
-                textEl.textContent = count > 0 ? `Transfers (${count})` : 'Transfers';
+                textEl.textContent = count > 0
+                    ? t('menu.transfersCount', { count })
+                    : t('menu.transfers');
             }
             transfersItem.style.display = (this._supportsFileTransfer && count > 0) ? '' : 'none';
         }
+    }
+
+    refreshI18n() {
+        if (this._submenus) {
+            Object.values(this._submenus).forEach(s => s.remove());
+        }
+        this._hideMenu();
+        this._buildMenu();
+        this.setActionSupport(this._supportsSAS, this._supportsLock, this._supportsFileTransfer);
     }
 
     setVisible(visible) {

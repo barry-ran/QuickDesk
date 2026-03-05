@@ -363,20 +363,24 @@
     <div id="connectionBar">
         <span id="connDot" class="conn-dot"></span>
         <span id="connDevice" class="conn-device">--</span>
-        <span id="connStatus" class="conn-status">连接中...</span>
+        <span id="connStatus" class="conn-status" data-i18n="remote.connecting">连接中...</span>
         <span id="connResolution" class="conn-resolution"></span>
+        <select id="remoteLangSelect" style="margin-left:auto;padding:4px 8px;font-size:13px;background:rgba(255,255,255,0.08);color:var(--text-primary);border:1px solid var(--border);border-radius:6px;outline:none;cursor:pointer;">
+            <option value="zh-CN">中文</option>
+            <option value="en-US">English</option>
+        </select>
     </div>
 
     <!-- Remote desktop -->
     <div id="remoteContainer">
         <div id="videoContainer" tabindex="0">
             <video id="remoteVideo" autoplay playsinline></video>
-            <div id="unmuteOverlay">点击任意位置开启声音</div>
+            <div id="unmuteOverlay" data-i18n="remote.clickToUnmute">点击任意位置开启声音</div>
             <div id="noVideo">
                 <svg viewBox="0 0 24 24" fill="currentColor">
                     <path d="M21 3H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H3V5h18v14zM10 8l6 4-6 4z"/>
                 </svg>
-                <p>等待视频流...</p>
+                <p data-i18n="remote.waitingVideo">等待视频流...</p>
             </div>
         </div>
         <div id="statsOverlay"></div>
@@ -384,13 +388,13 @@
         <!-- Log drawer (right side on PC, bottom sheet on mobile) -->
         <div id="logDrawer">
             <div class="log-header">
-                <span class="log-header-title">Logs</span>
+                <span class="log-header-title" data-i18n="remote.logs">Logs</span>
                 <button class="log-close-btn" id="logCloseBtn" title="Close">
                     <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
                 </button>
             </div>
             <div class="log-body" id="logContainer"></div>
-            <button class="log-clear-btn" id="logClearBtn">Clear</button>
+            <button class="log-clear-btn" id="logClearBtn" data-i18n="remote.clear">Clear</button>
         </div>
 
         <input id="mobileKeyInput" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
@@ -400,33 +404,33 @@
     <!-- Mobile toolbar -->
     <div id="mobileToolbar">
         <div class="mobile-toolbar-row">
-            <button class="mobile-btn" id="btnKeyboard" title="Keyboard">
+            <button class="mobile-btn" id="btnKeyboard" data-i18n-title="mobile.keyboard" title="Keyboard">
                 <svg viewBox="0 0 24 24"><path d="M20 5H4c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm-9 3h2v2h-2V8zm0 3h2v2h-2v-2zM8 8h2v2H8V8zm0 3h2v2H8v-2zm-1 2H5v-2h2v2zm0-3H5V8h2v2zm9 7H8v-2h8v2zm0-4h-2v-2h2v2zm0-3h-2V8h2v2zm3 3h-2v-2h2v2zm0-3h-2V8h2v2z"/></svg>
-                <span>Keyboard</span>
+                <span data-i18n="mobile.keyboard">Keyboard</span>
             </button>
-            <button class="mobile-btn" id="btnRightClick" title="Right Click">
+            <button class="mobile-btn" id="btnRightClick" data-i18n-title="mobile.rightClick" title="Right Click">
                 <svg viewBox="0 0 24 24"><path d="M13 1.07V9h7c0-4.08-3.05-7.44-7-7.93zM4 15c0 4.42 3.58 8 8 8s8-3.58 8-8v-4H4v4zm7-13.93C7.05 1.56 4 4.92 4 9h7V1.07z"/></svg>
-                <span>Right Click</span>
+                <span data-i18n="mobile.rightClick">Right Click</span>
             </button>
-            <button class="mobile-btn" id="btnLogs" title="Logs">
+            <button class="mobile-btn" id="btnLogs" data-i18n-title="mobile.logs" title="Logs">
                 <svg viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H5.17L4 17.17V4h16v12zM7 9h2v2H7zm4 0h2v2h-2zm4 0h2v2h-2z"/></svg>
-                <span>Logs</span>
+                <span data-i18n="mobile.logs">Logs</span>
             </button>
-            <button class="mobile-btn" id="btnZoomReset" title="Reset Zoom">
+            <button class="mobile-btn" id="btnZoomReset" data-i18n-title="mobile.zoom" title="Reset Zoom">
                 <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/><path d="M12 10h-2v2H9v-2H7V9h2V7h1v2h2v1z"/></svg>
-                <span>Zoom</span>
+                <span data-i18n="mobile.zoom">Zoom</span>
             </button>
-            <button class="mobile-btn" id="btnFullscreen" title="Fullscreen">
+            <button class="mobile-btn" id="btnFullscreen" data-i18n-title="mobile.fullscreen" title="Fullscreen">
                 <svg viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
-                <span>Fullscreen</span>
+                <span data-i18n="mobile.fullscreen">Fullscreen</span>
             </button>
-            <button class="mobile-btn" id="btnDisconnect" title="Disconnect">
+            <button class="mobile-btn" id="btnDisconnect" data-i18n-title="mobile.close" title="Disconnect">
                 <svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
-                <span>Close</span>
+                <span data-i18n="mobile.close">Close</span>
             </button>
         </div>
     </div>
 
-    <script type="module" src="js/remote-main.js?v=4"></script>
+    <script type="module" src="js/remote-main.js?v=6"></script>
 </body>
 </html>

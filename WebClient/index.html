@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" id="htmlRoot">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -209,6 +209,7 @@
             body { height: auto; min-height: 100vh; overflow: auto; flex-direction: column; }
             .nav-sidebar { display: none; }
             .content-area { padding: 16px; overflow-y: visible; }
+            #langSelect { top: 16px !important; right: 16px !important; }
             .page-title { font-size: 20px; margin-bottom: 16px; }
             .card { padding: 16px; margin-bottom: 14px; }
             .card-title { font-size: 15px; }
@@ -429,56 +430,60 @@
     <nav class="nav-sidebar">
         <div class="nav-header">
             <h1>QuickDesk</h1>
-            <div class="version">Web Client v1.0.0</div>
+            <div class="version" data-i18n="version.label">Web Client v1.0.0</div>
         </div>
         <div class="nav-items">
             <div class="nav-item active" data-page="remote">
                 <span class="nav-icon">🖥️</span>
-                <span>远程控制</span>
+                <span data-i18n="nav.remote">远程控制</span>
             </div>
             <div class="nav-item" data-page="settings">
                 <span class="nav-icon">⚙️</span>
-                <span>设置</span>
+                <span data-i18n="nav.settings">设置</span>
             </div>
             <div class="nav-item" data-page="about">
                 <span class="nav-icon">ℹ️</span>
-                <span>关于</span>
+                <span data-i18n="nav.about">关于</span>
             </div>
         </div>
     </nav>
 
     <!-- ==================== Content Area ==================== -->
-    <div class="content-area">
+    <div class="content-area" style="position: relative;">
+        <select id="langSelect" style="position:absolute;top:32px;right:40px;z-index:10;padding:4px 8px;font-size:13px;background:var(--bg-card);color:var(--text-secondary);border:1px solid var(--border);border-radius:6px;outline:none;cursor:pointer;">
+            <option value="zh-CN">中文</option>
+            <option value="en-US">English</option>
+        </select>
 
         <!-- ===== Remote Control Page ===== -->
         <div id="page-remote" class="page active">
-            <h2 class="page-title">远程控制</h2>
+            <h2 class="page-title" data-i18n="remote.title">远程控制</h2>
             <div class="connect-grid">
                 <!-- Connect Form -->
                 <div class="card">
-                    <div class="card-title">连接远程设备</div>
+                    <div class="card-title" data-i18n="connect.title">连接远程设备</div>
                     <div class="form-group">
-                        <label>信令服务器</label>
+                        <label data-i18n="connect.server">信令服务器</label>
                         <input type="text" id="serverUrl" class="form-input" placeholder="ws://qdsignaling.quickdesk.cc:8000" value="ws://qdsignaling.quickdesk.cc:8000" />
                     </div>
                     <div class="form-group">
-                        <label>设备 ID</label>
-                        <input type="text" id="deviceId" class="form-input" placeholder="请输入远程设备 ID" autocomplete="off" />
+                        <label data-i18n="connect.deviceId">设备 ID</label>
+                        <input type="text" id="deviceId" class="form-input" data-i18n-placeholder="connect.deviceId.placeholder" placeholder="请输入远程设备 ID" autocomplete="off" />
                     </div>
                     <div class="form-group">
-                        <label>访问码</label>
-                        <input type="password" id="accessCode" class="form-input" placeholder="请输入访问码" autocomplete="off" />
+                        <label data-i18n="connect.accessCode">访问码</label>
+                        <input type="password" id="accessCode" class="form-input" data-i18n-placeholder="connect.accessCode.placeholder" placeholder="请输入访问码" autocomplete="off" />
                     </div>
-                    <button id="connectBtn" class="btn btn-primary btn-full">连接</button>
+                    <button id="connectBtn" class="btn btn-primary btn-full" data-i18n="connect.button">连接</button>
                 </div>
 
                 <!-- Connection History -->
                 <div class="card">
-                    <div class="card-title">历史连接</div>
+                    <div class="card-title" data-i18n="history.title">历史连接</div>
                     <div id="historyList" class="history-list">
                         <div class="empty-state">
                             <div class="empty-icon">📋</div>
-                            <p>暂无历史连接记录</p>
+                            <p data-i18n="history.empty">暂无历史连接记录</p>
                         </div>
                     </div>
                 </div>
@@ -487,68 +492,26 @@
 
         <!-- ===== Settings Page ===== -->
         <div id="page-settings" class="page">
-            <h2 class="page-title">设置</h2>
+            <h2 class="page-title" data-i18n="settings.title">设置</h2>
 
             <!-- Network Settings -->
             <div class="card">
-                <div class="card-title">网络设置</div>
-
-                <!-- Built-in STUN -->
+                <div class="card-title" data-i18n="settings.network">网络设置</div>
                 <div class="setting-section">
-                    <div class="setting-section-title">内置 STUN 服务器</div>
-                    <div id="builtinStunList"></div>
-                </div>
-
-                <!-- User servers -->
-                <div class="setting-section">
-                    <div class="setting-section-title">自定义服务器</div>
-                    <div id="userServerList"></div>
-                    <div id="noUserServers" class="empty-state" style="padding: 16px 0;">
-                        <p>暂无自定义服务器</p>
-                    </div>
-                </div>
-
-                <div class="separator"></div>
-
-                <!-- Add TURN -->
-                <div class="setting-section">
-                    <div class="setting-section-title">添加 TURN 服务器</div>
+                    <div class="setting-section-title" data-i18n="settings.signalingServer">信令服务器</div>
+                    <p class="card-subtitle" data-i18n="settings.signalingServerDesc">设置默认的信令服务器地址，用于 WebRTC 连接协商。</p>
                     <div class="form-group">
-                        <input type="text" id="turnUrl" class="form-input" placeholder="turn:your-server.com:3478" />
-                    </div>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <input type="text" id="turnUsername" class="form-input" placeholder="用户名" />
-                        </div>
-                        <div class="form-group">
-                            <input type="password" id="turnPassword" class="form-input" placeholder="密码" />
-                        </div>
-                    </div>
-                    <button id="addTurnBtn" class="btn btn-primary btn-sm">添加 TURN 服务器</button>
-                </div>
-
-                <div class="separator"></div>
-
-                <!-- Add STUN -->
-                <div class="setting-section">
-                    <div class="setting-section-title">添加 STUN 服务器</div>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <input type="text" id="stunUrl" class="form-input" placeholder="stun:stun.l.google.com:19302" />
-                        </div>
-                        <div style="flex-shrink:0;display:flex;align-items:flex-end;padding-bottom:16px">
-                            <button id="addStunBtn" class="btn btn-primary btn-sm">添加</button>
-                        </div>
+                        <input type="text" id="settingsServerUrl" class="form-input" data-i18n-placeholder="settings.signalingServer.placeholder" placeholder="ws://qdsignaling.quickdesk.cc:8000" />
                     </div>
                 </div>
             </div>
 
             <!-- Video Settings -->
             <div class="card">
-                <div class="card-title">视频设置</div>
+                <div class="card-title" data-i18n="settings.video">视频设置</div>
                 <div class="setting-section">
-                    <div class="setting-section-title">首选视频编码器</div>
-                    <p class="card-subtitle">选择远程连接使用的视频编码器，实际使用取决于主机端支持情况。</p>
+                    <div class="setting-section-title" data-i18n="settings.videoCodec">首选视频编码器</div>
+                    <p class="card-subtitle" data-i18n="settings.videoCodecDesc">选择远程连接使用的视频编码器，实际使用取决于主机端支持情况。</p>
                     <div class="form-group">
                         <select id="videoCodecSelect" class="form-input">
                             <option value="H264">H264</option>
@@ -563,28 +526,28 @@
 
         <!-- ===== About Page ===== -->
         <div id="page-about" class="page">
-            <h2 class="page-title">关于</h2>
+            <h2 class="page-title" data-i18n="about.title">关于</h2>
 
             <div class="card">
                 <div class="about-logo">
                     <div class="about-logo-icon"><img src="images/logo.png" alt="QuickDesk"></div>
                     <div>
                         <div class="about-app-name">QuickDesk</div>
-                        <div class="about-version">Web Client v1.0.0</div>
+                        <div class="about-version" data-i18n="version.label">Web Client v1.0.0</div>
                     </div>
                 </div>
                 <div class="separator"></div>
-                <p class="about-desc">
+                <p class="about-desc" data-i18n="about.desc">
                     首款 AI 原生远程桌面。内置 MCP Server，让任何 AI Agent 都能查看和操控远程电脑。底层基于 Chromium Remoting 技术，经过 Google 十余年打磨，性能、安全性和稳定性达到工业级水准。
                 </p>
             </div>
 
             <div class="card">
-                <div class="card-title">链接</div>
+                <div class="card-title" data-i18n="about.links">链接</div>
                 <a class="link-item" href="https://github.com/barry-ran/QuickDesk" target="_blank" rel="noopener">
                     <div class="link-icon">🌐</div>
                     <div class="link-info">
-                        <div class="link-title">源代码</div>
+                        <div class="link-title" data-i18n="about.sourceCode">源代码</div>
                         <div class="link-url">github.com/barry-ran/QuickDesk</div>
                     </div>
                     <span class="link-arrow">→</span>
@@ -592,7 +555,7 @@
                 <a class="link-item" href="https://github.com/barry-ran/quickdesk-remoting" target="_blank" rel="noopener">
                     <div class="link-icon">🔗</div>
                     <div class="link-info">
-                        <div class="link-title">基于 Chromium Remoting</div>
+                        <div class="link-title" data-i18n="about.basedOn">基于 Chromium Remoting</div>
                         <div class="link-url">github.com/barry-ran/quickdesk-remoting</div>
                     </div>
                     <span class="link-arrow">→</span>
@@ -600,8 +563,8 @@
             </div>
 
             <div class="card">
-                <div class="card-title">开源协议</div>
-                <p class="about-desc" style="margin-bottom:0">
+                <div class="card-title" data-i18n="about.license">开源协议</div>
+                <p class="about-desc" style="margin-bottom:0" data-i18n="about.licenseDesc">
                     QuickDesk 采用 MIT License 开源协议。其中 quickdesk-remoting 组件基于 Chromium，采用 BSD 3-Clause License 开源协议。
                 </p>
             </div>
@@ -612,6 +575,6 @@
     <div id="toast" class="toast info"></div>
 
     <!-- Main entry -->
-    <script type="module" src="js/main.js"></script>
+    <script type="module" src="js/main.js?v=3"></script>
 </body>
 </html>

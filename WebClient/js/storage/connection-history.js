@@ -1,15 +1,16 @@
 /**
- * connection-history.js - 历史连接设备记录
+ * connection-history.js - Connection history storage
  *
- * 使用 localStorage 存储连接成功的设备记录（不保存密码）
+ * Stores successful device connections in localStorage (no passwords).
  */
+
+import { t } from '../i18n.js';
 
 const STORAGE_KEY = 'quickdesk_connection_history';
 const MAX_DEVICES = 50;
 
 export class ConnectionHistory {
     /**
-     * 获取所有历史设备（按最近连接时间降序排列）
      * @returns {Array<{deviceId: string, serverUrl: string, lastConnected: number, connectCount: number}>}
      */
     static getAll() {
@@ -23,9 +24,6 @@ export class ConnectionHistory {
         }
     }
 
-    /**
-     * 保存一次成功的连接（新增或更新）
-     */
     static save(deviceId, serverUrl) {
         if (!deviceId) return;
 
@@ -54,24 +52,15 @@ export class ConnectionHistory {
         ConnectionHistory._save(list);
     }
 
-    /**
-     * 移除一条记录
-     */
     static remove(deviceId) {
         const list = ConnectionHistory.getAll().filter(d => d.deviceId !== deviceId);
         ConnectionHistory._save(list);
     }
 
-    /**
-     * 清空所有记录
-     */
     static clear() {
         localStorage.removeItem(STORAGE_KEY);
     }
 
-    /**
-     * 格式化最近连接时间为可读字符串
-     */
     static formatTime(timestamp) {
         if (!timestamp) return '';
         const date = new Date(timestamp);
@@ -79,14 +68,14 @@ export class ConnectionHistory {
         const diffMs = now - date;
         const diffMin = Math.floor(diffMs / 60000);
 
-        if (diffMin < 1) return '刚刚';
-        if (diffMin < 60) return `${diffMin} 分钟前`;
+        if (diffMin < 1) return t('time.justNow');
+        if (diffMin < 60) return t('time.minutesAgo', { n: diffMin });
 
         const diffHour = Math.floor(diffMin / 60);
-        if (diffHour < 24) return `${diffHour} 小时前`;
+        if (diffHour < 24) return t('time.hoursAgo', { n: diffHour });
 
         const diffDay = Math.floor(diffHour / 24);
-        if (diffDay < 30) return `${diffDay} 天前`;
+        if (diffDay < 30) return t('time.daysAgo', { n: diffDay });
 
         return date.toLocaleDateString();
     }

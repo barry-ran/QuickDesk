@@ -16,7 +16,7 @@ import { MouseButton } from './protocol/protobuf-messages.js';
 import { VideoStats } from './ui/video-stats.js';
 import { FloatingToolbar } from './ui/floating-toolbar.js';
 import { IceConfigFetcher } from './ice-config-fetcher.js';
-import { IceServerStorage } from './storage/ice-server-storage.js';
+import { t, applyI18n, getLocale, setLocale } from './i18n.js';
 
 class RemoteDesktopApp {
     constructor() {
@@ -39,6 +39,9 @@ class RemoteDesktopApp {
     }
 
     async init() {
+        this._initRemoteLangSelector();
+        applyI18n();
+
         const params = new URLSearchParams(window.location.search);
         const serverUrl = params.get('server') || 'ws://localhost:8000';
         const deviceId = params.get('device');
@@ -46,8 +49,8 @@ class RemoteDesktopApp {
         const preferredVideoCodec = params.get('codec') || '';
 
         if (!deviceId || !accessCode) {
-            this._log('缺少连接参数 (device, code)', 'error');
-            this._setConnectionState('failed', '缺少连接参数');
+            this._log(t('log.missingParams'), 'error');
+            this._setConnectionState('failed', t('status.missingParams'));
             return;
         }
 
@@ -73,19 +76,31 @@ class RemoteDesktopApp {
             this.videoStats = new VideoStats(statsOverlay, null);
         }
 
-        this._log('正在获取 ICE 配置...');
+        this._log(t('log.fetchingIce'));
         const fetcher = new IceConfigFetcher(serverUrl);
-        const userIceServers = IceServerStorage.getAll();
-        const iceServers = await fetcher.getIceServers(userIceServers);
-        this._log(`ICE 配置: ${iceServers.length} 个服务器`);
+        const iceServers = await fetcher.getIceServers();
+        this._log(t('log.iceServers', { count: iceServers.length }));
 
         await this._connect(serverUrl, deviceId, accessCode, iceServers, preferredVideoCodec);
     }
 
+    _initRemoteLangSelector() {
+        const select = document.getElementById('remoteLangSelect');
+        if (!select) return;
+        select.value = getLocale();
+        select.addEventListener('change', () => {
+            setLocale(select.value);
+            applyI18n();
+            if (this.floatingToolbar) {
+                this.floatingToolbar.refreshI18n();
+            }
+        });
+    }
+
     async _connect(serverUrl, deviceId, accessCode, iceServers, preferredVideoCodec) {
-        this._log(`连接到 ${deviceId}...`);
+        this._log(t('log.connectingTo', { deviceId }));
         if (preferredVideoCodec) {
-            this._log(`首选视频编码器: ${preferredVideoCodec}`);
+            this._log(t('log.preferredCodec', { codec: preferredVideoCodec }));
         }
 
         try {
@@ -125,21 +140,21 @@ class RemoteDesktopApp {
             });
 
             this.dcHandler.addEventListener('controlReady', () => {
-                this._log('Control DataChannel 就绪');
+                this._log(t('log.controlReady'));
                 this._sendInitialConfig();
             });
 
             this.dcHandler.addEventListener('eventReady', () => {
-                this._log('Event DataChannel 就绪');
+                this._log(t('log.eventReady'));
             });
 
             this.dcHandler.addEventListener('capabilities', (e) => {
-                this._log(`Host 能力: ${e.detail.capabilities || '(empty)'}`);
+                this._log(t('log.hostCaps', { caps: e.detail.capabilities || '(empty)' }));
             });
 
             this.dcHandler.addEventListener('hostCapabilities', (e) => {
                 const { supportsSendAttentionSequence, supportsLockWorkstation, supportsFileTransfer } = e.detail;
-                this._log(`Negotiated caps: SAS=${supportsSendAttentionSequence} Lock=${supportsLockWorkstation} FileTransfer=${supportsFileTransfer}`);
+                this._log(t('log.negotiatedCaps', { sas: supportsSendAttentionSequence, lock: supportsLockWorkstation, ft: supportsFileTransfer }));
                 if (this.floatingToolbar) {
                     this.floatingToolbar.setActionSupport(
                         supportsSendAttentionSequence, supportsLockWorkstation, supportsFileTransfer);
@@ -156,17 +171,17 @@ class RemoteDesktopApp {
 
             this.dcHandler.addEventListener('fileTransferComplete', (e) => {
                 this._updateTransferStatus(e.detail.transferId, 'complete');
-                this._log(`Upload complete: ${e.detail.filename}`);
+                this._log(t('log.uploadComplete', { filename: e.detail.filename }));
             });
 
             this.dcHandler.addEventListener('fileTransferError', (e) => {
                 this._updateTransferStatus(e.detail.transferId, 'error', e.detail.errorMessage);
-                this._log(`Upload failed: ${e.detail.errorMessage}`);
+                this._log(t('log.uploadFailed', { error: e.detail.errorMessage }));
             });
 
             this.dcHandler.addEventListener('fileDownloadStarted', (e) => {
                 this._addTransferItem(e.detail.transferId, e.detail.filename, e.detail.totalBytes, 'download');
-                this._log(`Download started: ${e.detail.filename}`);
+                this._log(t('log.downloadStarted', { filename: e.detail.filename }));
             });
 
             this.dcHandler.addEventListener('fileDownloadProgress', (e) => {
@@ -175,7 +190,7 @@ class RemoteDesktopApp {
 
             this.dcHandler.addEventListener('fileDownloadComplete', (e) => {
                 this._updateTransferStatus(e.detail.transferId, 'complete');
-                this._log(`Download complete: ${e.detail.filename}`);
+                this._log(t('log.downloadComplete', { filename: e.detail.filename }));
                 if (e.detail.blob && !e.detail.streaming) {
                     this._triggerBrowserDownload(e.detail.blob, e.detail.filename);
                 }
@@ -183,27 +198,26 @@ class RemoteDesktopApp {
 
             this.dcHandler.addEventListener('fileDownloadError', (e) => {
                 this._updateTransferStatus(e.detail.transferId, 'error', e.detail.errorMessage);
-                this._log(`Download failed: ${e.detail.errorMessage}`);
+                this._log(t('log.downloadFailed', { error: e.detail.errorMessage }));
             });
 
             await this.session.connect(deviceId, accessCode);
 
         } catch (error) {
-            this._log(`连接失败: ${error.message}`, 'error');
+            this._log(t('log.connectFailed', { error: error.message }), 'error');
             this._setConnectionState('failed', error.message);
         }
     }
 
     _onSessionStateChange(detail) {
         const { oldState, newState } = detail;
-        this._log(`状态: ${oldState} -> ${newState}`);
+        this._log(t('log.stateChange', { from: oldState, to: newState }));
 
         switch (newState) {
             case SessionState.CONNECTED:
-                this._setConnectionState('connected', '已连接');
+                this._setConnectionState('connected', t('status.connected'));
                 if (this.floatingToolbar) this.floatingToolbar.setVisible(true);
                 if (this.videoStats) this.videoStats.setPeerConnection(this.session.pc);
-                // Notify opener about successful connection
                 if (window.opener && !window.opener.closed) {
                     try {
                         window.opener.postMessage({
@@ -215,10 +229,10 @@ class RemoteDesktopApp {
                 }
                 break;
             case SessionState.FAILED:
-                this._setConnectionState('failed', '连接失败');
+                this._setConnectionState('failed', t('status.failed'));
                 break;
             case SessionState.CLOSED:
-                this._setConnectionState('failed', '连接已关闭');
+                this._setConnectionState('failed', t('status.closed'));
                 break;
         }
     }
@@ -226,7 +240,7 @@ class RemoteDesktopApp {
     _onTrack(detail) {
         const { track, streams } = detail;
         const streamId = (streams && streams.length > 0) ? streams[0].id : '';
-        this._log(`收到 ${track.kind} 轨道, stream=${streamId}`);
+        this._log(t('log.trackReceived', { kind: track.kind, stream: streamId }));
 
         if (!this._receivedStreams) this._receivedStreams = new Map();
 
@@ -235,13 +249,13 @@ class RemoteDesktopApp {
         }
 
         if (track.kind === 'audio') {
-            this._log(`音频轨道: enabled=${track.enabled}, muted=${track.muted}, readyState=${track.readyState}`);
+            this._log(t('log.audioTrack', { enabled: track.enabled, muted: track.muted, state: track.readyState }));
             this._pendingAudioTrack = track;
             return;
         }
 
         if (track.kind === 'video' && this._selectedStreamId && streamId !== this._selectedStreamId) {
-            this._log(`忽略非主显示器视频流: ${streamId}`);
+            this._log(t('log.ignoreStream', { stream: streamId }));
             return;
         }
 
@@ -257,17 +271,13 @@ class RemoteDesktopApp {
         const combinedStream = new MediaStream();
         if (this._pendingAudioTrack && this._pendingAudioTrack.readyState === 'live') {
             combinedStream.addTrack(this._pendingAudioTrack);
-            this._log('音频轨道已合并到视频流');
+            this._log(t('log.audioMerged'));
         }
         combinedStream.addTrack(track);
         video.srcObject = combinedStream;
 
         video.play().catch(e => {
-            this._log(`视频自动播放失败: ${e.message}`, 'warning');
-            // Browser autoplay policy blocked playback (usually because
-            // the stream contains an audio track and the user hasn't
-            // interacted with the page yet).  Try muted playback first;
-            // if that works, show an overlay so the user can unmute.
+            this._log(t('log.autoplayFailed', { error: e.message }), 'warning');
             video.muted = true;
             video.play().then(() => {
                 this._showClickToUnmute(video);
@@ -277,7 +287,7 @@ class RemoteDesktopApp {
         });
 
         video.onloadedmetadata = () => {
-            this._log(`视频分辨率: ${video.videoWidth}x${video.videoHeight}`);
+            this._log(t('log.videoResolution', { width: video.videoWidth, height: video.videoHeight }));
             document.getElementById('noVideo')?.style.setProperty('display', 'none');
             if (this.floatingToolbar) {
                 this.floatingToolbar.setRemoteResolution(video.videoWidth, video.videoHeight);
@@ -289,7 +299,7 @@ class RemoteDesktopApp {
     _showClickToUnmute(video) {
         const overlay = document.getElementById('unmuteOverlay');
         if (!overlay) return;
-        overlay.textContent = 'Click to enable audio';
+        overlay.textContent = t('overlay.clickToUnmute');
         overlay.style.display = 'block';
         const handler = () => {
             video.muted = false;
@@ -304,7 +314,7 @@ class RemoteDesktopApp {
     _showClickToPlay(video) {
         const overlay = document.getElementById('unmuteOverlay');
         if (!overlay) return;
-        overlay.textContent = 'Click to start video';
+        overlay.textContent = t('overlay.clickToPlay');
         overlay.style.display = 'block';
         const handler = () => {
             video.muted = false;
@@ -320,21 +330,21 @@ class RemoteDesktopApp {
     _onVideoLayout(layout) {
         if (!layout.videoTracks || layout.videoTracks.length === 0) return;
 
-        this._log(`=== 收到 VideoLayout: ${layout.videoTracks.length} 个显示器 ===`);
+        this._log(t('log.videoLayout', { count: layout.videoTracks.length }));
 
         let primaryTrack = null;
         if (layout.primaryScreenId !== undefined) {
             for (let i = 0; i < layout.videoTracks.length; i++) {
-                const t = layout.videoTracks[i];
-                if (t.screenId === layout.primaryScreenId) {
-                    primaryTrack = t;
+                const vt = layout.videoTracks[i];
+                if (vt.screenId === layout.primaryScreenId) {
+                    primaryTrack = vt;
                     break;
                 }
             }
         }
         if (!primaryTrack) primaryTrack = layout.videoTracks[0];
 
-        this._log(`选择显示器: ${primaryTrack.width}x${primaryTrack.height}`);
+        this._log(t('log.selectMonitor', { width: primaryTrack.width, height: primaryTrack.height }));
         this._remoteWidth = primaryTrack.width;
         this._remoteHeight = primaryTrack.height;
 
@@ -413,7 +423,7 @@ class RemoteDesktopApp {
         this.dcHandler.sendCapabilities(
             'sendAttentionSequenceAction lockWorkstationAction fileTransfer');
         this.dcHandler.sendAudioControl({ enable: true });
-        this._log('已发送初始配置');
+        this._log(t('log.sentConfig'));
     }
 
     _handleToolbarAction(detail) {
@@ -435,13 +445,13 @@ class RemoteDesktopApp {
             case 'sendAttentionSequence':
                 if (this.dcHandler) {
                     this.dcHandler.sendAction('sendAttentionSequence');
-                    this._log('Sent Ctrl+Alt+Del');
+                    this._log(t('log.sentCAD'));
                 }
                 break;
             case 'lockWorkstation':
                 if (this.dcHandler) {
                     this.dcHandler.sendAction('lockWorkstation');
-                    this._log('Sent Lock Screen');
+                    this._log(t('log.sentLock'));
                 }
                 break;
             case 'uploadFile':
@@ -499,7 +509,7 @@ class RemoteDesktopApp {
         overlay.className = 'drop-overlay';
         overlay.innerHTML = `<div class="drop-overlay-content">
             <div class="drop-icon">📤</div>
-            <div class="drop-text">Drop files here to upload</div>
+            <div class="drop-text">${t('drop.text')}</div>
         </div>`;
         target.style.position = 'relative';
         target.appendChild(overlay);
@@ -516,7 +526,7 @@ class RemoteDesktopApp {
     _uploadFiles(fileList) {
         if (!this.dcHandler || !fileList || fileList.length === 0) return;
         for (const file of fileList) {
-            this._log(`Uploading file: ${file.name} (${file.size} bytes)`);
+            this._log(t('log.uploadingFile', { name: file.name, size: file.size }));
             this.dcHandler.startFileUpload(file);
         }
         this._showTransferPanel();
@@ -544,17 +554,17 @@ class RemoteDesktopApp {
                 });
             } catch (err) {
                 if (err.name === 'AbortError') {
-                    this._log('Download cancelled by user');
+                    this._log(t('log.downloadCancelled'));
                     return;
                 }
-                this._log(`Save picker error: ${err.message}`, 'warning');
+                this._log(t('log.savePickerError', { error: err.message }), 'warning');
             }
         }
 
         this.dcHandler.startFileDownload(fileHandle);
         this._log(fileHandle
-            ? 'Requested file download (streaming to disk)'
-            : 'Requested file download (buffered)');
+            ? t('log.downloadStreaming')
+            : t('log.downloadBuffered'));
     }
 
     _triggerFileUpload() {
@@ -736,7 +746,7 @@ class RemoteDesktopApp {
         switch (detail.setting) {
             case 'framerate':
                 this.dcHandler.sendVideoControl({ enable: true, targetFramerate: detail.value });
-                this._log(`目标帧率: ${detail.value} FPS`);
+                this._log(t('log.targetFps', { fps: detail.value }));
                 break;
             case 'framerateBoost': {
                 const boostConfig = {
@@ -747,14 +757,14 @@ class RemoteDesktopApp {
                 this.dcHandler.sendVideoControl({
                     framerateBoost: boostConfig[detail.value] || { enabled: false },
                 });
-                this._log(`帧率增强: ${detail.value}`);
+                this._log(t('log.boostMode', { mode: detail.value }));
                 break;
             }
             case 'bitrate':
                 this.dcHandler.sendPeerConnectionParameters({
                     preferredMinBitrateBps: detail.value,
                 });
-                this._log(`最小码率: ${Math.round(detail.value / (1024 * 1024))} MiB`);
+                this._log(t('log.minBitrate', { bitrate: Math.round(detail.value / (1024 * 1024)) }));
                 break;
             case 'resolution': {
                 let width, height;
@@ -769,12 +779,12 @@ class RemoteDesktopApp {
                     height = parseInt(parts[1]);
                 }
                 this.dcHandler.sendClientResolution({ widthPixels: width, heightPixels: height, xDpi: 96, yDpi: 96 });
-                this._log(`分辨率: ${width}x${height}`);
+                this._log(t('log.resolution', { width, height }));
                 break;
             }
             case 'audio':
                 this.dcHandler.sendAudioControl({ enable: detail.value });
-                this._log(`音频: ${detail.value ? '开启' : '关闭'}`);
+                this._log(t('log.audioToggle', { state: detail.value ? t('log.audioOn') : t('log.audioOff') }));
                 break;
             case 'stats':
                 if (this.videoStats) {
@@ -787,7 +797,7 @@ class RemoteDesktopApp {
     _screenshot() {
         const video = document.getElementById('remoteVideo');
         if (!video || !video.videoWidth) {
-            this._log('无视频可截图', 'warning');
+            this._log(t('log.noVideoScreenshot'), 'warning');
             return;
         }
         const canvas = document.createElement('canvas');
@@ -801,7 +811,7 @@ class RemoteDesktopApp {
             a.download = `quickdesk_screenshot_${Date.now()}.png`;
             a.click();
             URL.revokeObjectURL(url);
-            this._log('截图已保存');
+            this._log(t('log.screenshotSaved'));
         }, 'image/png');
     }
 
@@ -810,7 +820,7 @@ class RemoteDesktopApp {
             this.session.disconnect();
         }
         this._cleanupInputHandlers();
-        this._setConnectionState('failed', '已断开');
+        this._setConnectionState('failed', t('status.disconnected'));
         setTimeout(() => {
             if (this._isMobile) {
                 if (window.history.length > 1) {
