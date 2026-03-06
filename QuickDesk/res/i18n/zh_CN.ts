@@ -80,184 +80,219 @@
 <context>
     <name>FloatingToolButton</name>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="194"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="217"/>
         <source>Smart Boost</source>
         <translation>智能加速</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="242"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="265"/>
         <source>Target Framerate</source>
         <translation>目标帧率</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="290"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="313"/>
         <source>Resolution</source>
         <translation>分辨率</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="343"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="366"/>
         <source>Bitrate</source>
         <translation>比特率</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="390"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="413"/>
         <source>Fit Window</source>
         <translation>适应窗口</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="396"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="419"/>
         <source>Window resized to fit remote desktop</source>
         <translation>窗口已调整为适应远程桌面</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="402"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="425"/>
         <source>Video Stats</source>
         <translation>视频统计</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="411"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="434"/>
         <source>Mute Audio</source>
         <translation>静音</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="411"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="434"/>
         <source>Unmute Audio</source>
         <translation>取消静音</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="419"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="442"/>
         <source>Audio: Enabled</source>
         <translation>音频：已开启</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="419"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="442"/>
         <source>Audio: Muted</source>
         <translation>音频：已静音</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="429"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="456"/>
+        <source>Send Ctrl+Alt+Del</source>
+        <translation>发送Ctrl+Alt+Del</translation>
+    </message>
+    <message>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="462"/>
+        <source>Ctrl+Alt+Del sent</source>
+        <translation>Ctrl+Alt+Del已发送</translation>
+    </message>
+    <message>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="469"/>
+        <source>Lock Screen</source>
+        <translation>锁屏</translation>
+    </message>
+    <message>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="475"/>
+        <source>Lock screen sent</source>
+        <translation>锁屏已发送</translation>
+    </message>
+    <message>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="486"/>
+        <source>Upload File</source>
+        <translation>上传文件</translation>
+    </message>
+    <message>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="496"/>
+        <source>Download File</source>
+        <translation>下载文件</translation>
+    </message>
+    <message>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="506"/>
+        <source>Transfers</source>
+        <translation>传输</translation>
+    </message>
+    <message>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="516"/>
         <source>Disconnect</source>
         <translation>断开连接</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="455"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="542"/>
         <source>Off</source>
         <translation>关闭</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="460"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="547"/>
         <source>Smart Boost: Off</source>
         <translation>智能加速：关闭</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="465"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="552"/>
         <source>Office</source>
         <translation>办公模式</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="470"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="557"/>
         <source>Smart Boost: Office Mode</source>
         <translation>智能加速：办公模式</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="475"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="562"/>
         <source>Gaming</source>
         <translation>游戏模式</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="480"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="567"/>
         <source>Smart Boost: Gaming Mode</source>
         <translation>智能加速：游戏模式</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="505"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="592"/>
         <source>Target Framerate: 60 FPS</source>
         <translation>目标帧率：60 FPS</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="517"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="604"/>
         <source>Target Framerate: 30 FPS</source>
         <translation>目标帧率：30 FPS</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="529"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="616"/>
         <source>Target Framerate: 15 FPS</source>
         <translation>目标帧率：15 FPS</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="541"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="628"/>
         <source>Target Framerate: 5 FPS</source>
         <translation>目标帧率：5 FPS</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="563"/>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="565"/>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="578"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="650"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="652"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="665"/>
         <source>Original</source>
         <translation>原始</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="578"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="665"/>
         <source>Resolution: </source>
         <translation>分辨率：</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="593"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="680"/>
         <source>Resolution: 3840x2160 (4K)</source>
         <translation>分辨率：3840x2160 (4K)</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="604"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="691"/>
         <source>Resolution: 2560x1440 (2K)</source>
         <translation>分辨率：2560x1440 (2K)</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="615"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="702"/>
         <source>Resolution: 1920x1080 (FHD)</source>
         <translation>分辨率：1920x1080 (FHD)</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="626"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="713"/>
         <source>Resolution: 1600x900</source>
         <translation>分辨率：1600x900</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="637"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="724"/>
         <source>Resolution: 1366x768</source>
         <translation>分辨率：1366x768</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="648"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="735"/>
         <source>Resolution: 1280x720</source>
         <translation>分辨率：1280x720</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="659"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="746"/>
         <source>Resolution: 1024x768</source>
         <translation>分辨率：1024x768</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="685"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="772"/>
         <source>Bitrate: 100 MiB</source>
         <translation>比特率：100 MiB</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="697"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="784"/>
         <source>Bitrate: 50 MiB</source>
         <translation>比特率：50 MiB</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="709"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="796"/>
         <source>Bitrate: 10 MiB</source>
         <translation>比特率：10 MiB</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="721"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="808"/>
         <source>Bitrate: 5 MiB</source>
         <translation>比特率：5 MiB</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="733"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="820"/>
         <source>Bitrate: 2 MiB</source>
         <translation>比特率：2 MiB</translation>
     </message>
@@ -708,7 +743,12 @@
 <context>
     <name>RemoteDesktopView</name>
     <message>
-        <location filename="../../qml/quickdeskcomponent/RemoteDesktopView.qml" line="253"/>
+        <location filename="../../qml/quickdeskcomponent/RemoteDesktopView.qml" line="231"/>
+        <source>Drop files here to upload</source>
+        <translation>拖拽文件到此上传</translation>
+    </message>
+    <message>
+        <location filename="../../qml/quickdeskcomponent/RemoteDesktopView.qml" line="315"/>
         <source>Waiting for video...</source>
         <translation>等待视频...</translation>
     </message>
@@ -747,9 +787,79 @@
 <context>
     <name>RemoteWindow</name>
     <message>
-        <location filename="../../qml/views/RemoteWindow.qml" line="16"/>
+        <location filename="../../qml/views/RemoteWindow.qml" line="17"/>
         <source>QuickDesk - Remote Desktop</source>
         <translation>QuickDesk - 远程桌面</translation>
+    </message>
+    <message>
+        <location filename="../../qml/views/RemoteWindow.qml" line="656"/>
+        <source>Select Files to Upload</source>
+        <translation>选择文件上传</translation>
+    </message>
+    <message>
+        <location filename="../../qml/views/RemoteWindow.qml" line="747"/>
+        <source>Upload complete: %1</source>
+        <translation>上传完成：%1</translation>
+    </message>
+    <message>
+        <location filename="../../qml/views/RemoteWindow.qml" line="766"/>
+        <source>Upload failed: %1</source>
+        <translation>上传失败：%1</translation>
+    </message>
+    <message>
+        <location filename="../../qml/views/RemoteWindow.qml" line="798"/>
+        <source>Download complete: %1</source>
+        <translation>下载完成：%1</translation>
+    </message>
+    <message>
+        <location filename="../../qml/views/RemoteWindow.qml" line="807"/>
+        <source>Download failed: %1</source>
+        <translation>下载失败：%1</translation>
+    </message>
+    <message>
+        <location filename="../../qml/views/RemoteWindow.qml" line="816"/>
+        <source>File Transfers</source>
+        <translation>文件传输</translation>
+    </message>
+    <message>
+        <location filename="../../qml/views/RemoteWindow.qml" line="829"/>
+        <source>No Transfers</source>
+        <translation>没有传输</translation>
+    </message>
+    <message>
+        <location filename="../../qml/views/RemoteWindow.qml" line="830"/>
+        <source>Use the menu to upload or download files</source>
+        <translation>使用菜单上传下载文件</translation>
+    </message>
+    <message>
+        <location filename="../../qml/views/RemoteWindow.qml" line="912"/>
+        <source>Cancelled</source>
+        <translation>已取消</translation>
+    </message>
+    <message>
+        <location filename="../../qml/views/RemoteWindow.qml" line="926"/>
+        <source>Open File</source>
+        <translation>打开文件</translation>
+    </message>
+    <message>
+        <location filename="../../qml/views/RemoteWindow.qml" line="935"/>
+        <source>Open Folder</source>
+        <translation>打开目录</translation>
+    </message>
+    <message>
+        <location filename="../../qml/views/RemoteWindow.qml" line="944"/>
+        <source>Delete File</source>
+        <translation>删除文件</translation>
+    </message>
+    <message>
+        <location filename="../../qml/views/RemoteWindow.qml" line="948"/>
+        <source>File deleted</source>
+        <translation>文件已删除</translation>
+    </message>
+    <message>
+        <location filename="../../qml/views/RemoteWindow.qml" line="1005"/>
+        <source>Clear Completed</source>
+        <translation>清理已完成</translation>
     </message>
 </context>
 <context>
@@ -981,27 +1091,27 @@
 <context>
     <name>quickdesk::ClientManager</name>
     <message>
-        <location filename="../../src/manager/ClientManager.cpp" line="759"/>
+        <location filename="../../src/manager/ClientManager.cpp" line="932"/>
         <source>Authentication failed</source>
         <translation>认证失败</translation>
     </message>
     <message>
-        <location filename="../../src/manager/ClientManager.cpp" line="760"/>
+        <location filename="../../src/manager/ClientManager.cpp" line="933"/>
         <source>Channel error</source>
         <translation>通道错误</translation>
     </message>
     <message>
-        <location filename="../../src/manager/ClientManager.cpp" line="761"/>
+        <location filename="../../src/manager/ClientManager.cpp" line="934"/>
         <source>Connection timeout</source>
         <translation>连接超时</translation>
     </message>
     <message>
-        <location filename="../../src/manager/ClientManager.cpp" line="762"/>
+        <location filename="../../src/manager/ClientManager.cpp" line="935"/>
         <source>Network error</source>
         <translation>网络错误</translation>
     </message>
     <message>
-        <location filename="../../src/manager/ClientManager.cpp" line="763"/>
+        <location filename="../../src/manager/ClientManager.cpp" line="936"/>
         <source>Connection failed (error code: %1)</source>
         <translation>连接失败（错误代码：%1）</translation>
     </message>
