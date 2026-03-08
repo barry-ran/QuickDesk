@@ -230,7 +230,7 @@ class QuickDeskApp {
 
         const codecSelect = document.getElementById('videoCodecSelect');
         if (codecSelect) {
-            const saved = localStorage.getItem('quickdesk_video_codec') || 'H264';
+            const saved = localStorage.getItem('quickdesk_video_codec') || 'AV1';
             codecSelect.value = saved;
             codecSelect.addEventListener('change', () => {
                 localStorage.setItem('quickdesk_video_codec', codecSelect.value);
