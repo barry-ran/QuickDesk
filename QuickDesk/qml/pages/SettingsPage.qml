@@ -573,10 +573,10 @@ Item {
                                 id: codecCombo
                                 model: ListModel {
                                     id: codecModel
-                                    ListElement { text: "H264"; value: "H264" }
-                                    ListElement { text: "VP8";  value: "VP8" }
-                                    ListElement { text: "VP9";  value: "VP9" }
                                     ListElement { text: "AV1";  value: "AV1" }
+                                    ListElement { text: "VP9";  value: "VP9" }
+                                    ListElement { text: "VP8";  value: "VP8" }
+                                    ListElement { text: "H264"; value: "H264" }
                                 }
                                 textRole: "text"
                                 valueRole: "value"
