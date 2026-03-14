@@ -178,3 +178,7 @@ func (s *DeviceService) IsDeviceOnline(ctx context.Context, deviceID string) (bo
 	
 	return device.Online, nil
 }
+// GetAllDevices returns all devices
+func (s *DeviceService) GetAllDevices(ctx context.Context) ([]models.Device, error) {
+	return s.repo.GetAll(ctx)
+}

@@ -60,3 +60,10 @@ func (r *DeviceRepository) List(ctx context.Context, offset, limit int) ([]model
 	err := r.db.WithContext(ctx).Offset(offset).Limit(limit).Find(&devices).Error
 	return devices, err
 }
+
+// GetAll retrieves all devices
+func (r *DeviceRepository) GetAll(ctx context.Context) ([]models.Device, error) {
+	var devices []models.Device
+	err := r.db.WithContext(ctx).Find(&devices).Error
+	return devices, err
+}

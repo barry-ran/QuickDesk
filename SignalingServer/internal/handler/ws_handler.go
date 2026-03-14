@@ -479,3 +479,10 @@ func (h *WSHandler) IsHostOnline(deviceID string) bool {
 	_, exists := h.connections[hostKey]
 	return exists
 }
+// GetConnectionCount returns the total number of active WebSocket connections
+func (h *WSHandler) GetConnectionCount() int {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	return len(h.connections)
+}

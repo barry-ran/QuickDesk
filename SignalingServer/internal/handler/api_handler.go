@@ -4,16 +4,22 @@ import (
 	"crypto/hmac"
 	"crypto/sha1"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"log"
-	"encoding/json"
 	"net/http"
 	"quickdesk/signaling/internal/config"
 	"quickdesk/signaling/internal/models"
 	"quickdesk/signaling/internal/service"
+	"runtime"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/shirou/gopsutil/v3/cpu"
+	"github.com/shirou/gopsutil/v3/disk"
+	"github.com/shirou/gopsutil/v3/host"
+	"github.com/shirou/gopsutil/v3/mem"
+	psnet "github.com/shirou/gopsutil/v3/net"
 )
 
 type APIHandler struct {
@@ -22,6 +28,11 @@ type APIHandler struct {
 	presetService *service.PresetService
 	config        *config.Config
 	wsHandler     *WSHandler
+	// network IO stats for computing real-time speed
+	lastNetIO     psnet.IOCountersStat
+	lastNetIOTime time.Time
+	uploadSpeed   float64 // KB/s
+	downloadSpeed float64 // KB/s
 }
 
 func NewAPIHandler(deviceService *service.DeviceService, authService *service.AuthService, presetService *service.PresetService, cfg *config.Config) *APIHandler {
@@ -30,6 +41,7 @@ func NewAPIHandler(deviceService *service.DeviceService, authService *service.Au
 		authService:   authService,
 		presetService: presetService,
 		config:        cfg,
+		lastNetIOTime: time.Now(),
 	}
 }
 
@@ -263,4 +275,169 @@ func (h *APIHandler) HealthCheck(c *gin.Context) {
 		"status":  "ok",
 		"service": "quickdesk-signaling",
 	})
+}
+
+// GetAdminDevices handles GET /admin/devices
+func (h *APIHandler) GetAdminDevices(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	devices, err := h.deviceService.GetAllDevices(ctx)
+	if err != nil {
+		log.Printf("Failed to get devices: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get devices"})
+		return
+	}
+
+	var result []gin.H
+	for _, device := range devices {
+		online := h.wsHandler != nil && h.wsHandler.IsHostOnline(device.DeviceID)
+		result = append(result, gin.H{
+			"id":          device.ID,
+			"device_id":   device.DeviceID,
+			"device_uuid": device.DeviceUUID,
+			"os":          device.OS,
+			"os_version":  device.OSVersion,
+			"app_version": device.AppVersion,
+			"online":      online,
+			"last_seen":   device.LastSeen,
+			"created_at":  device.CreatedAt,
+			"updated_at":  device.UpdatedAt,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{"devices": result})
+}
+
+// GetAdminStats handles GET /admin/stats
+func (h *APIHandler) GetAdminStats(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	devices, err := h.deviceService.GetAllDevices(ctx)
+	if err != nil {
+		log.Printf("Failed to get devices: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get devices"})
+		return
+	}
+
+	totalDevices := len(devices)
+	onlineDevices := 0
+	offlineDevices := 0
+
+	for _, device := range devices {
+		if h.wsHandler != nil && h.wsHandler.IsHostOnline(device.DeviceID) {
+			onlineDevices++
+		} else {
+			offlineDevices++
+		}
+	}
+
+	onlineRate := 0
+	if totalDevices > 0 {
+		onlineRate = (onlineDevices * 100) / totalDevices
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"totalDevices":   totalDevices,
+		"onlineDevices":  onlineDevices,
+		"offlineDevices": offlineDevices,
+		"onlineRate":     onlineRate,
+	})
+}
+
+// GetSystemStatus handles GET /admin/system/status
+// Returns CPU, memory, disk usage and network IO stats via gopsutil.
+func (h *APIHandler) GetSystemStatus(c *gin.Context) {
+	cpuPercent, err := cpu.Percent(0, false)
+	cpuUsage := "0%"
+	if err == nil && len(cpuPercent) > 0 {
+		cpuUsage = fmt.Sprintf("%.1f%%", cpuPercent[0])
+	}
+
+	memInfo, err := mem.VirtualMemory()
+	memUsage := "0%"
+	if err == nil && memInfo != nil {
+		memUsage = fmt.Sprintf("%.1f%%", memInfo.UsedPercent)
+	}
+
+	diskInfo, err := disk.Usage("/")
+	diskUsage := "0%"
+	if err == nil && diskInfo != nil {
+		diskUsage = fmt.Sprintf("%.1f%%", diskInfo.UsedPercent)
+	}
+
+	hostInfo, err := host.Info()
+	uptime := "00:00:00"
+	if err == nil && hostInfo != nil {
+		uptimeDuration := time.Duration(hostInfo.Uptime) * time.Second
+		hours := int(uptimeDuration.Hours())
+		minutes := int(uptimeDuration.Minutes()) % 60
+		seconds := int(uptimeDuration.Seconds()) % 60
+		uptime = fmt.Sprintf("%02d:%02d:%02d", hours, minutes, seconds)
+	}
+
+	var uploadTotal int64
+	var downloadTotal int64
+
+	netIO, err := psnet.IOCounters(false)
+	if err == nil && len(netIO) > 0 {
+		uploadTotal = int64(netIO[0].BytesSent)
+		downloadTotal = int64(netIO[0].BytesRecv)
+
+		now := time.Now()
+		timeDelta := now.Sub(h.lastNetIOTime).Seconds()
+
+		if timeDelta > 0 && h.lastNetIO.BytesSent > 0 && h.lastNetIO.BytesRecv > 0 {
+			h.uploadSpeed = float64(netIO[0].BytesSent-h.lastNetIO.BytesSent) / timeDelta / 1024
+			h.downloadSpeed = float64(netIO[0].BytesRecv-h.lastNetIO.BytesRecv) / timeDelta / 1024
+
+			if h.uploadSpeed < 0 {
+				h.uploadSpeed = 0
+			}
+			if h.downloadSpeed < 0 {
+				h.downloadSpeed = 0
+			}
+		}
+
+		h.lastNetIO = netIO[0]
+		h.lastNetIOTime = now
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"status":        "online",
+		"statusText":    "运行中",
+		"cpu":           cpuUsage,
+		"memory":        memUsage,
+		"disk":          diskUsage,
+		"apiVersion":    "v1",
+		"dbStatus":      "connected",
+		"dbStatusText":  "已连接",
+		"network":       "ok",
+		"systemVersion": runtime.Version(),
+		"uptime":        uptime,
+		"ip":            "0.0.0.0",
+		"uploadSpeed":   h.uploadSpeed,
+		"downloadSpeed": h.downloadSpeed,
+		"uploadTotal":   uploadTotal,
+		"downloadTotal": downloadTotal,
+	})
+}
+
+// GetConnectionStatus handles GET /admin/connections
+func (h *APIHandler) GetConnectionStatus(c *gin.Context) {
+	var wsConnections int
+	if h.wsHandler != nil {
+		wsConnections = h.wsHandler.GetConnectionCount()
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"currentConnections":   wsConnections,
+		"todayConnections":     wsConnections,
+		"webSocketConnections": wsConnections,
+		"apiRequests":          0,
+	})
+}
+
+// GetActivity handles GET /admin/activity
+func (h *APIHandler) GetActivity(c *gin.Context) {
+	c.JSON(http.StatusOK, []gin.H{})
 }

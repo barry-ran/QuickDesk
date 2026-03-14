@@ -121,6 +121,13 @@ func main() {
 			admin.POST("/users", adminUserHandler.CreateAdminUser)
 			admin.PUT("/users/:id", adminUserHandler.UpdateAdminUser)
 			admin.DELETE("/users/:id", adminUserHandler.DeleteAdminUser)
+
+			// Admin monitoring dashboard
+			admin.GET("/stats", apiHandler.GetAdminStats)
+			admin.GET("/system/status", apiHandler.GetSystemStatus)
+			admin.GET("/connections", apiHandler.GetConnectionStatus)
+			admin.GET("/activity", apiHandler.GetActivity)
+			admin.GET("/devices", apiHandler.GetAdminDevices)
 		}
 	}
 
