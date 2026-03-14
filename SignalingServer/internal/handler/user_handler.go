@@ -252,12 +252,10 @@ func (a *UserAuth) generateToken() string {
 // Register handles POST /api/v1/user/register
 func (a *UserAuth) Register(c *gin.Context) {
 	var req struct {
-		Username    string `json:"username" binding:"required"`
-		Password    string `json:"password" binding:"required"`
-		Phone       string `json:"phone"`
-		Email       string `json:"email"`
-		Level       string `json:"level"`
-		ChannelType string `json:"channelType"`
+		Username string `json:"username" binding:"required"`
+		Password string `json:"password" binding:"required"`
+		Phone    string `json:"phone"`
+		Email    string `json:"email"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {

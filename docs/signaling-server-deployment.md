@@ -51,13 +51,13 @@ docker ps
 ## 3. Install Go
 
 ```bash
-# Download Go 1.21
+# Download Go 1.24
 cd /tmp
-wget https://go.dev/dl/go1.21.6.linux-amd64.tar.gz
+wget https://go.dev/dl/go1.24.0.linux-amd64.tar.gz
 
 # Extract and install
 sudo rm -rf /usr/local/go
-sudo tar -C /usr/local -xzf go1.21.6.linux-amd64.tar.gz
+sudo tar -C /usr/local -xzf go1.24.0.linux-amd64.tar.gz
 
 # Configure environment variables
 echo 'export PATH=$PATH:/usr/local/go/bin' >> ~/.bashrc
@@ -67,7 +67,7 @@ source ~/.bashrc
 go version
 ```
 
-## 4. Install Node.js (for admin dashboard frontend)
+## 4. Install Node.js (for frontend build)
 
 ```bash
 # Install Node.js 20 LTS
@@ -90,7 +90,7 @@ npm --version
 
 cd /opt/quickdesk/SignalingServer
 
-# Build admin dashboard frontend (Vue 3 + Element Plus)
+# Build frontend (admin dashboard + user portal, Vue 3 + Element Plus)
 cd web
 npm install
 npm run build
@@ -434,7 +434,9 @@ After deployment, the following URLs are available:
 - **HTTPS**: `https://your-domain.com`
 - **WebSocket**: `wss://your-domain.com/signal/:device_id?access_code=xxx`
 - **API**: `https://your-domain.com/api/v1/devices/register`
-- **Admin Dashboard**: `https://your-domain.com/admin/` (preset configuration management)
+- **Admin Dashboard**: `https://your-domain.com/admin/` (devices, users, admin accounts, system settings)
+- **User Portal**: `https://your-domain.com/user-login` (user registration, login, device binding)
+- **WebClient**: `https://your-domain.com/webclient/remote.html` (browser-based remote desktop)
 
 ## Performance Tuning
 
