@@ -40,3 +40,23 @@ COMMENT ON TABLE presets IS 'Server preset configuration (single row)';
 COMMENT ON COLUMN presets.notice IS 'Announcement text, JSON: {"zh_CN":"...", "en_US":"..."}';
 COMMENT ON COLUMN presets.links IS 'Navigation links, JSON: {"zh_CN":[{icon,text,url},...], "en_US":[...]}';
 COMMENT ON COLUMN presets.min_version IS 'Minimum allowed client version, e.g. "1.0.0"';
+
+-- Create admin_users table (administrator accounts)
+CREATE TABLE IF NOT EXISTS admin_users (
+    id SERIAL PRIMARY KEY,
+    username VARCHAR(50) UNIQUE NOT NULL,
+    password TEXT NOT NULL,   -- bcrypt hash
+    email VARCHAR(100),
+    role VARCHAR(20) DEFAULT 'admin',  -- admin, super_admin
+    status BOOLEAN DEFAULT true,
+    last_login TIMESTAMP,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_admin_username ON admin_users(username);
+CREATE INDEX IF NOT EXISTS idx_admin_email ON admin_users(email);
+
+COMMENT ON TABLE admin_users IS 'Administrator accounts (bcrypt passwords)';
+COMMENT ON COLUMN admin_users.role IS 'admin or super_admin';
+COMMENT ON COLUMN admin_users.status IS 'true: active, false: disabled';

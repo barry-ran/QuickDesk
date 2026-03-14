@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"net/http"
@@ -8,22 +9,23 @@ import (
 	"sync"
 	"time"
 
+	"quickdesk/signaling/internal/service"
+
 	"github.com/gin-gonic/gin"
-	"quickdesk/signaling/internal/config"
 )
 
 type AdminAuth struct {
-	config *config.AdminConfig
-	mu     sync.RWMutex
-	tokens map[string]time.Time // token -> expiry
+	service *service.AdminUserService
+	mu      sync.RWMutex
+	tokens  map[string]time.Time // token -> expiry
 }
 
 const tokenTTL = 24 * time.Hour
 
-func NewAdminAuth(cfg *config.AdminConfig) *AdminAuth {
+func NewAdminAuth(adminUserService *service.AdminUserService) *AdminAuth {
 	a := &AdminAuth{
-		config: cfg,
-		tokens: make(map[string]time.Time),
+		service: adminUserService,
+		tokens:  make(map[string]time.Time),
 	}
 	go a.cleanupLoop()
 	return a
@@ -39,8 +41,9 @@ func (a *AdminAuth) Login(c *gin.Context) {
 		return
 	}
 
-	if req.User != a.config.User || req.Password != a.config.Password {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
+	user, err := a.service.ValidateCredentials(context.Background(), req.User, req.Password)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -49,7 +52,10 @@ func (a *AdminAuth) Login(c *gin.Context) {
 	a.tokens[token] = time.Now().Add(tokenTTL)
 	a.mu.Unlock()
 
-	c.JSON(http.StatusOK, gin.H{"token": token})
+	c.JSON(http.StatusOK, gin.H{
+		"token": token,
+		"user":  user.ToResponse(),
+	})
 }
 
 // AuthRequired is a Gin middleware that verifies the admin token.

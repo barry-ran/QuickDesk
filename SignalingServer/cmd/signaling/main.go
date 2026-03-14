@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 
@@ -29,18 +30,41 @@ func main() {
 
 	// Auto-migrate models
 	log.Println("Running database migrations...")
-	if err := db.AutoMigrate(&models.Device{}, &models.Preset{}); err != nil {
-		log.Fatalf("Failed to run migrations: %v", err)
+	if err := db.AutoMigrate(&models.Device{}, &models.Preset{}, &models.AdminUser{}); err != nil {
+		log.Printf("Warning: migration error (continuing anyway): %v", err)
 	}
 
 	// Initialize repositories
 	deviceRepo := repository.NewDeviceRepository(db)
 	presetRepo := repository.NewPresetRepository(db)
+	adminUserRepo := repository.NewAdminUserRepository(db)
 
 	// Initialize services
 	deviceService := service.NewDeviceService(deviceRepo, redisClient)
 	authService := service.NewAuthService(redisClient)
 	presetService := service.NewPresetService(presetRepo)
+	adminUserService := service.NewAdminUserService(adminUserRepo)
+
+	// Create initial admin user if not exists (use ADMIN_USER/ADMIN_PASSWORD from config)
+	ctx := context.Background()
+	if _, err := adminUserRepo.GetByUsername(ctx, cfg.Admin.User); err != nil {
+		log.Printf("Creating initial admin user '%s'...", cfg.Admin.User)
+		hashedPassword, err := service.HashPassword(cfg.Admin.Password)
+		if err != nil {
+			log.Fatalf("Failed to hash initial admin password: %v", err)
+		}
+		initialAdmin := &models.AdminUser{
+			Username: cfg.Admin.User,
+			Password: hashedPassword,
+			Email:    "",
+			Role:     "super_admin",
+			Status:   true,
+		}
+		if err := adminUserRepo.Create(ctx, initialAdmin); err != nil {
+			log.Fatalf("Failed to create initial admin user: %v", err)
+		}
+		log.Println("Initial admin user created successfully")
+	}
 
 	// Initialize handlers
 	apiHandler := handler.NewAPIHandler(deviceService, authService, presetService, cfg)
@@ -81,7 +105,7 @@ func main() {
 		}
 
 		// Admin authentication
-		adminAuth := middleware.NewAdminAuth(&cfg.Admin)
+		adminAuth := middleware.NewAdminAuth(adminUserService)
 		v1.POST("/admin/login", adminAuth.Login)
 
 		// Admin API (requires admin token, no API key needed)
@@ -90,6 +114,13 @@ func main() {
 		{
 			admin.GET("/preset", apiHandler.GetAdminPreset)
 			admin.PUT("/preset", apiHandler.UpdateAdminPreset)
+
+			// Admin user management
+			adminUserHandler := handler.NewAdminUserHandler(adminUserService)
+			admin.GET("/users", adminUserHandler.GetAdminUsers)
+			admin.POST("/users", adminUserHandler.CreateAdminUser)
+			admin.PUT("/users/:id", adminUserHandler.UpdateAdminUser)
+			admin.DELETE("/users/:id", adminUserHandler.DeleteAdminUser)
 		}
 	}
 
