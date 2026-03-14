@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>QuickDesk Remote</title>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "@noble/curves/ed25519": "https://esm.sh/@noble/curves@1.8.1/ed25519",
+            "@noble/curves/abstract/utils": "https://esm.sh/@noble/curves@1.8.1/abstract/utils",
+            "@noble/hashes/sha256": "https://esm.sh/@noble/hashes@1.7.1/sha256",
+            "@noble/hashes/sha512": "https://esm.sh/@noble/hashes@1.7.1/sha512",
+            "@noble/hashes/hmac": "https://esm.sh/@noble/hashes@1.7.1/hmac"
+        }
+    }
+    </script>
+
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            --bg-primary: #1a1a2e;
+            --bg-secondary: #16213e;
+            --bg-card: #0f3460;
+            --bg-input: #1a1a3e;
+            --accent: #e94560;
+            --accent-hover: #ff6b81;
+            --text-primary: #eee;
+            --text-secondary: #a0a0b0;
+            --success: #4caf50;
+            --warning: #ffc107;
+            --error: #f44336;
+            --border: rgba(255,255,255,0.1);
+            --radius: 8px;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #000;
+            color: var(--text-primary);
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Connection info bar */
+        #connectionBar {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 6px 16px;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+            font-size: 13px;
+            min-height: 36px;
+        }
+
+        #connectionBar .conn-dot {
+            width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+            background: var(--warning);
+            animation: pulse 1.5s infinite;
+        }
+        #connectionBar .conn-dot.connected { background: var(--success); animation: none; }
+        #connectionBar .conn-dot.failed { background: var(--error); animation: none; }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+        #connectionBar .conn-device { font-weight: 600; }
+        #connectionBar .conn-status { color: var(--text-secondary); }
+        #connectionBar .conn-resolution { color: var(--text-secondary); font-size: 12px; }
+
+        /* Remote container */
+        #remoteContainer {
+            position: relative;
+            flex: 1;
+            background: #000;
+            overflow: hidden;
+        }
+
+        #videoContainer {
+            width: 100%; height: 100%;
+            position: relative;
+            outline: none;
+        }
+
+        #remoteVideo {
+            width: 100%; height: 100%;
+            object-fit: contain;
+            background: #000;
+        }
+
+        #noVideo {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: #444;
+        }
+        #noVideo svg { width: 80px; height: 80px; margin-bottom: 16px; opacity: 0.3; }
+        #noVideo p { font-size: 16px; }
+
+        /* Floating toolbar styles */
+        .floating-btn {
+            position: absolute; top: 16px; right: 16px;
+            width: 44px; height: 44px; border-radius: 50%;
+            background: rgba(0,0,0,0.6);
+            border: 1px solid rgba(255,255,255,0.15);
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; z-index: 100;
+            backdrop-filter: blur(8px);
+            transition: background 0.2s;
+            user-select: none;
+        }
+        .floating-btn:hover { background: rgba(0,0,0,0.8); }
+
+        .floating-menu, .floating-submenu {
+            position: absolute; z-index: 101;
+            background: rgba(20, 20, 40, 0.95);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 4px 0; min-width: 200px;
+            backdrop-filter: blur(16px);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+        }
+        .floating-submenu { z-index: 102; min-width: 180px; }
+
+        .menu-separator { height: 1px; background: var(--border); margin: 4px 0; }
+        .menu-item {
+            padding: 8px 16px; cursor: pointer; font-size: 14px;
+            display: flex; align-items: center; gap: 10px;
+            transition: background 0.15s; white-space: nowrap;
+        }
+        .menu-item:hover { background: rgba(255,255,255,0.08); }
+        .menu-item.destructive { color: #ff4d4f; }
+        .menu-item.destructive:hover { background: rgba(255,77,79,0.15); }
+        .menu-icon { font-size: 16px; width: 20px; text-align: center; flex-shrink: 0; }
+        .menu-text { flex: 1; }
+        .menu-arrow { font-size: 16px; opacity: 0.5; margin-left: auto; }
+        .menu-check { font-size: 13px; color: var(--accent); margin-left: auto; }
+
+        /* Stats overlay */
+        #statsOverlay {
+            display: none;
+            position: absolute; top: 16px; left: 16px;
+            background: rgba(0,0,0,0.75);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 12px 16px;
+            font-size: 13px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            z-index: 50;
+            backdrop-filter: blur(4px);
+            min-width: 200px;
+        }
+        .stats-grid { display: flex; flex-direction: column; gap: 4px; }
+        .stats-row { display: flex; justify-content: space-between; gap: 16px; }
+        .stats-label { color: var(--text-secondary); }
+        .stats-value { color: var(--text-primary); font-weight: 500; text-align: right; }
+        .stats-bar { height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; margin-top: 8px; }
+        .stats-bar-fill { height: 100%; border-radius: 2px; transition: width 0.3s; }
+
+        /* Log panel - right side drawer (PC) / bottom sheet (mobile) */
+        #logDrawer {
+            display: none;
+            position: absolute;
+            top: 0; right: 0; bottom: 0;
+            width: 340px;
+            z-index: 150;
+            background: rgba(16, 20, 38, 0.96);
+            border-left: 1px solid var(--border);
+            backdrop-filter: blur(16px);
+            flex-direction: column;
+            box-shadow: -4px 0 24px rgba(0,0,0,0.4);
+        }
+        #logDrawer.open { display: flex; }
+
+        .log-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 10px 14px;
+            border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
+        }
+        .log-header-title {
+            font-size: 13px; font-weight: 600; color: var(--text-secondary);
+            letter-spacing: 0.5px; text-transform: uppercase;
+        }
+        .log-close-btn {
+            width: 28px; height: 28px; border-radius: 6px;
+            border: none; background: none; color: var(--text-secondary);
+            cursor: pointer; display: flex; align-items: center; justify-content: center;
+            transition: background 0.15s, color 0.15s;
+        }
+        .log-close-btn:hover { background: rgba(255,255,255,0.1); color: var(--text-primary); }
+
+        .log-body {
+            flex: 1; overflow-y: auto; overflow-x: hidden;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 12px;
+            padding: 8px 12px;
+        }
+        .log-entry { padding: 2px 0; line-height: 1.6; word-break: break-all; }
+        .log-time { color: #555; margin-right: 8px; }
+        .log-info { color: #8bb4e0; }
+        .log-success { color: #4caf50; }
+        .log-error { color: #f44336; }
+        .log-warning { color: #ffc107; }
+
+        .log-clear-btn {
+            padding: 6px 12px; margin: 8px 12px;
+            border: 1px solid var(--border); border-radius: 6px;
+            background: none; color: var(--text-secondary);
+            font-size: 12px; cursor: pointer; flex-shrink: 0;
+            transition: background 0.15s, color 0.15s;
+        }
+        .log-clear-btn:hover { background: rgba(255,255,255,0.08); color: var(--text-primary); }
+
+        #unmuteOverlay {
+            display: none;
+            position: absolute; bottom: 20px; left: 50%;
+            transform: translateX(-50%);
+            z-index: 100;
+            background: rgba(0,0,0,0.75);
+            color: #fff;
+            padding: 10px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            user-select: none;
+            backdrop-filter: blur(4px);
+        }
+
+        /* Mobile toolbar */
+        #mobileToolbar {
+            display: none;
+            flex-shrink: 0;
+            z-index: 200;
+            background: rgba(20, 20, 40, 0.95);
+            border-top: 1px solid var(--border);
+            padding: 6px 0;
+            padding-bottom: max(6px, env(safe-area-inset-bottom));
+        }
+        .mobile-toolbar-row {
+            display: flex; justify-content: space-around; align-items: center;
+            padding: 0 8px;
+        }
+        .mobile-btn {
+            display: flex; flex-direction: column; align-items: center;
+            gap: 2px; padding: 8px 12px;
+            border: none; background: none; color: var(--text-secondary);
+            font-size: 10px; cursor: pointer;
+            -webkit-tap-highlight-color: transparent;
+            user-select: none; touch-action: manipulation;
+            border-radius: 8px;
+            transition: background 0.15s, color 0.15s;
+        }
+        .mobile-btn:active, .mobile-btn.active { background: rgba(255,255,255,0.1); color: var(--text-primary); }
+        .mobile-btn svg { width: 22px; height: 22px; fill: currentColor; }
+
+        /* Mobile overrides */
+        @media (max-width: 768px), (hover: none) and (pointer: coarse) {
+            body { height: 100dvh; }
+            #connectionBar { padding: 4px 10px; font-size: 12px; min-height: 28px; }
+            #connectionBar .conn-resolution { display: none; }
+            #logDrawer {
+                top: auto; left: 0; right: 0; bottom: 0;
+                width: 100%; height: 55%;
+                border-left: none; border-top: 1px solid var(--border);
+                border-radius: 12px 12px 0 0;
+                box-shadow: 0 -4px 24px rgba(0,0,0,0.5);
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Connection info bar -->
+    <div id="connectionBar">
+        <span id="connDot" class="conn-dot"></span>
+        <span id="connDevice" class="conn-device">--</span>
+        <span id="connStatus" class="conn-status">连接中...</span>
+        <span id="connResolution" class="conn-resolution"></span>
+    </div>
+
+    <!-- Remote desktop -->
+    <div id="remoteContainer">
+        <div id="videoContainer" tabindex="0">
+            <video id="remoteVideo" autoplay playsinline></video>
+            <div id="unmuteOverlay">点击任意位置开启声音</div>
+            <div id="noVideo">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M21 3H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H3V5h18v14zM10 8l6 4-6 4z"/>
+                </svg>
+                <p>等待视频流...</p>
+            </div>
+        </div>
+        <div id="statsOverlay"></div>
+
+        <!-- Log drawer (right side on PC, bottom sheet on mobile) -->
+        <div id="logDrawer">
+            <div class="log-header">
+                <span class="log-header-title">Logs</span>
+                <button class="log-close-btn" id="logCloseBtn" title="Close">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+                </button>
+            </div>
+            <div class="log-body" id="logContainer"></div>
+            <button class="log-clear-btn" id="logClearBtn">Clear</button>
+        </div>
+
+        <input id="mobileKeyInput" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+            style="position:absolute;left:-9999px;top:0;width:1px;height:1px;opacity:0;pointer-events:none;">
+    </div>
+
+    <!-- Mobile toolbar -->
+    <div id="mobileToolbar">
+        <div class="mobile-toolbar-row">
+            <button class="mobile-btn" id="btnKeyboard" title="Keyboard">
+                <svg viewBox="0 0 24 24"><path d="M20 5H4c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm-9 3h2v2h-2V8zm0 3h2v2h-2v-2zM8 8h2v2H8V8zm0 3h2v2H8v-2zm-1 2H5v-2h2v2zm0-3H5V8h2v2zm9 7H8v-2h8v2zm0-4h-2v-2h2v2zm0-3h-2V8h2v2zm3 3h-2v-2h2v2zm0-3h-2V8h2v2z"/></svg>
+                <span>Keyboard</span>
+            </button>
+            <button class="mobile-btn" id="btnRightClick" title="Right Click">
+                <svg viewBox="0 0 24 24"><path d="M13 1.07V9h7c0-4.08-3.05-7.44-7-7.93zM4 15c0 4.42 3.58 8 8 8s8-3.58 8-8v-4H4v4zm7-13.93C7.05 1.56 4 4.92 4 9h7V1.07z"/></svg>
+                <span>Right Click</span>
+            </button>
+            <button class="mobile-btn" id="btnLogs" title="Logs">
+                <svg viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H5.17L4 17.17V4h16v12zM7 9h2v2H7zm4 0h2v2h-2zm4 0h2v2h-2z"/></svg>
+                <span>Logs</span>
+            </button>
+            <button class="mobile-btn" id="btnZoomReset" title="Reset Zoom">
+                <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/><path d="M12 10h-2v2H9v-2H7V9h2V7h1v2h2v1z"/></svg>
+                <span>Zoom</span>
+            </button>
+            <button class="mobile-btn" id="btnFullscreen" title="Fullscreen">
+                <svg viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
+                <span>Fullscreen</span>
+            </button>
+            <button class="mobile-btn" id="btnDisconnect" title="Disconnect">
+                <svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+                <span>Close</span>
+            </button>
+        </div>
+    </div>
+
+    <script type="module" src="js/remote-main.js"></script>
+</body>
+</html>
