@@ -195,8 +195,93 @@ Once configured, your AI agent can use QuickDesk tools directly. Example convers
 |------|-------------|
 | `screenshot` | Capture the remote screen. Returns base64 image. Use `max_width` to scale down for faster processing. |
 | `get_screen_size` | Get the remote desktop resolution (width × height). |
+| `get_screen_text` | Run OCR (PP-OCRv4) on the current remote desktop frame. Returns all recognized text blocks with bounding boxes, center coordinates, and confidence scores. Results are cached by frame hash — calling this multiple times on the same frame is free. |
+| `find_element` | Find a UI element by its visible text using OCR. Returns all matching text blocks with bounding boxes and center coordinates. Supports partial match (default) and exact match. |
+| `click_text` | Find text on the remote desktop and click it in one step. Equivalent to `find_element` + `mouse_click` at the text center. If multiple matches exist, clicks the first one. |
 
-### Mouse
+#### `get_screen_text`
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `connection_id` | string | ✅ | — | Connection ID of the remote desktop |
+
+**Returns:** `{ blocks, frameHash, width, height, connectionId }`
+
+Each block in `blocks`:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `text` | string | Recognized text content |
+| `bbox` | object | Bounding box `{ x, y, w, h }` in pixels |
+| `center` | object | Center point `{ x, y }` for click targeting |
+| `confidence` | number | OCR confidence score (0–1) |
+
+#### `find_element`
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `connection_id` | string | ✅ | — | Connection ID of the remote desktop |
+| `text` | string | ✅ | — | Text to search for on screen |
+| `exact` | boolean | — | `false` | If true, require exact text match; false = partial/substring match |
+| `ignore_case` | boolean | — | `true` | Case-insensitive matching |
+
+**Returns:** `{ found, matches, query, frameHash, connectionId }`
+
+#### `click_text`
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `connection_id` | string | ✅ | — | Connection ID of the remote desktop |
+| `text` | string | ✅ | — | Text to find and click |
+| `exact` | boolean | — | `false` | Exact match vs. partial match |
+| `ignore_case` | boolean | — | `true` | Case-insensitive matching |
+| `button` | string | — | `"left"` | Mouse button: `"left"`, `"right"`, or `"middle"` |
+
+**Returns:** `{ success, clickedText, x, y, confidence }` or `{ success: false, error }` if text not found.
+
+### OCR-Based Screen Intelligence
+
+Instead of analyzing screenshots with a vision model, these tools run on-device OCR (PP-OCRv4) directly on the raw video frame — no JPEG degradation, instant results, and cached by frame hash.
+
+#### When to use OCR tools vs. `screenshot`
+
+| Scenario | Recommended Approach |
+|----------|----------------------|
+| Reading menu items, button labels, dialog text | `get_screen_text` or `find_element` |
+| Clicking a button by its label | `click_text` |
+| Understanding overall UI layout | `screenshot` → vision model |
+| Finding a specific word on screen | `find_element` |
+| Verifying text appeared after an action | `get_screen_text` (cached, fast re-check) |
+
+#### Usage Pattern: Click a Button by Label
+
+```
+click_text(connection_id=conn_id, text="OK")
+         → finds "OK" button on screen and clicks it
+```
+
+#### Usage Pattern: Read Text and Act
+
+```
+get_screen_text(connection_id=conn_id)
+    → returns all text blocks with coordinates
+
+find_element(connection_id=conn_id, text="Error", ignore_case=true)
+    → check if any error message is visible
+
+click_text(connection_id=conn_id, text="Retry")
+    → click the retry button
+```
+
+#### Usage Pattern: Verify Text Appeared
+
+```
+keyboard_hotkey(keys=["ctrl", "s"])          → save the file
+// wait a moment, then verify
+elements = find_element(connection_id=conn_id, text="Saved")
+if elements.found:
+    → file was saved successfully
+```
 
 | Tool | Description |
 |------|-------------|

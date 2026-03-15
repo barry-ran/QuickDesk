@@ -55,6 +55,14 @@ ApiHandler::ApiHandler(MainController* controller, QObject* parent)
             this, [this](const QString& connectionId) {
                 m_clipboardCache.remove(connectionId);
             });
+
+    // 在后台初始化 OCR 引擎（加载 ONNX 模型，约 500ms~1s）
+    QMetaObject::invokeMethod(this, [this]() {
+        if (!OcrEngine::instance().initialize()) {
+            LOG_WARN("ApiHandler: OCR engine initialization failed. "
+                     "getScreenText/findElement will return error until models are present.");
+        }
+    }, Qt::QueuedConnection);
 }
 
 void ApiHandler::registerHandlers() {
@@ -136,6 +144,17 @@ void ApiHandler::registerHandlers() {
     };
     m_handlers["getScreenSize"] = [this](const QJsonObject& p) {
         return handleGetScreenSize(p);
+    };
+
+    // OCR / UI 状态
+    m_handlers["getScreenText"] = [this](const QJsonObject& p) {
+        return handleGetScreenText(p);
+    };
+    m_handlers["findElement"] = [this](const QJsonObject& p) {
+        return handleFindElement(p);
+    };
+    m_handlers["clickText"] = [this](const QJsonObject& p) {
+        return handleClickText(p);
     };
 }
 
@@ -711,6 +730,185 @@ QJsonObject ApiHandler::handleGetScreenSize(const QJsonObject& params) {
     QJsonObject data;
     data["width"] = info.width;
     data["height"] = info.height;
+    return makeResult(data);
+}
+
+// --- OCR / UI 状态 ---
+
+// 辅助函数：将 OcrResult 序列化为 QJsonObject
+static QJsonObject ocrResultToJson(const OcrResult& result, const QString& connectionId) {
+    QJsonArray blocksArr;
+    for (const auto& blk : result.blocks) {
+        QJsonObject b;
+        b["text"]       = blk.text;
+        b["confidence"] = blk.confidence;
+        b["bbox"]       = QJsonObject{
+            {"x", blk.bbox.x()}, {"y", blk.bbox.y()},
+            {"w", blk.bbox.width()}, {"h", blk.bbox.height()}
+        };
+        b["center"] = QJsonObject{
+            {"x", blk.center.x()}, {"y", blk.center.y()}
+        };
+        blocksArr.append(b);
+    }
+    QJsonObject data;
+    data["connectionId"] = connectionId;
+    data["width"]        = result.imageSize.width();
+    data["height"]       = result.imageSize.height();
+    data["blocks"]       = blocksArr;
+    data["frameHash"]    = result.frameHash;
+    return data;
+}
+
+// 辅助函数：从共享内存读取视频帧并转换为 QImage
+static QImage readCurrentFrame(MainController* ctrl, const QString& connectionId, QString& err) {
+    auto* shm = ctrl->clientManager()->sharedMemoryManager();
+    if (!shm || !shm->isAttached(connectionId)) {
+        err = QString("No video frame available for: %1").arg(connectionId);
+        return {};
+    }
+    QVideoFrame vf = shm->readVideoFrame(connectionId);
+    if (!vf.isValid()) {
+        err = "Failed to read video frame";
+        return {};
+    }
+    QImage img = vf.toImage();
+    if (img.isNull()) {
+        err = "Failed to convert video frame to QImage";
+    }
+    return img;
+}
+
+QJsonObject ApiHandler::handleGetScreenText(const QJsonObject& params) {
+    auto connectionId = params["connectionId"].toString();
+    if (connectionId.isEmpty())
+        return makeError(400, "Missing 'connectionId'");
+
+    if (!OcrEngine::instance().isInitialized())
+        return makeError(503, "OCR engine not ready. Check that model files are present in the models/ directory.");
+
+    QString err;
+    QImage image = readCurrentFrame(m_controller, connectionId, err);
+    if (image.isNull())
+        return makeError(404, err);
+
+    // 先查缓存
+    QString frameHash = OcrEngine::computeFrameHash(image);
+    OcrResult cached;
+    if (OcrCache::instance().get(frameHash, cached)) {
+        return makeResult(ocrResultToJson(cached, connectionId));
+    }
+
+    // 缓存未命中，执行 OCR（同步，约 100~300ms）
+    OcrResult result = OcrEngine::instance().recognize(image);
+    result.frameHash = frameHash;
+
+    OcrCache::instance().put(frameHash, result);
+    return makeResult(ocrResultToJson(result, connectionId));
+}
+
+QJsonObject ApiHandler::handleFindElement(const QJsonObject& params) {
+    auto connectionId = params["connectionId"].toString();
+    if (connectionId.isEmpty())
+        return makeError(400, "Missing 'connectionId'");
+
+    auto text = params["text"].toString().trimmed();
+    if (text.isEmpty())
+        return makeError(400, "Missing 'text' to find");
+
+    bool exact      = params["exact"].toBool(false);
+    bool ignoreCase = params["ignoreCase"].toBool(true);
+
+    if (!OcrEngine::instance().isInitialized())
+        return makeError(503, "OCR engine not ready");
+
+    QString err;
+    QImage image = readCurrentFrame(m_controller, connectionId, err);
+    if (image.isNull())
+        return makeError(404, err);
+
+    // 查缓存或识别
+    QString frameHash = OcrEngine::computeFrameHash(image);
+    OcrResult result;
+    if (!OcrCache::instance().get(frameHash, result)) {
+        result = OcrEngine::instance().recognize(image);
+        result.frameHash = frameHash;
+        OcrCache::instance().put(frameHash, result);
+    }
+
+    // 搜索匹配的文本块
+    Qt::CaseSensitivity cs = ignoreCase ? Qt::CaseInsensitive : Qt::CaseSensitive;
+    QJsonArray matches;
+    for (const auto& blk : result.blocks) {
+        bool hit = exact ? (blk.text.compare(text, cs) == 0)
+                         : blk.text.contains(text, cs);
+        if (hit) {
+            QJsonObject m;
+            m["text"]       = blk.text;
+            m["confidence"] = blk.confidence;
+            m["bbox"]       = QJsonObject{
+                {"x", blk.bbox.x()}, {"y", blk.bbox.y()},
+                {"w", blk.bbox.width()}, {"h", blk.bbox.height()}
+            };
+            m["center"] = QJsonObject{
+                {"x", blk.center.x()}, {"y", blk.center.y()}
+            };
+            matches.append(m);
+        }
+    }
+
+    QJsonObject data;
+    data["connectionId"] = connectionId;
+    data["query"]        = text;
+    data["found"]        = !matches.isEmpty();
+    data["matches"]      = matches;
+    data["frameHash"]    = frameHash;
+    return makeResult(data);
+}
+
+QJsonObject ApiHandler::handleClickText(const QJsonObject& params) {
+    auto connectionId = params["connectionId"].toString();
+    if (connectionId.isEmpty())
+        return makeError(400, "Missing 'connectionId'");
+
+    // 1. 先查找文本
+    QJsonObject findResult = handleFindElement(params);
+    if (findResult.contains("error"))
+        return findResult;
+
+    QJsonObject foundData = findResult["result"].toObject();
+    QJsonArray matches = foundData["matches"].toArray();
+    if (matches.isEmpty()) {
+        QJsonObject errData;
+        errData["found"]   = false;
+        errData["query"]   = params["text"].toString();
+        errData["message"] = QString("Text not found on screen: \"%1\"").arg(params["text"].toString());
+        return makeResult(errData);
+    }
+
+    // 2. 取第一个匹配（最高置信度由 OCR 引擎保证顺序）
+    QJsonObject first  = matches[0].toObject();
+    QJsonObject center = first["center"].toObject();
+    int x = center["x"].toInt();
+    int y = center["y"].toInt();
+
+    // 3. 执行鼠标点击
+    auto buttonStr = params["button"].toString("left");
+    int button = 1;
+    if (buttonStr == "right") button = 2;
+    else if (buttonStr == "middle") button = 4;
+
+    auto* client = m_controller->clientManager();
+    client->sendMouseMove(connectionId, x, y);
+    client->sendMousePress(connectionId, x, y, button);
+    client->sendMouseRelease(connectionId, x, y, button);
+
+    QJsonObject data;
+    data["success"]      = true;
+    data["clickedText"]  = first["text"];
+    data["x"]            = x;
+    data["y"]            = y;
+    data["confidence"]   = first["confidence"];
     return makeResult(data);
 }
 

@@ -4,6 +4,9 @@
 #ifndef QUICKDESK_API_APIHANDLER_H
 #define QUICKDESK_API_APIHANDLER_H
 
+#include "OcrEngine.h"
+#include "OcrCache.h"
+
 #include <QObject>
 #include <QJsonObject>
 #include <functional>
@@ -57,6 +60,11 @@ private:
     QJsonObject handleGetClipboard(const QJsonObject& params);
     QJsonObject handleSetClipboard(const QJsonObject& params);
     QJsonObject handleGetScreenSize(const QJsonObject& params);
+
+    // OCR / UI 状态
+    QJsonObject handleGetScreenText(const QJsonObject& params);
+    QJsonObject handleFindElement(const QJsonObject& params);
+    QJsonObject handleClickText(const QJsonObject& params);
 
     static int keyNameToScanCode(const QString& keyName);
 

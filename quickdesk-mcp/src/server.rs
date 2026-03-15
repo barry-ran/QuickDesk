@@ -216,6 +216,40 @@ struct GetRecentEventsParam {
     limit: Option<usize>,
 }
 
+// ---- OCR / UI state param structs ----
+
+#[derive(Deserialize, JsonSchema)]
+struct GetScreenTextParam {
+    /// Connection ID of the remote desktop
+    connection_id: String,
+}
+
+#[derive(Deserialize, JsonSchema)]
+struct FindElementParam {
+    /// Connection ID of the remote desktop
+    connection_id: String,
+    /// Text to search for on screen (supports partial match by default)
+    text: String,
+    /// If true, require exact text match. Default: false (partial match)
+    exact: Option<bool>,
+    /// If true, ignore letter case. Default: true
+    ignore_case: Option<bool>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+struct ClickTextParam {
+    /// Connection ID of the remote desktop
+    connection_id: String,
+    /// Text to find and click. Clicks the center of the first matched text block.
+    text: String,
+    /// If true, require exact text match. Default: false
+    exact: Option<bool>,
+    /// If true, ignore letter case. Default: true
+    ignore_case: Option<bool>,
+    /// Mouse button: "left" (default), "right", or "middle"
+    button: Option<String>,
+}
+
 #[derive(Deserialize, JsonSchema)]
 struct MultiDeviceTaskArgs {
     /// Description of the task to perform across devices, e.g. "check disk usage on all servers", "install security updates"
@@ -680,6 +714,74 @@ impl QuickDeskMcpServer {
             .await;
 
         serde_json::to_string_pretty(&events).unwrap_or_default()
+    }
+
+    // ---- OCR / UI state tools ----
+
+    #[tool(description = "Extract all text from the current remote desktop screen using OCR (PP-OCRv4). \
+Returns a list of text blocks with their text content, bounding box (x/y/w/h in pixels), center \
+coordinates, and confidence score. Supports both Chinese and English. \
+Results are cached per frame — calling this multiple times on the same frame costs nothing. \
+Use this instead of screenshot+vision for text-heavy tasks to reduce token cost and improve reliability.")]
+    async fn get_screen_text(&self, params: Parameters<GetScreenTextParam>) -> String {
+        let p = params.0;
+        match self
+            .ws
+            .request("getScreenText", json!({ "connectionId": p.connection_id }))
+            .await
+        {
+            Ok(v) => serde_json::to_string_pretty(&v).unwrap_or_default(),
+            Err(e) => format!("Error: {e}"),
+        }
+    }
+
+    #[tool(description = "Find a UI element on the remote desktop by its visible text. \
+Runs OCR on the current screen and returns all blocks that match the search text. \
+Each match includes the bounding box and center coordinates. \
+Use exact=true for precise matching (e.g. button labels); leave it false for partial search. \
+Returns found=false if the text is not on screen.")]
+    async fn find_element(&self, params: Parameters<FindElementParam>) -> String {
+        let p = params.0;
+        let mut req = json!({
+            "connectionId": p.connection_id,
+            "text": p.text,
+        });
+        if let Some(exact) = p.exact {
+            req["exact"] = json!(exact);
+        }
+        if let Some(ic) = p.ignore_case {
+            req["ignoreCase"] = json!(ic);
+        }
+        match self.ws.request("findElement", req).await {
+            Ok(v) => serde_json::to_string_pretty(&v).unwrap_or_default(),
+            Err(e) => format!("Error: {e}"),
+        }
+    }
+
+    #[tool(description = "Find text on the remote desktop and click it in one step. \
+Equivalent to find_element + mouse_click at the text center. \
+If multiple matches exist, clicks the first one. \
+Returns success=true with the clicked text and coordinates, or found=false if not on screen. \
+Prefer this over screenshot→find coordinates→click for text-based UI interactions.")]
+    async fn click_text(&self, params: Parameters<ClickTextParam>) -> String {
+        let p = params.0;
+        let mut req = json!({
+            "connectionId": p.connection_id,
+            "text": p.text,
+        });
+        if let Some(exact) = p.exact {
+            req["exact"] = json!(exact);
+        }
+        if let Some(ic) = p.ignore_case {
+            req["ignoreCase"] = json!(ic);
+        }
+        if let Some(btn) = p.button {
+            req["button"] = json!(btn);
+        }
+        match self.ws.request("clickText", req).await {
+            Ok(v) => serde_json::to_string_pretty(&v).unwrap_or_default(),
+            Err(e) => format!("Error: {e}"),
+        }
     }
 
     #[tool(description = "List all supported event types that can be waited on with wait_for_event. Returns the event type names and their descriptions.")]

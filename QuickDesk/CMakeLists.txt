@@ -2,6 +2,8 @@ include(spdlog)
 
 include(quickdesk-remoting)
 
+include(rapidocr)
+
 add_subdirectory(base)
 add_subdirectory(infra)
 
@@ -42,12 +44,16 @@ set(API_SOURCES
     src/api/WebSocketServer.cpp
     src/api/ApiHandler.cpp
     src/api/SecurityManager.cpp
+    src/api/OcrEngine.cpp
+    src/api/OcrCache.cpp
 )
 
 set(API_HEADERS
     src/api/WebSocketServer.h
     src/api/ApiHandler.h
     src/api/SecurityManager.h
+    src/api/OcrEngine.h
+    src/api/OcrCache.h
 )
 
 set(COMMON_HEADERS
@@ -222,7 +228,8 @@ qt_add_qml_module(QuickDesk
 
 # Include directories
 target_include_directories(QuickDesk PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/src    
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${RAPIDOCR_INCLUDE_DIRS}
 )
 
 set_target_properties(QuickDesk PROPERTIES
@@ -254,8 +261,8 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
 endif()
 
 target_link_libraries(QuickDesk
-    PRIVATE 
-    Qt6::Quick 
+    PRIVATE
+    Qt6::Quick
     Qt6::QuickControls2
     Qt6::Core
     Qt6::Widgets
@@ -265,6 +272,53 @@ target_link_libraries(QuickDesk
     base
     infra
 )
+
+# -------------------------------------------------------------------------
+# RapidOCR 链接（与 quick-recoil-assistant 方式一致）
+# -------------------------------------------------------------------------
+if(RAPIDOCR_FOUND)
+    # 设置链接搜索目录（release / debug 分开），库名由 RAPIDOCR_LIB_NAME 指定
+    target_link_directories(QuickDesk PRIVATE
+        $<$<CONFIG:Debug>:${RAPIDOCR_LINK_DIRS_DBG}>
+        $<$<NOT:$<CONFIG:Debug>>:${RAPIDOCR_LINK_DIRS_REL}>
+    )
+    target_link_libraries(QuickDesk PRIVATE ${RAPIDOCR_LIB_NAME})
+    # 告知 OcrEngine.cpp 实际链接了 RapidOCR，编译完整实现而非 stub
+    target_compile_definitions(QuickDesk PRIVATE QUICKDESK_OCR_ENABLED)
+endif()
+
+# -------------------------------------------------------------------------
+# 部署 RapidOcrOnnx.dll（Windows only）
+# -------------------------------------------------------------------------
+if(WIN32 AND RAPIDOCR_FOUND)
+    add_custom_command(TARGET QuickDesk POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "$<$<CONFIG:Debug>:${RAPIDOCR_DLLS_DBG}>$<$<NOT:$<CONFIG:Debug>>:${RAPIDOCR_DLLS}>"
+            "$<TARGET_FILE_DIR:QuickDesk>/"
+        COMMENT "Deploying RapidOcrOnnx.dll"
+    )
+endif()
+
+# -------------------------------------------------------------------------
+# 部署 OCR 模型文件（Windows & macOS）
+# -------------------------------------------------------------------------
+if(RAPIDOCR_FOUND AND EXISTS "${RAPIDOCR_MODEL_DIR}")
+    if(WIN32)
+        add_custom_command(TARGET QuickDesk POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_directory
+                "${RAPIDOCR_MODEL_DIR}"
+                "$<TARGET_FILE_DIR:QuickDesk>/models"
+            COMMENT "Deploying OCR models"
+        )
+    elseif(APPLE)
+        add_custom_command(TARGET QuickDesk POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_directory
+                "${RAPIDOCR_MODEL_DIR}"
+                "$<TARGET_FILE_DIR:QuickDesk>/../Resources/models"
+            COMMENT "Deploying OCR models to macOS bundle"
+        )
+    endif()
+endif()
 
 include(GNUInstallDirs)
 install(TARGETS QuickDesk

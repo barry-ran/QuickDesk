@@ -195,8 +195,93 @@ quickdesk-mcp [--ws-url ws://127.0.0.1:9600] [--token YOUR_TOKEN]
 |------|------|
 | `screenshot` | 截取远程屏幕。返回 base64 图像。使用 `max_width` 缩小图片以加速传输和 AI 处理。 |
 | `get_screen_size` | 获取远程桌面分辨率（宽 × 高）。 |
+| `get_screen_text` | 对当前远程桌面帧执行 OCR（PP-OCRv4）。返回所有识别到的文字块，含边界框、中心坐标和置信度。结果按帧哈希缓存——对同一帧多次调用无额外开销。 |
+| `find_element` | 通过可见文字查找 UI 元素。返回所有匹配的文字块及其边界框和中心坐标。支持部分匹配（默认）和精确匹配。 |
+| `click_text` | 在远程桌面上查找文字并一步点击。等价于 `find_element` + 在文字中心执行 `mouse_click`。若有多个匹配，点击第一个。 |
 
-### 鼠标
+#### `get_screen_text`
+
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| `connection_id` | string | ✅ | — | 远程桌面的连接 ID |
+
+**返回：** `{ blocks, frameHash, width, height, connectionId }`
+
+`blocks` 中每个元素的字段：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `text` | string | 识别到的文字内容 |
+| `bbox` | object | 边界框 `{ x, y, w, h }`（像素） |
+| `center` | object | 中心点 `{ x, y }`，可直接用于点击坐标 |
+| `confidence` | number | OCR 置信度（0–1） |
+
+#### `find_element`
+
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| `connection_id` | string | ✅ | — | 远程桌面的连接 ID |
+| `text` | string | ✅ | — | 要在屏幕上查找的文字 |
+| `exact` | boolean | — | `false` | 为 true 时要求精确匹配；false 为部分/子串匹配 |
+| `ignore_case` | boolean | — | `true` | 是否忽略大小写 |
+
+**返回：** `{ found, matches, query, frameHash, connectionId }`
+
+#### `click_text`
+
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| `connection_id` | string | ✅ | — | 远程桌面的连接 ID |
+| `text` | string | ✅ | — | 要查找并点击的文字 |
+| `exact` | boolean | — | `false` | 精确匹配还是部分匹配 |
+| `ignore_case` | boolean | — | `true` | 是否忽略大小写 |
+| `button` | string | — | `"left"` | 鼠标按钮：`"left"`、`"right"` 或 `"middle"` |
+
+**返回：** `{ success, clickedText, x, y, confidence }`，文字未找到时返回 `{ success: false, error }`。
+
+### 基于 OCR 的屏幕理解
+
+相比截图后交给视觉模型分析，这些工具在本地直接对原始视频帧执行 OCR（PP-OCRv4）——无 JPEG 压缩损耗、响应即时，且按帧哈希自动缓存。
+
+#### OCR 工具 vs `screenshot` 的选择
+
+| 场景 | 推荐方式 |
+|------|----------|
+| 读取菜单项、按钮标签、对话框文字 | `get_screen_text` 或 `find_element` |
+| 通过标签点击按钮 | `click_text` |
+| 理解整体 UI 布局 | `screenshot` → 视觉模型 |
+| 在屏幕上查找特定词语 | `find_element` |
+| 验证操作后文字是否出现 | `get_screen_text`（缓存，极快） |
+
+#### 使用模式：通过标签点击按钮
+
+```
+click_text(connection_id=conn_id, text="确定")
+         → 在屏幕上找到"确定"按钮并点击
+```
+
+#### 使用模式：读取文字后执行操作
+
+```
+get_screen_text(connection_id=conn_id)
+    → 返回所有文字块及坐标
+
+find_element(connection_id=conn_id, text="错误", ignore_case=true)
+    → 检查是否有错误提示
+
+click_text(connection_id=conn_id, text="重试")
+    → 点击重试按钮
+```
+
+#### 使用模式：验证文字是否出现
+
+```
+keyboard_hotkey(keys=["ctrl", "s"])            → 保存文件
+// 稍等片刻，然后验证
+elements = find_element(connection_id=conn_id, text="已保存")
+if elements.found:
+    → 文件保存成功
+```
 
 | 工具 | 说明 |
 |------|------|
