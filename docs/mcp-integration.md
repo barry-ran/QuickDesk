@@ -198,9 +198,12 @@ Once configured, your AI agent can use QuickDesk tools directly. Example convers
 | `get_screen_text` | Run OCR (PP-OCRv4) on the current remote desktop frame. Returns all recognized text blocks with bounding boxes, center coordinates, and confidence scores. Results are cached by frame hash — calling this multiple times on the same frame is free. |
 | `find_element` | Find a UI element by its visible text using OCR. Returns all matching text blocks with bounding boxes and center coordinates. Supports partial match (default) and exact match. |
 | `click_text` | Find text on the remote desktop and click it in one step. Equivalent to `find_element` + `mouse_click` at the text center. If multiple matches exist, clicks the first one. |
-| `get_ui_state` | Get a unified UI state snapshot: screen resolution, OCR text blocks, and active window title. Returns structured data instead of a raw image, reducing token cost and enabling reliable text-based navigation. Use this as a lightweight alternative to `screenshot` when you need to understand what is on screen without visual analysis. |
+| `get_ui_state` | Get a unified UI state snapshot: screen resolution, OCR text blocks, and active window title. Returns structured data instead of a raw image, reducing token cost and enabling reliable text-based navigation. Use this as a lightweight alternative to `screenshot` when you need to understand what is on screen without visual analysis. The `ocr.blocks` array contains every recognised text block with its coordinates. |
 | `wait_for_text` | Block until the specified text appears on the remote desktop screen, or until the timeout expires. Returns `found=true` with the matching text block when the text appears. Prefer this over polling with `screenshot` in a loop. |
 | `assert_text_present` | Assert that the specified text is currently visible on the remote desktop screen. Returns `present=true` with the matching text block if found, or `present=false` if not found. Returns immediately without polling — use `wait_for_text` if you need to wait. |
+| `verify_action_result` | Verify that a set of conditions are met after performing an action. Polls OCR and window state until all conditions pass or the timeout elapses. Returns `allPassed=true` with per-condition detail, or `allPassed=false` with a failure summary. For post-action verification with retries. |
+| `screen_diff_summary` | Compare the current screen's OCR state against a previous snapshot identified by `from_hash`. Returns a structured diff listing text blocks that appeared or disappeared between the two frames, plus a human-readable summary. Use `get_ui_state` to capture the baseline `frame_hash` before an action. |
+| `assert_screen_state` | Immediately assert that a set of conditions are all satisfied on the current screen without any polling. Returns `allPassed=true/false` with per-condition detail and a summary. Use as a pre-condition check before a risky action. |
 
 #### `get_screen_text`
 
@@ -294,6 +297,85 @@ Immediately check if the specified text is currently visible on screen. Does not
 
 **Returns:** `{ present: true, match: { text, bbox, center, confidence }, query, connectionId }` if found, or `{ present: false, query, connectionId }` if not found.
 
+### Verification & Self-Healing
+
+These tools give AI agents the ability to verify their own actions and detect screen changes — the foundation of reliable automation.
+
+| Tool | Description |
+|------|-------------|
+| `verify_action_result` | Poll OCR + window state until all conditions pass or timeout. Use after performing an action to confirm it succeeded. |
+| `screen_diff_summary` | Compare two OCR snapshots by frame hash. Reveals exactly which text blocks appeared or disappeared. |
+| `assert_screen_state` | Immediate (no polling) assertion of multiple conditions. Use as a pre-flight check before risky actions. |
+
+#### Condition Types
+
+All three verification tools share the same condition structure (`{ type, value }`):
+
+| Type | Description |
+|------|-------------|
+| `text_present` | Text is visible on screen (partial match, case-insensitive) |
+| `text_absent` | Text is NOT visible on screen |
+| `text_present_exact` | Text is visible on screen (exact, case-sensitive) |
+| `window_title_contains` | Active window title contains the value |
+| `window_title_equals` | Active window title exactly equals the value |
+
+#### `verify_action_result`
+
+Poll until all conditions pass or the timeout elapses. Each failed poll waits 200 ms before retrying.
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `connection_id` | string | ✅ | — | Connection ID of the remote desktop |
+| `expectations` | array | ✅ | — | List of `{ type, value }` conditions that must all pass |
+| `timeout_ms` | integer | — | `3000` | Maximum polling time in milliseconds |
+
+**Returns:**
+
+```json
+{
+  "allPassed": true,
+  "timedOut": false,
+  "results": [
+    { "type": "text_present", "value": "Saved", "passed": true,
+      "actual": "File Saved", "reason": "Found \"Saved\" in block \"File Saved\"" }
+  ],
+  "summary": "All 1 condition(s) passed"
+}
+```
+
+#### `screen_diff_summary`
+
+Compare the current frame against a previously recorded snapshot.
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `connection_id` | string | ✅ | — | Connection ID of the remote desktop |
+| `from_hash` | string | — | `""` | Frame hash from a prior `get_ui_state` call. Leave empty to show all current blocks as "added". |
+
+**Returns:**
+
+```json
+{
+  "fromHash": "abc123...",
+  "toHash":   "def456...",
+  "hasChanges": true,
+  "added":   [ { "text": "Save successful", "bbox": {...}, "center": {...}, "confidence": 0.97 } ],
+  "removed": [ { "text": "Saving...",        "bbox": {...}, "center": {...}, "confidence": 0.95 } ],
+  "summary": "appeared: \"Save successful\"; disappeared: \"Saving...\""
+}
+```
+
+#### `assert_screen_state`
+
+No polling — returns the current pass/fail status immediately.
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `connection_id` | string | ✅ | — | Connection ID of the remote desktop |
+| `expectations` | array | ✅ | — | List of `{ type, value }` conditions to check |
+
+**Returns:** Same structure as `verify_action_result`.
+
 ### OCR-Based Screen Intelligence
 
 Instead of analyzing screenshots with a vision model, these tools run on-device OCR (PP-OCRv4) directly on the raw video frame — no JPEG degradation, instant results, and cached by frame hash.
@@ -306,7 +388,11 @@ Instead of analyzing screenshots with a vision model, these tools run on-device 
 | Clicking a button by its label | `click_text` |
 | Understanding overall UI layout | `screenshot` → vision model |
 | Finding a specific word on screen | `find_element` |
-| Verifying text appeared after an action | `assert_text_present` (instant) |
+| Verifying text appeared after an action | `verify_action_result` (with retries) or `assert_text_present` (instant) |
+| Waiting for a result to appear | `wait_for_text` (blocks until found) |
+| Getting screen state without a screenshot | `get_ui_state` (resolution + OCR + window title) |
+| Confirming an action had the expected effect | `verify_action_result` or `screen_diff_summary` |
+| Pre-flight check before a risky action | `assert_screen_state` |
 | Waiting for a result to appear | `wait_for_text` (blocks until found) |
 | Getting screen state without a screenshot | `get_ui_state` (resolution + OCR + window title) |
 
@@ -649,6 +735,49 @@ screenshot()                                         → capture the new layout
 get_recent_events(event_type="connectionStateChanged", limit=10)
                                → see recent connection state changes
 get_recent_events(limit=50)    → see all recent events
+```
+
+### Verify Action Result (with Retries)
+
+```
+// Perform an action
+keyboard_hotkey(keys=["ctrl", "s"])
+
+// Poll until "Saved" appears on screen (up to 3 s)
+verify_action_result(connection_id=conn_id,
+  expectations=[{ type: "text_present", value: "Saved" }],
+  timeout_ms=3000)
+    → allPassed=true: action confirmed
+    → allPassed=false + reason: let agent decide next step
+```
+
+### Screen Diff: Detect What Changed
+
+```
+// Capture baseline before action
+state = get_ui_state(connection_id=conn_id)   → hash = state.ocr.frameHash
+
+// Perform action
+click_text(connection_id=conn_id, text="Submit")
+
+// See what changed
+screen_diff_summary(connection_id=conn_id, from_hash=hash)
+    → added:   ["Submission confirmed"]
+    → removed: ["Submit"]
+    → summary: "appeared: \"Submission confirmed\"; disappeared: \"Submit\""
+```
+
+### Pre-flight Assert Before Risky Action
+
+```
+// Confirm delete dialog is visible before clicking OK
+assert_screen_state(connection_id=conn_id,
+  expectations=[
+    { type: "text_present",          value: "Are you sure" },
+    { type: "window_title_contains", value: "Confirm" }
+  ])
+    → allPassed=true:  safe to proceed
+    → allPassed=false: unexpected state, abort and report
 ```
 
 ## Building from Source

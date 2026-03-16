@@ -198,9 +198,12 @@ quickdesk-mcp [--ws-url ws://127.0.0.1:9600] [--token YOUR_TOKEN]
 | `get_screen_text` | 对当前远程桌面帧执行 OCR（PP-OCRv4）。返回所有识别到的文字块，含边界框、中心坐标和置信度。结果按帧哈希缓存——对同一帧多次调用无额外开销。 |
 | `find_element` | 通过可见文字查找 UI 元素。返回所有匹配的文字块及其边界框和中心坐标。支持部分匹配（默认）和精确匹配。 |
 | `click_text` | 在远程桌面上查找文字并一步点击。等价于 `find_element` + 在文字中心执行 `mouse_click`。若有多个匹配，点击第一个。 |
-| `get_ui_state` | 获取聚合 UI 状态快照：屏幕分辨率 + OCR 文本块 + 活动窗口标题，一次调用全部返回。相比截图大幅减少 Token 消耗，适合文字导航场景。 |
+| `get_ui_state` | 获取聚合 UI 状态快照：屏幕分辨率 + OCR 文本块 + 活动窗口标题，一次调用全部返回。相比截图大幅减少 Token 消耗，适合文字导航场景。`ocr.blocks` 包含所有识别到的文字块及其坐标。 |
 | `wait_for_text` | 阻塞等待指定文字出现在屏幕上，或直到超时。内部自动轮询 OCR，无需循环截图。 |
 | `assert_text_present` | 立即断言指定文字是否在屏幕上。不等待，直接返回当前状态。若需等待请使用 `wait_for_text`。 |
+| `verify_action_result` | 执行动作后验证一组条件是否全部满足。自动轮询 OCR 和窗口状态，直到全部通过或超时。返回每条条件的通过/失败详情及汇总描述。用于动作后的带重试验证。 |
+| `screen_diff_summary` | 对比两个 OCR 快照的差异（通过帧哈希标识基线）。返回新出现和消失的文字块列表及人类可读的摘要。在动作前用 `get_ui_state` 记录基线哈希，动作后调用此工具分析变化。 |
+| `assert_screen_state` | 立即（无轮询）断言一组条件是否全部满足。返回每条条件的通过/失败详情。用于高风险动作前的前置条件检查。 |
 
 #### `get_screen_text`
 
@@ -294,6 +297,85 @@ quickdesk-mcp [--ws-url ws://127.0.0.1:9600] [--token YOUR_TOKEN]
 
 **返回：** 找到时返回 `{ present: true, match: { text, bbox, center, confidence }, query, connectionId }`，未找到时返回 `{ present: false, query, connectionId }`。
 
+### 验证与自愈
+
+这组工具让 AI Agent 能够验证自己的操作结果、检测屏幕变化——可靠自动化的基础。
+
+| 工具 | 说明 |
+|------|------|
+| `verify_action_result` | 自动轮询 OCR + 窗口状态，直到所有条件通过或超时。用于动作后的结果确认。 |
+| `screen_diff_summary` | 对比两个 OCR 快照。精确显示哪些文字块出现、哪些消失。 |
+| `assert_screen_state` | 立即（无轮询）断言多个条件。用于高风险动作前的前置检查。 |
+
+#### 条件类型
+
+三个验证工具共用同一条件结构 `{ type, value }`：
+
+| type | 说明 |
+|------|------|
+| `text_present` | 屏幕上存在指定文字（部分匹配，大小写不敏感） |
+| `text_absent` | 屏幕上不存在指定文字 |
+| `text_present_exact` | 屏幕上存在指定文字（精确匹配，大小写敏感） |
+| `window_title_contains` | 活动窗口标题包含指定子串 |
+| `window_title_equals` | 活动窗口标题精确匹配 |
+
+#### `verify_action_result`
+
+轮询直到所有条件通过或超时，每次失败后等待 200 ms 再重试。
+
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| `connection_id` | string | ✅ | — | 远程桌面的连接 ID |
+| `expectations` | array | ✅ | — | `{ type, value }` 条件数组，所有条件必须全部通过 |
+| `timeout_ms` | integer | — | `3000` | 最大轮询时间（毫秒） |
+
+**返回：**
+
+```json
+{
+  "allPassed": true,
+  "timedOut": false,
+  "results": [
+    { "type": "text_present", "value": "已保存", "passed": true,
+      "actual": "文件已保存", "reason": "Found \"已保存\" in block \"文件已保存\"" }
+  ],
+  "summary": "All 1 condition(s) passed"
+}
+```
+
+#### `screen_diff_summary`
+
+对比当前帧与之前记录的快照。
+
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| `connection_id` | string | ✅ | — | 远程桌面的连接 ID |
+| `from_hash` | string | — | `""` | 来自之前 `get_ui_state` 调用的帧哈希。为空则将所有当前文字块视为"新增"。 |
+
+**返回：**
+
+```json
+{
+  "fromHash": "abc123...",
+  "toHash":   "def456...",
+  "hasChanges": true,
+  "added":   [ { "text": "保存成功", "bbox": {...}, "center": {...}, "confidence": 0.97 } ],
+  "removed": [ { "text": "保存中...", "bbox": {...}, "center": {...}, "confidence": 0.95 } ],
+  "summary": "appeared: \"保存成功\"; disappeared: \"保存中...\""
+}
+```
+
+#### `assert_screen_state`
+
+无轮询，立即返回当前通过/失败状态。
+
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| `connection_id` | string | ✅ | — | 远程桌面的连接 ID |
+| `expectations` | array | ✅ | — | `{ type, value }` 条件数组 |
+
+**返回：** 与 `verify_action_result` 相同的结构。
+
 ### 基于 OCR 的屏幕理解
 
 相比截图后交给视觉模型分析，这些工具在本地直接对原始视频帧执行 OCR（PP-OCRv4）——无 JPEG 压缩损耗、响应即时，且按帧哈希自动缓存。
@@ -306,9 +388,11 @@ quickdesk-mcp [--ws-url ws://127.0.0.1:9600] [--token YOUR_TOKEN]
 | 通过标签点击按钮 | `click_text` |
 | 理解整体 UI 布局 | `screenshot` → 视觉模型 |
 | 在屏幕上查找特定词语 | `find_element` |
-| 验证操作后文字是否出现 | `assert_text_present`（立即） |
+| 验证操作后文字是否出现 | `verify_action_result`（带重试）或 `assert_text_present`（立即） |
 | 等待某个结果出现 | `wait_for_text`（阻塞等待） |
 | 获取屏幕状态（无需截图） | `get_ui_state`（分辨率 + OCR + 窗口标题） |
+| 确认动作产生了预期效果 | `verify_action_result` 或 `screen_diff_summary` |
+| 高风险动作前的前置条件检查 | `assert_screen_state` |
 
 #### 使用模式：通过标签点击按钮
 
@@ -649,6 +733,49 @@ screenshot()                                         → 捕获新布局
 get_recent_events(event_type="connectionStateChanged", limit=10)
                                → 查看最近的连接状态变化
 get_recent_events(limit=50)    → 查看所有近期事件
+```
+
+### 验证动作结果（带重试）
+
+```
+// 执行动作
+keyboard_hotkey(keys=["ctrl", "s"])
+
+// 轮询等待"已保存"出现（最长 3 秒）
+verify_action_result(connection_id=conn_id,
+  expectations=[{ type: "text_present", value: "已保存" }],
+  timeout_ms=3000)
+    → allPassed=true：动作已确认
+    → allPassed=false + reason：Agent 据此决定下一步
+```
+
+### 屏幕差异：检测变化内容
+
+```
+// 动作前记录基线
+state = get_ui_state(connection_id=conn_id)   → hash = state.ocr.frameHash
+
+// 执行动作
+click_text(connection_id=conn_id, text="提交")
+
+// 查看发生了什么变化
+screen_diff_summary(connection_id=conn_id, from_hash=hash)
+    → added:   ["提交成功"]
+    → removed: ["提交"]
+    → summary: "appeared: \"提交成功\"; disappeared: \"提交\""
+```
+
+### 高风险动作前的前置断言
+
+```
+// 点击"确认删除"前，先验证对话框和窗口标题
+assert_screen_state(connection_id=conn_id,
+  expectations=[
+    { type: "text_present",          value: "确认删除" },
+    { type: "window_title_contains", value: "确认" }
+  ])
+    → allPassed=true：安全，继续操作
+    → allPassed=false：异常状态，终止并上报
 ```
 
 ## 从源码编译

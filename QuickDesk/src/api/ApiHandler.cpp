@@ -44,7 +44,8 @@ QString rtcStatusToString(RtcStatus::Status s) {
 ApiHandler::ApiHandler(MainController* controller, QObject* parent)
     : QObject(parent)
     , m_controller(controller)
-    , m_uiState(controller) {
+    , m_uiState(controller)
+    , m_verification(controller) {
     registerHandlers();
 
     connect(m_controller->clientManager(), &ClientManager::clipboardReceived,
@@ -165,6 +166,16 @@ void ApiHandler::registerHandlers() {
     };
     m_handlers["assertTextPresent"] = [this](const QJsonObject& p) {
         return handleAssertTextPresent(p);
+    };
+    // 验证与自愈
+    m_handlers["verifyActionResult"] = [this](const QJsonObject& p) {
+        return handleVerifyActionResult(p);
+    };
+    m_handlers["screenDiffSummary"] = [this](const QJsonObject& p) {
+        return handleScreenDiffSummary(p);
+    };
+    m_handlers["assertScreenState"] = [this](const QJsonObject& p) {
+        return handleAssertScreenState(p);
     };
 }
 
@@ -995,6 +1006,74 @@ QJsonObject ApiHandler::handleAssertTextPresent(const QJsonObject& params) {
         data["match"] = ocrBlockToJson(found);
     }
     return makeResult(data);
+}
+
+// --- 验证与自愈 ---
+
+// 辅助：从 JSON Array 解析 conditions 列表
+static QList<VerificationCondition> parseConditions(const QJsonArray& arr) {
+    QList<VerificationCondition> list;
+    for (const auto& v : arr) {
+        auto c = VerificationService::conditionFromJson(v.toObject());
+        if (!c.type.isEmpty() && !c.value.isEmpty())
+            list.append(c);
+    }
+    return list;
+}
+
+QJsonObject ApiHandler::handleVerifyActionResult(const QJsonObject& params) {
+    auto connectionId = params["connectionId"].toString();
+    if (connectionId.isEmpty())
+        return makeError(400, "Missing 'connectionId'");
+
+    auto condArr = params["expectations"].toArray();
+    if (condArr.isEmpty())
+        condArr = params["conditions"].toArray();  // 兼容两种字段名
+    if (condArr.isEmpty())
+        return makeError(400, "Missing 'expectations' array");
+
+    auto conditions = parseConditions(condArr);
+    if (conditions.isEmpty())
+        return makeError(400, "No valid conditions in 'expectations'");
+
+    int timeoutMs = params["timeoutMs"].toInt(3000);
+
+    auto vr = m_verification.verifyActionResult(connectionId, conditions, timeoutMs);
+    return makeResult(VerificationService::verificationResultToJson(vr));
+}
+
+QJsonObject ApiHandler::handleScreenDiffSummary(const QJsonObject& params) {
+    auto connectionId = params["connectionId"].toString();
+    if (connectionId.isEmpty())
+        return makeError(400, "Missing 'connectionId'");
+
+    auto fromHash = params["fromHash"].toString();  // empty = no baseline
+
+    QString err;
+    auto diff = m_verification.screenDiffSummary(connectionId, fromHash, err);
+    if (!err.isEmpty())
+        return makeError(500, err);
+
+    return makeResult(VerificationService::screenDiffToJson(diff));
+}
+
+QJsonObject ApiHandler::handleAssertScreenState(const QJsonObject& params) {
+    auto connectionId = params["connectionId"].toString();
+    if (connectionId.isEmpty())
+        return makeError(400, "Missing 'connectionId'");
+
+    auto condArr = params["expectations"].toArray();
+    if (condArr.isEmpty())
+        condArr = params["conditions"].toArray();
+    if (condArr.isEmpty())
+        return makeError(400, "Missing 'expectations' array");
+
+    auto conditions = parseConditions(condArr);
+    if (conditions.isEmpty())
+        return makeError(400, "No valid conditions in 'expectations'");
+
+    auto vr = m_verification.assertScreenState(connectionId, conditions);
+    return makeResult(VerificationService::verificationResultToJson(vr));
 }
 
 // --- Helpers ---

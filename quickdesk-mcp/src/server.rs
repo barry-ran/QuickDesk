@@ -298,6 +298,45 @@ struct AssertTextPresentParam {
     ignore_case: Option<bool>,
 }
 
+// ---- Verification param structs ----
+
+#[derive(Deserialize, JsonSchema)]
+struct VerificationCondition {
+    /// Condition type: "text_present" | "text_absent" | "text_present_exact" |
+    /// "window_title_contains" | "window_title_equals"
+    #[serde(rename = "type")]
+    condition_type: String,
+    /// The expected value to check against
+    value: String,
+}
+
+#[derive(Deserialize, JsonSchema)]
+struct VerifyActionResultParam {
+    /// Connection ID of the remote desktop
+    connection_id: String,
+    /// List of conditions that must all pass
+    expectations: Vec<VerificationCondition>,
+    /// Maximum time to poll in milliseconds (default: 3000)
+    timeout_ms: Option<i32>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+struct ScreenDiffParam {
+    /// Connection ID of the remote desktop
+    connection_id: String,
+    /// Frame hash from a previous get_ui_state or screen_diff_summary call.
+    /// Leave empty to compare against an empty baseline (shows all current text as "added").
+    from_hash: Option<String>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+struct AssertScreenStateParam {
+    /// Connection ID of the remote desktop
+    connection_id: String,
+    /// List of conditions to assert simultaneously (no polling)
+    expectations: Vec<VerificationCondition>,
+}
+
 // ---- MCP Server ----
 
 #[derive(Clone)]
@@ -873,6 +912,65 @@ Unlike wait_for_text, this returns immediately without polling.")]
             req["ignoreCase"] = json!(ic);
         }
         match self.ws.request("assertTextPresent", req).await {
+            Ok(v) => serde_json::to_string_pretty(&v).unwrap_or_default(),
+            Err(e) => format!("Error: {e}"),
+        }
+    }
+
+    #[tool(description = "Verify that a set of conditions are met after performing an action. \
+Polls OCR and window state until all conditions pass or the timeout elapses. \
+Conditions can check for text presence/absence on screen or the active window title. \
+Returns allPassed=true with per-condition details, or allPassed=false with a failure summary \
+that the agent can use to decide the next action. \
+Supported condition types: \"text_present\", \"text_absent\", \"text_present_exact\", \
+\"window_title_contains\", \"window_title_equals\".")]
+    async fn verify_action_result(&self, params: Parameters<VerifyActionResultParam>) -> String {
+        let p = params.0;
+        let expectations: Vec<serde_json::Value> = p.expectations.iter().map(|c| {
+            json!({ "type": c.condition_type, "value": c.value })
+        }).collect();
+        let req = json!({
+            "connectionId": p.connection_id,
+            "expectations": expectations,
+            "timeoutMs": p.timeout_ms.unwrap_or(3000),
+        });
+        match self.ws.request("verifyActionResult", req).await {
+            Ok(v) => serde_json::to_string_pretty(&v).unwrap_or_default(),
+            Err(e) => format!("Error: {e}"),
+        }
+    }
+
+    #[tool(description = "Compare the current screen's OCR state against a previous snapshot identified \
+by from_hash. Returns a structured diff listing text blocks that appeared or disappeared between the \
+two frames, plus a human-readable summary. \
+Use get_ui_state to capture the baseline frame_hash before performing an action, then call \
+screen_diff_summary afterwards to understand what changed.")]
+    async fn screen_diff_summary(&self, params: Parameters<ScreenDiffParam>) -> String {
+        let p = params.0;
+        let req = json!({
+            "connectionId": p.connection_id,
+            "fromHash": p.from_hash.unwrap_or_default(),
+        });
+        match self.ws.request("screenDiffSummary", req).await {
+            Ok(v) => serde_json::to_string_pretty(&v).unwrap_or_default(),
+            Err(e) => format!("Error: {e}"),
+        }
+    }
+
+    #[tool(description = "Immediately assert that a set of conditions are all satisfied on the current \
+screen without any polling. Returns allPassed=true/false with per-condition detail and a summary. \
+Use this as a pre-condition check before a risky action (e.g. confirm a delete dialog is visible \
+before clicking OK). For post-action verification with retries, use verify_action_result instead.")]
+    async fn assert_screen_state(&self, params: Parameters<AssertScreenStateParam>) -> String {
+        let p = params.0;
+        let expectations: Vec<serde_json::Value> = p.expectations.iter().map(|c| {
+            json!({ "type": c.condition_type, "value": c.value })
+        }).collect();
+        let req = json!({
+            "connectionId": p.connection_id,
+            "expectations": expectations,
+        });
+        match self.ws.request("assertScreenState", req).await {
             Ok(v) => serde_json::to_string_pretty(&v).unwrap_or_default(),
             Err(e) => format!("Error: {e}"),
         }
