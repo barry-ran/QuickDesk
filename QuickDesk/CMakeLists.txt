@@ -285,10 +285,8 @@ target_link_libraries(QuickDesk
 # RapidOCR 链接（与 quick-recoil-assistant 方式一致）
 # -------------------------------------------------------------------------
 if(RAPIDOCR_FOUND)
-    # 设置链接搜索目录（release / debug 分开），库名由 RAPIDOCR_LIB_NAME 指定
-    target_link_directories(QuickDesk PRIVATE
-        $<$<CONFIG:Debug>:${RAPIDOCR_LINK_DIRS_DBG}>
-        $<$<NOT:$<CONFIG:Debug>>:${RAPIDOCR_LINK_DIRS_REL}>
+    # 设置链接搜索目录
+    target_link_directories(QuickDesk PRIVATE ${RAPIDOCR_LINK_DIRS}
     )
     target_link_libraries(QuickDesk PRIVATE ${RAPIDOCR_LIB_NAME})
     # 告知 OcrEngine.cpp 实际链接了 RapidOCR，编译完整实现而非 stub
@@ -296,15 +294,25 @@ if(RAPIDOCR_FOUND)
 endif()
 
 # -------------------------------------------------------------------------
-# 部署 RapidOcrOnnx.dll（Windows only）
+# 部署 RapidOcrOnnx
 # -------------------------------------------------------------------------
-if(WIN32 AND RAPIDOCR_FOUND)
-    add_custom_command(TARGET QuickDesk POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "$<$<CONFIG:Debug>:${RAPIDOCR_DLLS_DBG}>$<$<NOT:$<CONFIG:Debug>>:${RAPIDOCR_DLLS}>"
-            "$<TARGET_FILE_DIR:QuickDesk>/"
-        COMMENT "Deploying RapidOcrOnnx.dll"
-    )
+if(RAPIDOCR_FOUND)
+    if(WIN32)
+        add_custom_command(TARGET QuickDesk POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${RAPIDOCR_DLLS}>"
+                "$<TARGET_FILE_DIR:QuickDesk>/"
+            COMMENT "Deploying RapidOcrOnnx.dll"
+        )
+    elseif(APPLE)
+        add_custom_command(TARGET QuickDesk POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${RAPIDOCR_DLLS}>"
+                "$<TARGET_FILE_DIR:QuickDesk>/../Frameworks/"
+            COMMENT "Deploying RapidOcrOnnx.dylib"
+        )
+    endif()
+    
 endif()
 
 # -------------------------------------------------------------------------
