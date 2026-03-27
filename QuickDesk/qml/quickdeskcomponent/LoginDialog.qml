@@ -12,7 +12,6 @@ Popup {
     modal: true
     anchors.centerIn: parent
     width: 380
-    height: contentColumn.implicitHeight + 60
     padding: Theme.spacingXLarge
 
     background: Rectangle {
@@ -20,10 +19,6 @@ Popup {
         radius: Theme.radiusLarge
         border.width: Theme.borderWidthThin
         border.color: Theme.border
-
-        // Shadow
-        layer.enabled: true
-        layer.effect: null
     }
 
     property string mode: "login"  // "login", "register", or "sms-login"
@@ -258,6 +253,13 @@ Popup {
             Layout.fillWidth: true
             Layout.alignment: Qt.AlignHCenter
             horizontalAlignment: Text.AlignHCenter
+            Layout.minimumHeight: implicitHeight
+        }
+
+        Item {
+            visible: loginDialog.errorMessage === ""
+            Layout.fillWidth: true
+            Layout.preferredHeight: Theme.fontSizeSmall + 4
         }
 
         // Confirm button
