@@ -19,6 +19,7 @@ ApplicationWindow {
     maximumHeight: 600
     visible: true
     title: qsTr("QuickDesk")
+    color: Theme.background
     
     onClosing: function(close) {
         close.accepted = false
@@ -332,7 +333,7 @@ ApplicationWindow {
                         var loggedIn = root.mainController && root.mainController.authManager
                                        && root.mainController.authManager.isLoggedIn
                         if (loggedIn) {
-                            userMenu.popup()
+                            userMenu.open()
                         } else {
                             loginDialog.open()
                         }
@@ -417,14 +418,16 @@ ApplicationWindow {
                 }
 
                 // User menu (when logged in)
-                Menu {
+                QDMenu {
                     id: userMenu
+                    x: parent.width
+                    y: parent.height - height
 
-                    MenuItem {
+                    QDMenuItem {
                         text: qsTr("Logout")
-                        onTriggered: {
-                            root.mainController.authManager.logout()
-                        }
+                        iconText: FluentIconGlyph.signOutGlyph
+                        isDestructive: true
+                        onTriggered: root.mainController.authManager.logout()
                     }
                 }
             }

@@ -26,9 +26,9 @@ Controls.Popup {
         Rectangle {
             id: menuBg
             anchors.fill: parent
-            color: Theme.surface
-            border.width: Theme.borderWidthThin
-            border.color: Theme.border
+            color: Theme.surfaceVariant
+            border.width: 1
+            border.color: Theme.borderHover
             radius: Theme.radiusMedium
         }
         

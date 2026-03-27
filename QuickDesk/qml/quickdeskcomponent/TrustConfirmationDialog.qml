@@ -168,14 +168,14 @@ Item {
                         Text {
                             text: qsTr("Tool:")
                             font.family: Theme.fontFamily
-                            font.pixelSize: Theme.fontSizeBody
+                            font.pixelSize: Theme.fontSizeMedium
                             font.weight: Font.DemiBold
                             color: Theme.textSecondary
                         }
                         Text {
                             text: root.toolName
                             font.family: Theme.fontFamilyMono ? Theme.fontFamilyMono : "Consolas"
-                            font.pixelSize: Theme.fontSizeBody
+                            font.pixelSize: Theme.fontSizeMedium
                             color: Theme.text
                         }
                     }
@@ -185,7 +185,7 @@ Item {
                         Text {
                             text: qsTr("Risk:")
                             font.family: Theme.fontFamily
-                            font.pixelSize: Theme.fontSizeBody
+                            font.pixelSize: Theme.fontSizeMedium
                             font.weight: Font.DemiBold
                             color: Theme.textSecondary
                         }
