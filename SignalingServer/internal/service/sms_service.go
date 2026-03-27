@@ -2,11 +2,13 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"log"
 	"math/rand"
 	"regexp"
+	"sync"
 	"time"
 
 	openapi "github.com/alibabacloud-go/darabonba-openapi/v2/client"
@@ -18,11 +20,11 @@ import (
 var phoneRegex = regexp.MustCompile(`^1[3-9]\d{9}$`)
 
 const (
-	smsCodeTTL    = 5 * time.Minute  // verification code validity
-	smsRateTTL    = 60 * time.Second // per-number cooldown
-	smsDailyTTL   = 24 * time.Hour   // daily limit window
-	smsDailyLimit = 10               // max codes per phone per day
-	smsMaxAttempts = 3               // max wrong attempts before code is invalidated
+	smsCodeTTL     = 5 * time.Minute
+	smsRateTTL     = 60 * time.Second
+	smsDailyTTL    = 24 * time.Hour
+	smsDailyLimit  = 10
+	smsMaxAttempts = 3
 )
 
 type smsCodeData struct {
@@ -30,83 +32,104 @@ type smsCodeData struct {
 	Attempts int    `json:"attempts"`
 }
 
-type SmsService struct {
-	rdb       *redis.Client
-	smsClient *dysmsapi.Client
-	signName  string
-	template  string
-	enabled   bool
+// SmsSettingsProvider is the interface SmsService needs to read live SMS config.
+type SmsSettingsProvider interface {
+	GetSmsAccessKeyID() string
+	GetSmsAccessKeySecret() string
+	GetSmsSignName() string
+	GetSmsTemplateCode() string
+	IsSmsEnabled() bool
 }
 
-func NewSmsService(rdb *redis.Client, accessKeyID, accessKeySecret, signName, templateCode string, enabled bool) *SmsService {
-	s := &SmsService{
-		rdb:      rdb,
-		signName: signName,
-		template: templateCode,
-		enabled:  enabled,
-	}
+type SmsService struct {
+	rdb      *redis.Client
+	settings SmsSettingsProvider
 
-	if enabled {
-		cfg := &openapi.Config{
-			AccessKeyId:     tea.String(accessKeyID),
-			AccessKeySecret: tea.String(accessKeySecret),
-			Endpoint:        tea.String("dysmsapi.aliyuncs.com"),
-		}
-		client, err := dysmsapi.NewClient(cfg)
-		if err != nil {
-			log.Printf("[SmsService] Failed to create Aliyun SMS client: %v (SMS disabled)", err)
-			s.enabled = false
-		} else {
-			s.smsClient = client
-			log.Println("[SmsService] Aliyun SMS client initialized")
-		}
-	} else {
-		log.Println("[SmsService] SMS disabled (Aliyun credentials not configured)")
-	}
+	mu          sync.Mutex
+	smsClient   *dysmsapi.Client
+	fingerprint [32]byte // hash of credentials to detect changes
+}
 
+func NewSmsService(rdb *redis.Client, settings SmsSettingsProvider) *SmsService {
+	s := &SmsService{rdb: rdb, settings: settings}
+	if settings.IsSmsEnabled() {
+		s.ensureClient()
+	}
 	return s
 }
 
 func (s *SmsService) IsEnabled() bool {
-	return s.enabled
+	return s.settings.IsSmsEnabled()
+}
+
+// ensureClient lazily creates or recreates the Aliyun client when credentials change.
+func (s *SmsService) ensureClient() *dysmsapi.Client {
+	keyID := s.settings.GetSmsAccessKeyID()
+	keySecret := s.settings.GetSmsAccessKeySecret()
+
+	fp := sha256.Sum256([]byte(keyID + "|" + keySecret))
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.smsClient != nil && s.fingerprint == fp {
+		return s.smsClient
+	}
+
+	cfg := &openapi.Config{
+		AccessKeyId:     tea.String(keyID),
+		AccessKeySecret: tea.String(keySecret),
+		Endpoint:        tea.String("dysmsapi.aliyuncs.com"),
+	}
+	client, err := dysmsapi.NewClient(cfg)
+	if err != nil {
+		log.Printf("[SmsService] Failed to create Aliyun SMS client: %v", err)
+		s.smsClient = nil
+		return nil
+	}
+
+	s.smsClient = client
+	s.fingerprint = fp
+	log.Println("[SmsService] Aliyun SMS client (re)initialized")
+	return client
 }
 
 func ValidatePhone(phone string) bool {
 	return phoneRegex.MatchString(phone)
 }
 
-// SendCode generates a 4-digit code, stores it in Redis, and sends via Aliyun SMS.
 func (s *SmsService) SendCode(ctx context.Context, phone string) error {
-	if !s.enabled {
+	if !s.IsEnabled() {
 		return fmt.Errorf("SMS service is not enabled")
 	}
 
-	// Rate limit: 60s cooldown
+	client := s.ensureClient()
+	if client == nil {
+		return fmt.Errorf("SMS service initialization failed")
+	}
+
 	rateKey := fmt.Sprintf("sms_rate:%s", phone)
 	if s.rdb.Exists(ctx, rateKey).Val() > 0 {
 		return fmt.Errorf("发送太频繁，请稍后再试")
 	}
 
-	// Daily limit
 	dailyKey := fmt.Sprintf("sms_daily:%s", phone)
 	count, _ := s.rdb.Get(ctx, dailyKey).Int()
 	if count >= smsDailyLimit {
 		return fmt.Errorf("今日验证码发送次数已达上限")
 	}
 
-	// Generate 4-digit code
 	code := fmt.Sprintf("%04d", rand.Intn(10000))
 
-	// Send via Aliyun
 	templateParam, _ := json.Marshal(map[string]string{"code": code})
 	req := &dysmsapi.SendSmsRequest{
 		PhoneNumbers:  tea.String(phone),
-		SignName:      tea.String(s.signName),
-		TemplateCode:  tea.String(s.template),
+		SignName:      tea.String(s.settings.GetSmsSignName()),
+		TemplateCode:  tea.String(s.settings.GetSmsTemplateCode()),
 		TemplateParam: tea.String(string(templateParam)),
 	}
 
-	resp, err := s.smsClient.SendSms(req)
+	resp, err := client.SendSms(req)
 	if err != nil {
 		log.Printf("[SmsService] Aliyun SendSms error: %v", err)
 		return fmt.Errorf("短信发送失败")
@@ -116,15 +139,12 @@ func (s *SmsService) SendCode(ctx context.Context, phone string) error {
 		return fmt.Errorf("短信发送失败: %s", tea.StringValue(resp.Body.Message))
 	}
 
-	// Store code in Redis
 	codeKey := fmt.Sprintf("sms_code:%s", phone)
 	data, _ := json.Marshal(smsCodeData{Code: code, Attempts: 0})
 	s.rdb.Set(ctx, codeKey, string(data), smsCodeTTL)
 
-	// Set rate limit
 	s.rdb.Set(ctx, rateKey, "1", smsRateTTL)
 
-	// Increment daily counter
 	pipe := s.rdb.Pipeline()
 	pipe.Incr(ctx, dailyKey)
 	pipe.Expire(ctx, dailyKey, smsDailyTTL)
@@ -134,8 +154,6 @@ func (s *SmsService) SendCode(ctx context.Context, phone string) error {
 	return nil
 }
 
-// VerifyCode checks the code and returns nil on success.
-// On failure it increments the attempt counter; after 3 wrong attempts the code is deleted.
 func (s *SmsService) VerifyCode(ctx context.Context, phone, code string) error {
 	codeKey := fmt.Sprintf("sms_code:%s", phone)
 	val, err := s.rdb.Get(ctx, codeKey).Result()
@@ -169,7 +187,6 @@ func (s *SmsService) VerifyCode(ctx context.Context, phone, code string) error {
 		return fmt.Errorf("验证码错误，还可尝试%d次", remaining)
 	}
 
-	// Success – delete the code so it can't be reused
 	s.rdb.Del(ctx, codeKey)
 	return nil
 }

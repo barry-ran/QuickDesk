@@ -106,6 +106,60 @@
           </el-form-item>
         </el-form>
       </el-card>
+
+      <!-- 阿里云短信配置 -->
+      <el-card class="settings-card" shadow="never">
+        <template #header>
+          <div class="card-header">
+            <el-icon><ChatLineRound /></el-icon>
+            <span>Aliyun SMS</span>
+            <el-tag v-if="isSmsEnabled" type="success" size="small" style="margin-left:auto">Enabled</el-tag>
+            <el-tag v-else type="info" size="small" style="margin-left:auto">Disabled</el-tag>
+          </div>
+        </template>
+        <el-form label-width="180px" label-position="top">
+          <div class="form-tip" style="margin-bottom:12px">
+            Configure Aliyun SMS for phone number verification (login/register).
+            All four fields must be filled to enable SMS features. Leave empty to disable.
+          </div>
+
+          <el-form-item label="Access Key ID">
+            <el-input
+              v-model="form.smsAccessKeyId"
+              placeholder="e.g. LTAI5txxxxxxxxxx"
+              style="max-width:500px"
+            />
+          </el-form-item>
+
+          <el-form-item label="Access Key Secret">
+            <el-input
+              v-model="form.smsAccessKeySecret"
+              placeholder="e.g. eHjxxxxxxxxxxxxxxxxxx"
+              style="max-width:500px"
+              show-password
+              type="password"
+            />
+          </el-form-item>
+
+          <el-form-item label="Sign Name">
+            <el-input
+              v-model="form.smsSignName"
+              placeholder="e.g. QuickDesk"
+              style="max-width:400px"
+            />
+            <div class="form-tip">The SMS signature approved in your Aliyun SMS console.</div>
+          </el-form-item>
+
+          <el-form-item label="Template Code">
+            <el-input
+              v-model="form.smsTemplateCode"
+              placeholder="e.g. SMS_123456789"
+              style="max-width:400px"
+            />
+            <div class="form-tip">The template code for verification code SMS, must contain ${code} variable.</div>
+          </el-form-item>
+        </el-form>
+      </el-card>
     </div>
   </div>
 </template>
@@ -113,7 +167,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Setting, Check, Connection, Lock } from '@element-plus/icons-vue'
+import { Setting, Check, Connection, Lock, ChatLineRound } from '@element-plus/icons-vue'
 import { useSettingsStore } from '../stores/settings.js'
 import { authFetch } from '../api/auth.js'
 import ListEditor from './ListEditor.vue'
@@ -133,8 +187,16 @@ const form = reactive({
   turnCredentialTtl: 86400,
   stunUrls: '',
   apiKey: '',
-  allowedOrigins: ''
+  allowedOrigins: '',
+  smsAccessKeyId: '',
+  smsAccessKeySecret: '',
+  smsSignName: '',
+  smsTemplateCode: ''
 })
+
+const isSmsEnabled = computed(() =>
+  form.smsAccessKeyId && form.smsAccessKeySecret && form.smsSignName && form.smsTemplateCode
+)
 
 const turnUrlList = computed({
   get: () => textToList(form.turnUrls),

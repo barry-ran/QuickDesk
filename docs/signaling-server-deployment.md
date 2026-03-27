@@ -43,8 +43,14 @@ These parameters can be preset in `.env` or configured later in the admin panel 
 | `STUN_URLS` | (empty) | STUN server URLs (comma-separated) |
 | `API_KEY` | (empty) | Client auth API key (empty=disabled) |
 | `ALLOWED_ORIGINS` | (empty) | WebClient origin whitelist (comma-separated) |
+| `ALIYUN_SMS_ACCESS_KEY_ID` | (empty) | Aliyun SMS AccessKey ID |
+| `ALIYUN_SMS_ACCESS_KEY_SECRET` | (empty) | Aliyun SMS AccessKey Secret |
+| `ALIYUN_SMS_SIGN_NAME` | (empty) | Aliyun SMS signature name |
+| `ALIYUN_SMS_TEMPLATE_CODE` | (empty) | Aliyun SMS template code |
 
 > **Note:** Optional `.env` values are only used to seed the database on first deployment. After that, all changes should be made through the admin panel.
+> 
+> **SMS:** Aliyun SMS enables phone number verification for login/register. SMS is auto-enabled when all four fields are set; leave any empty to disable.
 
 ---
 
@@ -79,6 +85,7 @@ After deployment, log in to the admin panel to complete the following:
 1. **Change admin password**: Admin Panel → Admin Users → Edit, change username/password
 2. **Configure ICE servers**: Admin Panel → Settings → ICE / TURN / STUN, add your TURN/STUN servers
 3. **Configure security**: Set API Key and Allowed Origins as needed
+4. **Configure SMS** (optional): Admin Panel → Settings → Aliyun SMS, fill in AccessKey, signature and template to enable phone number verification
 
 These settings take effect **immediately** without restarting the server.
 
@@ -500,7 +507,7 @@ docker logs quickdesk-postgres
 4. **Regular backups**: Set up scheduled database backups
 5. **Log monitoring**: Configure log collection and alerting
 6. **Rate limiting**: Configure request rate limiting in Nginx
-7. **Client authentication**: Set `API_KEY` in your `.env` to restrict native client access, set `ALLOWED_ORIGINS` to restrict WebClient access
+7. **Client authentication**: Configure API Key and Allowed Origins in the admin panel (Settings) to restrict client access
 
 ```nginx
 # Nginx rate limiting example
@@ -549,8 +556,7 @@ After deployment, the following URLs are available:
 - **WebSocket**: `wss://your-domain.com/signal/:device_id?access_code=xxx`
 - **API**: `https://your-domain.com/api/v1/devices/register`
 - **Admin Dashboard**: `https://your-domain.com/admin/` (devices, users, admin accounts, system settings)
-- **User Portal**: `https://your-domain.com/user-login` (user registration, login, device binding)
-- **WebClient**: Deployed independently, not bundled with the signaling server
+- **WebClient**: Deployed independently, communicates with the signaling server via API
 
 ## Performance Tuning
 

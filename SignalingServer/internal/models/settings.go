@@ -23,6 +23,12 @@ type Settings struct {
 	// Security
 	APIKey         string `gorm:"size:500" json:"apiKey"`
 	AllowedOrigins string `gorm:"type:text" json:"allowedOrigins"`
+
+	// Aliyun SMS
+	SmsAccessKeyID     string `gorm:"size:200" json:"smsAccessKeyId"`
+	SmsAccessKeySecret string `gorm:"size:200" json:"smsAccessKeySecret"`
+	SmsSignName        string `gorm:"size:100" json:"smsSignName"`
+	SmsTemplateCode    string `gorm:"size:100" json:"smsTemplateCode"`
 }
 
 func (Settings) TableName() string {

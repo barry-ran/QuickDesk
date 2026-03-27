@@ -39,14 +39,18 @@ func main() {
 
 	// Initialize settings service and seed from .env on first run
 	settingsService := service.NewSettingsService(db)
-	settingsService.SeedFromEnv(
-		strings.Join(cfg.Ice.TurnURLs, "\n"),
-		cfg.Ice.AuthSecret,
-		cfg.Ice.CredentialTTL,
-		strings.Join(cfg.Ice.StunURLs, "\n"),
-		cfg.Security.APIKey,
-		strings.Join(cfg.Security.AllowedOrigins, "\n"),
-	)
+	settingsService.SeedFromEnv(service.EnvSeed{
+		TurnURLs:       strings.Join(cfg.Ice.TurnURLs, "\n"),
+		TurnAuthSecret: cfg.Ice.AuthSecret,
+		TurnTTL:        cfg.Ice.CredentialTTL,
+		StunURLs:       strings.Join(cfg.Ice.StunURLs, "\n"),
+		APIKey:         cfg.Security.APIKey,
+		AllowedOrigins: strings.Join(cfg.Security.AllowedOrigins, "\n"),
+		SmsKeyID:       cfg.Sms.AccessKeyID,
+		SmsKeySecret:   cfg.Sms.AccessKeySecret,
+		SmsSignName:    cfg.Sms.SignName,
+		SmsTemplateCode: cfg.Sms.TemplateCode,
+	})
 
 	deviceRepo := repository.NewDeviceRepository(db)
 	presetRepo := repository.NewPresetRepository(db)
@@ -104,13 +108,8 @@ func main() {
 		// Public feature flags (clients use this to decide which UI to show)
 		v1.GET("/features", apiHandler.GetFeatures)
 
-		// SMS service (nil-safe – disabled when Aliyun credentials are not configured)
-		smsService := service.NewSmsService(
-			redisClient,
-			cfg.Sms.AccessKeyID, cfg.Sms.AccessKeySecret,
-			cfg.Sms.SignName, cfg.Sms.TemplateCode,
-			cfg.Sms.Enabled,
-		)
+		// SMS service – reads credentials dynamically from settingsService
+		smsService := service.NewSmsService(redisClient, settingsService)
 
 		// SMS verification code endpoint
 		smsHandler := handler.NewSmsHandler(smsService, db)

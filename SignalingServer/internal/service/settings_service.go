@@ -79,8 +79,17 @@ func (s *SettingsService) Save(settings *models.Settings) error {
 	return nil
 }
 
+// EnvSeed holds all .env values for first-run seeding.
+type EnvSeed struct {
+	TurnURLs, TurnAuthSecret       string
+	TurnTTL                        int
+	StunURLs, APIKey, AllowedOrigins string
+	SmsKeyID, SmsKeySecret         string
+	SmsSignName, SmsTemplateCode   string
+}
+
 // SeedFromEnv initializes DB with .env values if settings row doesn't exist yet.
-func (s *SettingsService) SeedFromEnv(turnURLs, turnAuthSecret string, turnTTL int, stunURLs, apiKey, allowedOrigins string) {
+func (s *SettingsService) SeedFromEnv(seed EnvSeed) {
 	var count int64
 	s.db.Model(&models.Settings{}).Count(&count)
 	if count > 0 {
@@ -89,14 +98,18 @@ func (s *SettingsService) SeedFromEnv(turnURLs, turnAuthSecret string, turnTTL i
 
 	log.Println("Seeding settings from .env configuration...")
 	settings := &models.Settings{
-		SiteEnabled:       true,
-		SiteName:          "QuickDesk",
-		TurnURLs:          turnURLs,
-		TurnAuthSecret:    turnAuthSecret,
-		TurnCredentialTTL: turnTTL,
-		StunURLs:          stunURLs,
-		APIKey:            apiKey,
-		AllowedOrigins:    allowedOrigins,
+		SiteEnabled:        true,
+		SiteName:           "QuickDesk",
+		TurnURLs:           seed.TurnURLs,
+		TurnAuthSecret:     seed.TurnAuthSecret,
+		TurnCredentialTTL:  seed.TurnTTL,
+		StunURLs:           seed.StunURLs,
+		APIKey:             seed.APIKey,
+		AllowedOrigins:     seed.AllowedOrigins,
+		SmsAccessKeyID:     seed.SmsKeyID,
+		SmsAccessKeySecret: seed.SmsKeySecret,
+		SmsSignName:        seed.SmsSignName,
+		SmsTemplateCode:    seed.SmsTemplateCode,
 	}
 	if err := s.Save(settings); err != nil {
 		log.Printf("Failed to seed settings: %v", err)
@@ -131,6 +144,19 @@ func (s *SettingsService) GetAPIKey() string {
 
 func (s *SettingsService) GetAllowedOrigins() []string {
 	return splitLines(s.Get().AllowedOrigins)
+}
+
+// SMS getters
+
+func (s *SettingsService) GetSmsAccessKeyID() string     { return s.Get().SmsAccessKeyID }
+func (s *SettingsService) GetSmsAccessKeySecret() string { return s.Get().SmsAccessKeySecret }
+func (s *SettingsService) GetSmsSignName() string        { return s.Get().SmsSignName }
+func (s *SettingsService) GetSmsTemplateCode() string    { return s.Get().SmsTemplateCode }
+
+func (s *SettingsService) IsSmsEnabled() bool {
+	st := s.Get()
+	return st.SmsAccessKeyID != "" && st.SmsAccessKeySecret != "" &&
+		st.SmsSignName != "" && st.SmsTemplateCode != ""
 }
 
 // splitLines splits a string by newlines or commas into trimmed non-empty parts.

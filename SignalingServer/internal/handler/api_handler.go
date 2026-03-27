@@ -55,7 +55,7 @@ func (h *APIHandler) SetWSHandler(ws *WSHandler) {
 // Returns feature flags so clients can adapt their UI (e.g. hide SMS login when not configured).
 func (h *APIHandler) GetFeatures(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
-		"sms_enabled": h.config.Sms.Enabled,
+		"sms_enabled": h.settingsService.IsSmsEnabled(),
 	})
 }
 
