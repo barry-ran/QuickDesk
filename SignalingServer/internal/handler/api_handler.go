@@ -212,7 +212,8 @@ func (h *APIHandler) GetPreset(c *gin.Context) {
 
 	// Build response: parse stored JSON strings into proper JSON objects
 	response := gin.H{
-		"min_version": preset.MinVersion,
+		"min_version":   preset.MinVersion,
+		"webclient_url": preset.WebclientURL,
 	}
 
 	// Parse notice JSON

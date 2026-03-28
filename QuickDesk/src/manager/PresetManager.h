@@ -18,6 +18,7 @@ class PresetManager : public QObject {
     Q_PROPERTY(QString announcement READ announcement NOTIFY announcementChanged)
     Q_PROPERTY(QVariantList links READ links NOTIFY linksChanged)
     Q_PROPERTY(bool presetLoaded READ presetLoaded NOTIFY presetLoadedChanged)
+    Q_PROPERTY(QString webclientUrl READ webclientUrl NOTIFY webclientUrlChanged)
 
 public:
     explicit PresetManager(ServerManager* serverManager, QObject* parent = nullptr);
@@ -29,11 +30,13 @@ public:
     QString announcement() const;
     QVariantList links() const;
     bool presetLoaded() const;
+    QString webclientUrl() const;
 
 signals:
     void announcementChanged();
     void linksChanged();
     void presetLoadedChanged();
+    void webclientUrlChanged();
     void presetLoadFailed(const QString& error);
     void forceUpgradeRequired(const QString& minVersion);
 
@@ -53,6 +56,7 @@ private:
 
     QString m_announcement;
     QVariantList m_links;
+    QString m_webclientUrl;
     QString m_lastMinVersion;
 };
 

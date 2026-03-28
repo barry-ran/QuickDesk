@@ -59,6 +59,7 @@ void PresetManager::stop()
 QString PresetManager::announcement() const { return m_announcement; }
 QVariantList PresetManager::links() const { return m_links; }
 bool PresetManager::presetLoaded() const { return m_presetLoaded; }
+QString PresetManager::webclientUrl() const { return m_webclientUrl; }
 
 void PresetManager::fetchPreset()
 {
@@ -151,6 +152,14 @@ void PresetManager::parsePresetData(const QByteArray& data)
         m_links = newLinks;
         emit linksChanged();
         LOG_INFO("Links updated: {} items", m_links.size());
+    }
+
+    // Parse webclient_url
+    QString webclientUrl = root["webclient_url"].toString();
+    if (m_webclientUrl != webclientUrl) {
+        m_webclientUrl = webclientUrl;
+        emit webclientUrlChanged();
+        LOG_INFO("WebClient URL updated: {}", m_webclientUrl.toStdString());
     }
 
     // Mark as loaded

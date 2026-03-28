@@ -427,12 +427,13 @@ ApplicationWindow {
                         text: qsTr("Account Settings")
                         iconText: FluentIconGlyph.contactGlyph
                         onTriggered: {
-                            var serverUrl = root.mainController.serverManager.serverUrl
+                            var webclientUrl = root.mainController.presetManager.webclientUrl
+                            if (!webclientUrl) {
+                                root.showToast(qsTr("WebClient URL not configured on the server"), QDToast.Type.Warning)
+                                return
+                            }
                             var token = root.mainController.authManager.token
-                            var httpUrl = serverUrl
-                            if (httpUrl.startsWith("wss://")) httpUrl = "https://" + httpUrl.substring(6)
-                            else if (httpUrl.startsWith("ws://")) httpUrl = "http://" + httpUrl.substring(5)
-                            Qt.openUrlExternally(httpUrl + "/#/account?token=" + token)
+                            Qt.openUrlExternally(webclientUrl + "/#/account?token=" + token)
                         }
                     }
 

@@ -204,13 +204,16 @@ Item {
                                 var serverUrl = mainController.serverManager.serverUrl
                                 var deviceId = mainController.deviceId
                                 var accessCode = mainController.accessCode
-                                var accessLink = "http://webclient.quickdesk.quickcoder.cc?server="
-                                    + encodeURIComponent(serverUrl)
-                                    + "&device=" + encodeURIComponent(deviceId)
-                                    + "&code=" + encodeURIComponent(accessCode)
                                 var shareText = qsTr("Device ID") + ": " + deviceId + "\n"
-                                              + qsTr("Access Code") + ": " + accessCode + "\n"
-                                              + qsTr("Access Link") + ": " + accessLink
+                                              + qsTr("Access Code") + ": " + accessCode
+                                var webclientUrl = mainController.presetManager.webclientUrl
+                                if (webclientUrl) {
+                                    var accessLink = webclientUrl + "?server="
+                                        + encodeURIComponent(serverUrl)
+                                        + "&device=" + encodeURIComponent(deviceId)
+                                        + "&code=" + encodeURIComponent(accessCode)
+                                    shareText += "\n" + qsTr("Access Link") + ": " + accessLink
+                                }
                                 mainController.copyToClipboard(shareText)
                                 root.showToast(qsTr("Device info copied to clipboard"), QDToast.Type.Success)
                             }

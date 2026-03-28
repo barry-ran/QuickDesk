@@ -372,11 +372,12 @@ Popup {
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
                     onClicked: {
-                        var serverUrl = loginDialog.mainController.serverManager.serverUrl
-                        var httpUrl = serverUrl
-                        if (httpUrl.startsWith("wss://")) httpUrl = "https://" + httpUrl.substring(6)
-                        else if (httpUrl.startsWith("ws://")) httpUrl = "http://" + httpUrl.substring(5)
-                        Qt.openUrlExternally(httpUrl + "/#/account")
+                        var webclientUrl = loginDialog.mainController.presetManager.webclientUrl
+                        if (!webclientUrl) {
+                            loginDialog.errorMessage = qsTr("WebClient URL not configured on the server")
+                            return
+                        }
+                        Qt.openUrlExternally(webclientUrl + "/#/account")
                     }
                 }
             }
