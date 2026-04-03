@@ -198,6 +198,31 @@ QString CloudDeviceManager::getDeviceAccessCode(const QString& deviceId) const
     return QString();
 }
 
+QString CloudDeviceManager::getDeviceDisplayName(const QString& deviceId) const
+{
+    for (const auto& v : m_myDevices) {
+        QVariantMap d = v.toMap();
+        if (d["device_id"].toString() == deviceId) {
+            QString remark = d["remark"].toString();
+            if (!remark.isEmpty())
+                return remark + " (" + deviceId + ")";
+            break;
+        }
+    }
+
+    for (const auto& v : m_myFavorites) {
+        QVariantMap f = v.toMap();
+        if (f["device_id"].toString() == deviceId) {
+            QString name = f["device_name"].toString();
+            if (!name.isEmpty())
+                return name + " (" + deviceId + ")";
+            break;
+        }
+    }
+
+    return deviceId;
+}
+
 // ---- Connection Record ----
 
 void CloudDeviceManager::recordConnection(const QString& deviceId, int duration,
@@ -289,11 +314,22 @@ void CloudDeviceManager::addFavorite(const QString& deviceId, const QString& nam
 {
     if (!m_authManager->isLoggedIn()) return;
 
+    QString favName = name;
+    if (favName.isEmpty()) {
+        for (const auto& v : m_myDevices) {
+            QVariantMap d = v.toMap();
+            if (d["device_id"].toString() == deviceId) {
+                favName = d["remark"].toString();
+                break;
+            }
+        }
+    }
+
     QUrl url(httpBaseUrl() + "api/v1/user/favorites");
     auto headers = authHeaders();
     QJsonObject body;
     body["device_id"] = deviceId;
-    if (!name.isEmpty()) body["device_name"] = name;
+    if (!favName.isEmpty()) body["device_name"] = favName;
     if (!password.isEmpty()) body["access_password"] = password;
     QString bodyData = QString::fromUtf8(QJsonDocument(body).toJson(QJsonDocument::Compact));
 

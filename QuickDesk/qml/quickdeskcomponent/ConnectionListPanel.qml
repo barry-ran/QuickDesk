@@ -114,18 +114,25 @@ ColumnLayout {
                         Text {
                             Layout.fillWidth: true
                             text: {
+                                var did
                                 if (root.panelType === "clients") {
-                                    return root.mainController.hostManager.getClientDeviceId(modelData) || modelData
+                                    did = root.mainController.hostManager.getClientDeviceId(modelData) || modelData
                                 } else {
-                                    return modelData
+                                    did = modelData
                                 }
+                                if (root.mainController && root.mainController.cloudDeviceManager) {
+                                    var _d = root.mainController.cloudDeviceManager.myDevices
+                                    var _f = root.mainController.cloudDeviceManager.myFavorites
+                                    return root.mainController.cloudDeviceManager.getDeviceDisplayName(did)
+                                }
+                                return did
                             }
                             font.pixelSize: Theme.fontSizeMedium
                             font.weight: Font.DemiBold
                             color: Theme.text
-                            elide: Text.ElideMiddle
-                            verticalAlignment: Text.AlignVCenter  // 垂直居中
-                            Layout.alignment: Qt.AlignVCenter  // Layout中垂直居中
+                            elide: Text.ElideRight
+                            verticalAlignment: Text.AlignVCenter
+                            Layout.alignment: Qt.AlignVCenter
                         }
                         
                         // View button (only for connections)

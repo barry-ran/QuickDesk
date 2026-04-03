@@ -167,7 +167,15 @@ Item {
                         Text {
                             Layout.fillWidth: true
                             Layout.fillHeight: true
-                            text: modelData.deviceId || modelData
+                            text: {
+                                var did = modelData.deviceId || modelData
+                                if (root.mainController && root.mainController.cloudDeviceManager) {
+                                    var _d = root.mainController.cloudDeviceManager.myDevices
+                                    var _f = root.mainController.cloudDeviceManager.myFavorites
+                                    return root.mainController.cloudDeviceManager.getDeviceDisplayName(did)
+                                }
+                                return did
+                            }
                             font.family: Theme.fontFamily
                             font.pixelSize: Theme.fontSizeMedium
                             color: delegate.hovered ? Theme.primary : Theme.text

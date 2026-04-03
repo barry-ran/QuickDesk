@@ -29,6 +29,7 @@ public:
     Q_INVOKABLE void setDeviceRemark(const QString& deviceId, const QString& remark);
     Q_INVOKABLE void syncAccessCode(const QString& deviceId, const QString& accessCode);
     Q_INVOKABLE QString getDeviceAccessCode(const QString& deviceId) const;
+    Q_INVOKABLE QString getDeviceDisplayName(const QString& deviceId) const;
 
     // Connection record
     Q_INVOKABLE void recordConnection(const QString& deviceId, int duration,
