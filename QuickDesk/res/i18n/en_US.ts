@@ -67,12 +67,12 @@
         <translation>No remote connections</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/ConnectionListPanel.qml" line="151"/>
+        <location filename="../../qml/quickdeskcomponent/ConnectionListPanel.qml" line="152"/>
         <source>View Remote Desktop</source>
         <translation>View Remote Desktop</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/ConnectionListPanel.qml" line="174"/>
+        <location filename="../../qml/quickdeskcomponent/ConnectionListPanel.qml" line="175"/>
         <source>Disconnect</source>
         <translation>Disconnect</translation>
     </message>
@@ -100,80 +100,82 @@
         <translation>No devices bound yet</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/DeviceListPage.qml" line="130"/>
-        <location filename="../../qml/pages/DeviceListPage.qml" line="246"/>
+        <location filename="../../qml/pages/DeviceListPage.qml" line="125"/>
+        <location filename="../../qml/pages/DeviceListPage.qml" line="242"/>
         <source>Device</source>
         <translation>Device</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/DeviceListPage.qml" line="143"/>
-        <location filename="../../qml/pages/DeviceListPage.qml" line="258"/>
+        <location filename="../../qml/pages/DeviceListPage.qml" line="138"/>
+        <location filename="../../qml/pages/DeviceListPage.qml" line="254"/>
         <source>Connect</source>
         <translation>Connect</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/DeviceListPage.qml" line="150"/>
+        <location filename="../../qml/pages/DeviceListPage.qml" line="145"/>
+        <location filename="../../qml/pages/DeviceListPage.qml" line="171"/>
         <source>Access code not available</source>
         <translation>Access code not available</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/DeviceListPage.qml" line="181"/>
+        <location filename="../../qml/pages/DeviceListPage.qml" line="182"/>
         <source>My Favorites</source>
         <translation>My Favorites</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/DeviceListPage.qml" line="193"/>
+        <location filename="../../qml/pages/DeviceListPage.qml" line="194"/>
         <source>No favorites yet</source>
         <translation>No favorites yet</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/DeviceListPage.qml" line="265"/>
+        <location filename="../../qml/pages/DeviceListPage.qml" line="261"/>
+        <location filename="../../qml/pages/DeviceListPage.qml" line="286"/>
         <source>No password saved for this device</source>
         <translation>No password saved for this device</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/DeviceListPage.qml" line="297"/>
+        <location filename="../../qml/pages/DeviceListPage.qml" line="298"/>
         <source>Connection Logs</source>
         <translation>Connection Logs</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/DeviceListPage.qml" line="308"/>
+        <location filename="../../qml/pages/DeviceListPage.qml" line="309"/>
         <source>No connection logs</source>
         <translation>No connection logs</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/DeviceListPage.qml" line="386"/>
-        <location filename="../../qml/pages/DeviceListPage.qml" line="453"/>
+        <location filename="../../qml/pages/DeviceListPage.qml" line="380"/>
+        <location filename="../../qml/pages/DeviceListPage.qml" line="447"/>
         <source>Set Remark</source>
         <translation>Set Remark</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/DeviceListPage.qml" line="396"/>
+        <location filename="../../qml/pages/DeviceListPage.qml" line="390"/>
         <source>Remove</source>
         <translation>Remove</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/DeviceListPage.qml" line="410"/>
+        <location filename="../../qml/pages/DeviceListPage.qml" line="404"/>
         <source>Edit Remark</source>
         <translation>Edit Remark</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/DeviceListPage.qml" line="420"/>
+        <location filename="../../qml/pages/DeviceListPage.qml" line="414"/>
         <source>Remove Favorite</source>
         <translation>Remove Favorite</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/DeviceListPage.qml" line="462"/>
+        <location filename="../../qml/pages/DeviceListPage.qml" line="456"/>
         <source>Enter remark name</source>
         <translation>Enter remark name</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/DeviceListPage.qml" line="470"/>
+        <location filename="../../qml/pages/DeviceListPage.qml" line="464"/>
         <source>Cancel</source>
         <translation>Cancel</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/DeviceListPage.qml" line="475"/>
+        <location filename="../../qml/pages/DeviceListPage.qml" line="469"/>
         <source>Save</source>
         <translation>Save</translation>
     </message>
@@ -181,229 +183,249 @@
 <context>
     <name>FloatingToolButton</name>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="219"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="221"/>
         <source>Smart Boost</source>
         <translation>Smart Boost</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="267"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="269"/>
         <source>Target Framerate</source>
         <translation>Target Framerate</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="315"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="317"/>
         <source>Resolution</source>
         <translation>Resolution</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="368"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="370"/>
         <source>Bitrate</source>
         <translation>Bitrate</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="415"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="417"/>
         <source>Fit Window</source>
         <translation>Fit Window</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="421"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="423"/>
         <source>Window resized to fit remote desktop</source>
         <translation>Window resized to fit remote desktop</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="427"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="429"/>
         <source>Video Stats</source>
         <translation>Video Stats</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="436"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="438"/>
         <source>Mute Audio</source>
         <translation>Mute Audio</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="436"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="438"/>
         <source>Unmute Audio</source>
         <translation>Unmute Audio</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="444"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="446"/>
         <source>Audio: Enabled</source>
         <translation>Audio: Enabled</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="444"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="446"/>
         <source>Audio: Muted</source>
         <translation>Audio: Muted</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="458"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="460"/>
         <source>Send Ctrl+Alt+Del</source>
         <translation>Send Ctrl+Alt+Del</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="464"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="466"/>
         <source>Ctrl+Alt+Del sent</source>
         <translation>Ctrl+Alt+Del sent</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="471"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="473"/>
         <source>Lock Screen</source>
         <translation>Lock Screen</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="477"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="479"/>
         <source>Lock screen sent</source>
         <translation>Lock screen sent</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="488"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="486"/>
+        <source>Disable Privacy Screen</source>
+        <translation>Disable Privacy Screen</translation>
+    </message>
+    <message>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="486"/>
+        <source>Privacy Screen</source>
+        <translation>Privacy Screen</translation>
+    </message>
+    <message>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="495"/>
+        <source>Privacy Screen: On</source>
+        <translation>Privacy Screen: On</translation>
+    </message>
+    <message>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="495"/>
+        <source>Privacy Screen: Off</source>
+        <translation>Privacy Screen: Off</translation>
+    </message>
+    <message>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="508"/>
         <source>Upload File</source>
         <translation>Upload File</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="498"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="518"/>
         <source>Download File</source>
         <translation>Download File</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="508"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="528"/>
         <source>Transfers</source>
         <translation>Transfers</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="520"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="540"/>
         <source>Deactivate Emergency Stop</source>
         <translation>Deactivate Emergency Stop</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="520"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="540"/>
         <source>Emergency Stop</source>
         <translation>Emergency Stop</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="531"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="551"/>
         <source>Disconnect</source>
         <translation>Disconnect</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="556"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="576"/>
         <source>Off</source>
         <translation>Off</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="561"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="581"/>
         <source>Smart Boost: Off</source>
         <translation>Smart Boost: Off</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="566"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="586"/>
         <source>Office</source>
         <translation>Office</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="571"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="591"/>
         <source>Smart Boost: Office Mode</source>
         <translation>Smart Boost: Office Mode</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="576"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="596"/>
         <source>Gaming</source>
         <translation>Gaming</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="581"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="601"/>
         <source>Smart Boost: Gaming Mode</source>
         <translation>Smart Boost: Gaming Mode</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="606"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="626"/>
         <source>Target Framerate: 60 FPS</source>
         <translation>Target Framerate: 60 FPS</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="618"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="638"/>
         <source>Target Framerate: 30 FPS</source>
         <translation>Target Framerate: 30 FPS</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="630"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="650"/>
         <source>Target Framerate: 15 FPS</source>
         <translation>Target Framerate: 15 FPS</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="642"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="662"/>
         <source>Target Framerate: 5 FPS</source>
         <translation>Target Framerate: 5 FPS</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="664"/>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="666"/>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="679"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="684"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="686"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="699"/>
         <source>Original</source>
         <translation>Original</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="679"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="699"/>
         <source>Resolution: </source>
         <translation>Resolution: </translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="694"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="714"/>
         <source>Resolution: 3840x2160 (4K)</source>
         <translation>Resolution: 3840x2160 (4K)</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="705"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="725"/>
         <source>Resolution: 2560x1440 (2K)</source>
         <translation>Resolution: 2560x1440 (2K)</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="716"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="736"/>
         <source>Resolution: 1920x1080 (FHD)</source>
         <translation>Resolution: 1920x1080 (FHD)</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="727"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="747"/>
         <source>Resolution: 1600x900</source>
         <translation>Resolution: 1600x900</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="738"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="758"/>
         <source>Resolution: 1366x768</source>
         <translation>Resolution: 1366x768</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="749"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="769"/>
         <source>Resolution: 1280x720</source>
         <translation>Resolution: 1280x720</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="760"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="780"/>
         <source>Resolution: 1024x768</source>
         <translation>Resolution: 1024x768</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="786"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="806"/>
         <source>Bitrate: 100 MiB</source>
         <translation>Bitrate: 100 MiB</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="798"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="818"/>
         <source>Bitrate: 50 MiB</source>
         <translation>Bitrate: 50 MiB</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="810"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="830"/>
         <source>Bitrate: 10 MiB</source>
         <translation>Bitrate: 10 MiB</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="822"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="842"/>
         <source>Bitrate: 5 MiB</source>
         <translation>Bitrate: 5 MiB</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="834"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="854"/>
         <source>Bitrate: 2 MiB</source>
         <translation>Bitrate: 2 MiB</translation>
     </message>
@@ -617,44 +639,44 @@
         <translation>Initialization failed: </translation>
     </message>
     <message>
-        <location filename="../../qml/views/MainWindow.qml" line="301"/>
+        <location filename="../../qml/views/MainWindow.qml" line="294"/>
         <source>Remote Control</source>
         <translation>Remote Control</translation>
     </message>
     <message>
-        <location filename="../../qml/views/MainWindow.qml" line="303"/>
+        <location filename="../../qml/views/MainWindow.qml" line="296"/>
         <source>Settings</source>
         <translation>Settings</translation>
     </message>
     <message>
-        <location filename="../../qml/views/MainWindow.qml" line="679"/>
-        <location filename="../../qml/views/MainWindow.qml" line="710"/>
+        <location filename="../../qml/views/MainWindow.qml" line="654"/>
+        <location filename="../../qml/views/MainWindow.qml" line="685"/>
         <source>Host</source>
         <translation>Host</translation>
     </message>
     <message>
-        <location filename="../../qml/views/MainWindow.qml" line="747"/>
-        <location filename="../../qml/views/MainWindow.qml" line="752"/>
-        <location filename="../../qml/views/MainWindow.qml" line="753"/>
-        <location filename="../../qml/views/MainWindow.qml" line="754"/>
-        <location filename="../../qml/views/MainWindow.qml" line="755"/>
-        <location filename="../../qml/views/MainWindow.qml" line="756"/>
-        <location filename="../../qml/views/MainWindow.qml" line="757"/>
-        <location filename="../../qml/views/MainWindow.qml" line="760"/>
-        <location filename="../../qml/views/MainWindow.qml" line="761"/>
-        <location filename="../../qml/views/MainWindow.qml" line="762"/>
-        <location filename="../../qml/views/MainWindow.qml" line="763"/>
-        <location filename="../../qml/views/MainWindow.qml" line="764"/>
+        <location filename="../../qml/views/MainWindow.qml" line="722"/>
+        <location filename="../../qml/views/MainWindow.qml" line="727"/>
+        <location filename="../../qml/views/MainWindow.qml" line="728"/>
+        <location filename="../../qml/views/MainWindow.qml" line="729"/>
+        <location filename="../../qml/views/MainWindow.qml" line="730"/>
+        <location filename="../../qml/views/MainWindow.qml" line="731"/>
+        <location filename="../../qml/views/MainWindow.qml" line="732"/>
+        <location filename="../../qml/views/MainWindow.qml" line="735"/>
+        <location filename="../../qml/views/MainWindow.qml" line="736"/>
+        <location filename="../../qml/views/MainWindow.qml" line="737"/>
+        <location filename="../../qml/views/MainWindow.qml" line="738"/>
+        <location filename="../../qml/views/MainWindow.qml" line="739"/>
         <source>Client</source>
         <translation>Client</translation>
     </message>
     <message>
-        <location filename="../../qml/views/MainWindow.qml" line="679"/>
-        <location filename="../../qml/views/MainWindow.qml" line="690"/>
-        <location filename="../../qml/views/MainWindow.qml" line="700"/>
-        <location filename="../../qml/views/MainWindow.qml" line="747"/>
-        <location filename="../../qml/views/MainWindow.qml" line="757"/>
-        <location filename="../../qml/views/MainWindow.qml" line="764"/>
+        <location filename="../../qml/views/MainWindow.qml" line="654"/>
+        <location filename="../../qml/views/MainWindow.qml" line="665"/>
+        <location filename="../../qml/views/MainWindow.qml" line="675"/>
+        <location filename="../../qml/views/MainWindow.qml" line="722"/>
+        <location filename="../../qml/views/MainWindow.qml" line="732"/>
+        <location filename="../../qml/views/MainWindow.qml" line="739"/>
         <source>Unknown</source>
         <translation>Unknown</translation>
     </message>
@@ -664,153 +686,143 @@
         <translation>Current version is too old. Minimum required version: %1. Please upgrade to continue using.</translation>
     </message>
     <message>
-        <location filename="../../qml/views/MainWindow.qml" line="168"/>
-        <source>Device not connected: </source>
-        <translation>Device not connected: </translation>
-    </message>
-    <message>
-        <location filename="../../qml/views/MainWindow.qml" line="210"/>
-        <location filename="../../qml/views/MainWindow.qml" line="222"/>
+        <location filename="../../qml/views/MainWindow.qml" line="203"/>
+        <location filename="../../qml/views/MainWindow.qml" line="215"/>
         <source>Failed to create RemoteWindow</source>
         <translation>Failed to create RemoteWindow</translation>
     </message>
     <message>
-        <location filename="../../qml/views/MainWindow.qml" line="233"/>
+        <location filename="../../qml/views/MainWindow.qml" line="226"/>
         <source>RemoteWindow not ready</source>
         <translation>RemoteWindow not ready</translation>
     </message>
     <message>
-        <location filename="../../qml/views/MainWindow.qml" line="302"/>
+        <location filename="../../qml/views/MainWindow.qml" line="295"/>
         <source>Device List</source>
         <translation>Device List</translation>
     </message>
     <message>
-        <location filename="../../qml/views/MainWindow.qml" line="304"/>
+        <location filename="../../qml/views/MainWindow.qml" line="297"/>
         <source>About</source>
         <translation>About</translation>
     </message>
     <message>
-        <location filename="../../qml/views/MainWindow.qml" line="392"/>
+        <location filename="../../qml/views/MainWindow.qml" line="385"/>
         <source>Login</source>
         <translation>Login</translation>
     </message>
     <message>
-        <location filename="../../qml/views/MainWindow.qml" line="412"/>
+        <location filename="../../qml/views/MainWindow.qml" line="405"/>
         <source>Click to login</source>
         <translation>Click to login</translation>
     </message>
     <message>
-        <location filename="../../qml/views/MainWindow.qml" line="427"/>
+        <location filename="../../qml/views/MainWindow.qml" line="420"/>
         <source>Account Settings</source>
         <translation>Account Settings</translation>
     </message>
     <message>
-        <location filename="../../qml/views/MainWindow.qml" line="432"/>
+        <location filename="../../qml/views/MainWindow.qml" line="425"/>
         <source>WebClient URL not configured on the server</source>
         <translation>WebClient URL not configured on the server</translation>
     </message>
     <message>
-        <location filename="../../qml/views/MainWindow.qml" line="441"/>
+        <location filename="../../qml/views/MainWindow.qml" line="434"/>
         <source>Logout</source>
         <translation>Logout</translation>
     </message>
     <message>
-        <location filename="../../qml/views/MainWindow.qml" line="537"/>
+        <location filename="../../qml/views/MainWindow.qml" line="530"/>
         <source>Already connected, switched to existing window</source>
         <translation>Already connected, switched to existing window</translation>
     </message>
     <message>
-        <location filename="../../qml/views/MainWindow.qml" line="542"/>
-        <location filename="../../qml/views/MainWindow.qml" line="604"/>
+        <location filename="../../qml/views/MainWindow.qml" line="535"/>
+        <location filename="../../qml/views/MainWindow.qml" line="579"/>
         <source>Connecting...</source>
         <translation>Connecting...</translation>
     </message>
     <message>
-        <location filename="../../qml/views/MainWindow.qml" line="579"/>
-        <source>Cannot find device for connection: </source>
-        <translation>Cannot find device for connection: </translation>
-    </message>
-    <message>
-        <location filename="../../qml/views/MainWindow.qml" line="692"/>
-        <location filename="../../qml/views/MainWindow.qml" line="760"/>
+        <location filename="../../qml/views/MainWindow.qml" line="667"/>
+        <location filename="../../qml/views/MainWindow.qml" line="735"/>
         <source>Not Started</source>
         <translation>Not Started</translation>
     </message>
     <message>
-        <location filename="../../qml/views/MainWindow.qml" line="694"/>
-        <location filename="../../qml/views/MainWindow.qml" line="761"/>
+        <location filename="../../qml/views/MainWindow.qml" line="669"/>
+        <location filename="../../qml/views/MainWindow.qml" line="736"/>
         <source>Starting</source>
         <translation>Starting</translation>
     </message>
     <message>
-        <location filename="../../qml/views/MainWindow.qml" line="696"/>
-        <location filename="../../qml/views/MainWindow.qml" line="762"/>
+        <location filename="../../qml/views/MainWindow.qml" line="671"/>
+        <location filename="../../qml/views/MainWindow.qml" line="737"/>
         <source>Start Failed</source>
         <translation>Start Failed</translation>
     </message>
     <message>
-        <location filename="../../qml/views/MainWindow.qml" line="698"/>
-        <location filename="../../qml/views/MainWindow.qml" line="763"/>
+        <location filename="../../qml/views/MainWindow.qml" line="673"/>
+        <location filename="../../qml/views/MainWindow.qml" line="738"/>
         <source>Restarting</source>
         <translation>Restarting</translation>
     </message>
     <message>
-        <location filename="../../qml/views/MainWindow.qml" line="813"/>
+        <location filename="../../qml/views/MainWindow.qml" line="788"/>
         <source>MCP [%1]: Off</source>
         <translation>MCP [%1]: Off</translation>
     </message>
     <message>
-        <location filename="../../qml/views/MainWindow.qml" line="815"/>
+        <location filename="../../qml/views/MainWindow.qml" line="790"/>
         <source>MCP [%1]: %2 client(s)</source>
         <translation>MCP [%1]: %2 client(s)</translation>
     </message>
     <message>
-        <location filename="../../qml/views/MainWindow.qml" line="816"/>
+        <location filename="../../qml/views/MainWindow.qml" line="791"/>
         <source>MCP [%1]: Ready</source>
         <translation>MCP [%1]: Ready</translation>
     </message>
     <message>
-        <location filename="../../qml/views/MainWindow.qml" line="837"/>
+        <location filename="../../qml/views/MainWindow.qml" line="812"/>
         <source>Click to configure MCP integration</source>
         <translation>Click to configure MCP integration</translation>
     </message>
     <message>
-        <location filename="../../qml/views/MainWindow.qml" line="888"/>
+        <location filename="../../qml/views/MainWindow.qml" line="863"/>
         <source>Server Connection Error</source>
         <translation>Server Connection Error</translation>
     </message>
     <message>
-        <location filename="../../qml/views/MainWindow.qml" line="896"/>
+        <location filename="../../qml/views/MainWindow.qml" line="871"/>
         <source>Upgrade Required</source>
         <translation>Upgrade Required</translation>
     </message>
     <message>
-        <location filename="../../qml/views/MainWindow.qml" line="685"/>
-        <location filename="../../qml/views/MainWindow.qml" line="752"/>
+        <location filename="../../qml/views/MainWindow.qml" line="660"/>
+        <location filename="../../qml/views/MainWindow.qml" line="727"/>
         <source>Disconnected</source>
         <translation>Disconnected</translation>
     </message>
     <message>
-        <location filename="../../qml/views/MainWindow.qml" line="686"/>
-        <location filename="../../qml/views/MainWindow.qml" line="753"/>
+        <location filename="../../qml/views/MainWindow.qml" line="661"/>
+        <location filename="../../qml/views/MainWindow.qml" line="728"/>
         <source>Connecting</source>
         <translation>Connecting</translation>
     </message>
     <message>
-        <location filename="../../qml/views/MainWindow.qml" line="687"/>
-        <location filename="../../qml/views/MainWindow.qml" line="754"/>
+        <location filename="../../qml/views/MainWindow.qml" line="662"/>
+        <location filename="../../qml/views/MainWindow.qml" line="729"/>
         <source>Connected</source>
         <translation>Connected</translation>
     </message>
     <message>
-        <location filename="../../qml/views/MainWindow.qml" line="688"/>
-        <location filename="../../qml/views/MainWindow.qml" line="755"/>
+        <location filename="../../qml/views/MainWindow.qml" line="663"/>
+        <location filename="../../qml/views/MainWindow.qml" line="730"/>
         <source>Connection Failed</source>
         <translation>Connection Failed</translation>
     </message>
     <message>
-        <location filename="../../qml/views/MainWindow.qml" line="689"/>
-        <location filename="../../qml/views/MainWindow.qml" line="756"/>
+        <location filename="../../qml/views/MainWindow.qml" line="664"/>
+        <location filename="../../qml/views/MainWindow.qml" line="731"/>
         <source>Reconnecting</source>
         <translation>Reconnecting</translation>
     </message>
@@ -1121,22 +1133,22 @@
         <translation>Show history (%1)</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/RemoteDeviceSelector.qml" line="206"/>
+        <location filename="../../qml/quickdeskcomponent/RemoteDeviceSelector.qml" line="214"/>
         <source>Delete from history</source>
         <translation>Delete from history</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/RemoteDeviceSelector.qml" line="253"/>
+        <location filename="../../qml/quickdeskcomponent/RemoteDeviceSelector.qml" line="262"/>
         <source>Remove from favorites</source>
         <translation>Remove from favorites</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/RemoteDeviceSelector.qml" line="253"/>
+        <location filename="../../qml/quickdeskcomponent/RemoteDeviceSelector.qml" line="262"/>
         <source>Add to favorites</source>
         <translation>Add to favorites</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/RemoteDeviceSelector.qml" line="287"/>
+        <location filename="../../qml/quickdeskcomponent/RemoteDeviceSelector.qml" line="296"/>
         <source>No history</source>
         <translation>No history</translation>
     </message>
@@ -1157,88 +1169,88 @@
         <translation>QuickDesk - Remote Desktop</translation>
     </message>
     <message>
-        <location filename="../../qml/views/RemoteWindow.qml" line="463"/>
-        <location filename="../../qml/views/RemoteWindow.qml" line="1057"/>
+        <location filename="../../qml/views/RemoteWindow.qml" line="470"/>
+        <location filename="../../qml/views/RemoteWindow.qml" line="1065"/>
         <source>Emergency stop deactivated</source>
         <translation>Emergency stop deactivated</translation>
     </message>
     <message>
-        <location filename="../../qml/views/RemoteWindow.qml" line="467"/>
+        <location filename="../../qml/views/RemoteWindow.qml" line="474"/>
         <source>Emergency stop activated - all AI operations halted</source>
         <translation>Emergency stop activated - all AI operations halted</translation>
     </message>
     <message>
-        <location filename="../../qml/views/RemoteWindow.qml" line="668"/>
+        <location filename="../../qml/views/RemoteWindow.qml" line="676"/>
         <source>Select Files to Upload</source>
         <translation>Select Files to Upload</translation>
     </message>
     <message>
-        <location filename="../../qml/views/RemoteWindow.qml" line="759"/>
+        <location filename="../../qml/views/RemoteWindow.qml" line="767"/>
         <source>Upload complete: %1</source>
         <translation>Upload complete: %1</translation>
     </message>
     <message>
-        <location filename="../../qml/views/RemoteWindow.qml" line="778"/>
+        <location filename="../../qml/views/RemoteWindow.qml" line="786"/>
         <source>Upload failed: %1</source>
         <translation>Upload failed: %1</translation>
     </message>
     <message>
-        <location filename="../../qml/views/RemoteWindow.qml" line="810"/>
+        <location filename="../../qml/views/RemoteWindow.qml" line="818"/>
         <source>Download complete: %1</source>
         <translation>Download complete: %1</translation>
     </message>
     <message>
-        <location filename="../../qml/views/RemoteWindow.qml" line="819"/>
+        <location filename="../../qml/views/RemoteWindow.qml" line="827"/>
         <source>Download failed: %1</source>
         <translation>Download failed: %1</translation>
     </message>
     <message>
-        <location filename="../../qml/views/RemoteWindow.qml" line="828"/>
+        <location filename="../../qml/views/RemoteWindow.qml" line="836"/>
         <source>File Transfers</source>
         <translation>File Transfers</translation>
     </message>
     <message>
-        <location filename="../../qml/views/RemoteWindow.qml" line="841"/>
+        <location filename="../../qml/views/RemoteWindow.qml" line="849"/>
         <source>No Transfers</source>
         <translation>No Transfers</translation>
     </message>
     <message>
-        <location filename="../../qml/views/RemoteWindow.qml" line="842"/>
+        <location filename="../../qml/views/RemoteWindow.qml" line="850"/>
         <source>Use the menu to upload or download files</source>
         <translation>Use the menu to upload or download files</translation>
     </message>
     <message>
-        <location filename="../../qml/views/RemoteWindow.qml" line="924"/>
+        <location filename="../../qml/views/RemoteWindow.qml" line="932"/>
         <source>Cancelled</source>
         <translation>Cancelled</translation>
     </message>
     <message>
-        <location filename="../../qml/views/RemoteWindow.qml" line="938"/>
+        <location filename="../../qml/views/RemoteWindow.qml" line="946"/>
         <source>Open File</source>
         <translation>Open File</translation>
     </message>
     <message>
-        <location filename="../../qml/views/RemoteWindow.qml" line="947"/>
+        <location filename="../../qml/views/RemoteWindow.qml" line="955"/>
         <source>Open Folder</source>
         <translation>Open Folder</translation>
     </message>
     <message>
-        <location filename="../../qml/views/RemoteWindow.qml" line="956"/>
+        <location filename="../../qml/views/RemoteWindow.qml" line="964"/>
         <source>Delete File</source>
         <translation>Delete File</translation>
     </message>
     <message>
-        <location filename="../../qml/views/RemoteWindow.qml" line="960"/>
+        <location filename="../../qml/views/RemoteWindow.qml" line="968"/>
         <source>File deleted</source>
         <translation>File deleted</translation>
     </message>
     <message>
-        <location filename="../../qml/views/RemoteWindow.qml" line="1017"/>
+        <location filename="../../qml/views/RemoteWindow.qml" line="1025"/>
         <source>Clear Completed</source>
         <translation>Clear Completed</translation>
     </message>
     <message>
-        <location filename="../../qml/views/RemoteWindow.qml" line="1053"/>
+        <location filename="../../qml/views/RemoteWindow.qml" line="1061"/>
         <source>Emergency stop activated: </source>
         <translation>Emergency stop activated: </translation>
     </message>
@@ -1306,255 +1318,265 @@
         <translation>24 Hours</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="213"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="218"/>
+        <source>Auto Privacy Screen</source>
+        <translation>Auto Privacy Screen</translation>
+    </message>
+    <message>
+        <location filename="../../qml/pages/SettingsPage.qml" line="223"/>
+        <source>Automatically black out the physical screen when a remote client connects</source>
+        <translation>Automatically black out the physical screen when a remote client connects</translation>
+    </message>
+    <message>
+        <location filename="../../qml/pages/SettingsPage.qml" line="247"/>
         <source>Network</source>
         <translation>Network</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="227"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="261"/>
         <source>Signaling Server</source>
         <translation>Signaling Server</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="234"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="268"/>
         <source>Configure the signaling server address for remote connections.</source>
         <translation>Configure the signaling server address for remote connections.</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="256"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="290"/>
         <source>Current:</source>
         <translation>Current:</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="279"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="313"/>
         <source>ws://your-server.com:8000</source>
         <translation>ws://your-server.com:8000</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="284"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="318"/>
         <source>Update</source>
         <translation>Update</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="297"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="331"/>
         <source>Server URL must start with ws:// or wss://</source>
         <translation>Server URL must start with ws:// or wss://</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="302"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="336"/>
         <source>Server URL updated. Restart to apply changes.</source>
         <translation>Server URL updated. Restart to apply changes.</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="317"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="351"/>
         <source>TURN/STUN Servers</source>
         <translation>TURN/STUN Servers</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="352"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="386"/>
         <source>TURN Server</source>
         <translation>TURN Server</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="352"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="386"/>
         <source>STUN Server</source>
         <translation>STUN Server</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="372"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="406"/>
         <source>No custom servers configured</source>
         <translation>No custom servers configured</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="387"/>
-        <location filename="../../qml/pages/SettingsPage.qml" line="418"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="421"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="452"/>
         <source>Add TURN Server</source>
         <translation>Add TURN Server</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="396"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="430"/>
         <source>turn:your-server.com:3478</source>
         <translation>turn:your-server.com:3478</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="406"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="440"/>
         <source>Username</source>
         <translation>Username</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="412"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="446"/>
         <source>Password</source>
         <translation>Password</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="434"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="468"/>
         <source>TURN server added. Restart to apply changes.</source>
         <translation>TURN server added. Restart to apply changes.</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="436"/>
-        <location filename="../../qml/pages/SettingsPage.qml" line="473"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="470"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="507"/>
         <source>Invalid server URL format</source>
         <translation>Invalid server URL format</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="449"/>
-        <location filename="../../qml/pages/SettingsPage.qml" line="462"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="483"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="496"/>
         <source>Add STUN Server</source>
         <translation>Add STUN Server</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="458"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="492"/>
         <source>stun:stun.l.google.com:19302</source>
         <translation>stun:stun.l.google.com:19302</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="471"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="505"/>
         <source>STUN server added. Restart to apply changes.</source>
         <translation>STUN server added. Restart to apply changes.</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="486"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="520"/>
         <source>Application</source>
         <translation>Application</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="504"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="538"/>
         <source>Language</source>
         <translation>Language</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="532"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="566"/>
         <source>Language updated. Restart to apply changes.</source>
         <translation>Language updated. Restart to apply changes.</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="558"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="592"/>
         <source>Video Codec</source>
         <translation>Video Codec</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="564"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="598"/>
         <source>Preferred video codec for remote connections</source>
         <translation>Preferred video codec for remote connections</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="590"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="624"/>
         <source>Video codec updated. Effective on next connection.</source>
         <translation>Video codec updated. Effective on next connection.</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="612"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="646"/>
         <source>Theme</source>
         <translation>Theme</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="620"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="654"/>
         <source>Light</source>
         <translation>Light</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="620"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="654"/>
         <source>Dark</source>
         <translation>Dark</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="647"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="681"/>
         <source>Launch at Startup</source>
         <translation>Launch at Startup</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="653"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="687"/>
         <source>Automatically start the application when you log in</source>
         <translation>Automatically start the application when you log in</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="679"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="713"/>
         <source>AI</source>
         <translation>AI</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="698"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="732"/>
         <source>Skills</source>
         <translation>Skills</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="704"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="738"/>
         <source>Enable host-side skill execution for remote tool operations</source>
         <translation>Enable host-side skill execution for remote tool operations</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="720"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="754"/>
         <source>Skills enabled</source>
         <translation>Skills enabled</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="720"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="754"/>
         <source>Skills disabled</source>
         <translation>Skills disabled</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="739"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="773"/>
         <source>Operation Confirmation</source>
         <translation>Operation Confirmation</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="745"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="779"/>
         <source>How to handle high-risk operation requests from AI agent</source>
         <translation>How to handle high-risk operation requests from AI agent</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="757"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="791"/>
         <source>Manual Confirm</source>
         <translation>Manual Confirm</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="757"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="791"/>
         <source>Auto Approve</source>
         <translation>Auto Approve</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="767"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="801"/>
         <source>Operations will be auto-approved</source>
         <translation>Operations will be auto-approved</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="768"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="802"/>
         <source>Operations require manual confirmation</source>
         <translation>Operations require manual confirmation</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="784"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="818"/>
         <source>Skills Directories</source>
         <translation>Skills Directories</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="791"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="825"/>
         <source>Built-in skills are loaded from the installation directory. Add extra directories below.</source>
         <translation>Built-in skills are loaded from the installation directory. Add extra directories below.</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="830"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="864"/>
         <source>Skills directory removed</source>
         <translation>Skills directory removed</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="839"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="873"/>
         <source>No extra directories configured</source>
         <translation>No extra directories configured</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="855"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="889"/>
         <source>C:path	oskills</source>
         <translation>C:\\path\\to\\skills</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="860"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="894"/>
         <source>Add</source>
         <translation>Add</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="869"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="903"/>
         <source>Skills directory added. Skill host will reload.</source>
         <translation>Skills directory added. Skill host will reload.</translation>
     </message>
@@ -1590,27 +1612,27 @@
 <context>
     <name>quickdesk::ClientManager</name>
     <message>
-        <location filename="../../src/manager/ClientManager.cpp" line="949"/>
+        <location filename="../../src/manager/ClientManager.cpp" line="1004"/>
         <source>Authentication failed</source>
         <translation>Authentication failed</translation>
     </message>
     <message>
-        <location filename="../../src/manager/ClientManager.cpp" line="950"/>
+        <location filename="../../src/manager/ClientManager.cpp" line="1005"/>
         <source>Channel error</source>
         <translation>Channel error</translation>
     </message>
     <message>
-        <location filename="../../src/manager/ClientManager.cpp" line="951"/>
+        <location filename="../../src/manager/ClientManager.cpp" line="1006"/>
         <source>Connection timeout</source>
         <translation>Connection timeout</translation>
     </message>
     <message>
-        <location filename="../../src/manager/ClientManager.cpp" line="952"/>
+        <location filename="../../src/manager/ClientManager.cpp" line="1007"/>
         <source>Network error</source>
         <translation>Network error</translation>
     </message>
     <message>
-        <location filename="../../src/manager/ClientManager.cpp" line="953"/>
+        <location filename="../../src/manager/ClientManager.cpp" line="1008"/>
         <source>Connection failed (error code: %1)</source>
         <translation>Connection failed (error code: %1)</translation>
     </message>
@@ -1618,12 +1640,12 @@
 <context>
     <name>quickdesk::HostManager</name>
     <message>
-        <location filename="../../src/manager/HostManager.cpp" line="216"/>
+        <location filename="../../src/manager/HostManager.cpp" line="217"/>
         <source>Remote Device %1</source>
         <translation>Remote Device %1</translation>
     </message>
     <message>
-        <location filename="../../src/manager/HostManager.cpp" line="218"/>
+        <location filename="../../src/manager/HostManager.cpp" line="219"/>
         <source>Unknown Device</source>
         <translation>Unknown Device</translation>
     </message>
@@ -1631,45 +1653,45 @@
 <context>
     <name>quickdesk::MainController</name>
     <message>
-        <location filename="../../src/controller/MainController.cpp" line="376"/>
+        <location filename="../../src/controller/MainController.cpp" line="371"/>
         <source>Device ID: %1
 Access Code: %2</source>
         <translation>Device ID: %1
 Access Code: %2</translation>
     </message>
     <message>
-        <location filename="../../src/controller/MainController.cpp" line="463"/>
+        <location filename="../../src/controller/MainController.cpp" line="458"/>
         <source>Connected</source>
         <translation>Connected</translation>
     </message>
     <message>
-        <location filename="../../src/controller/MainController.cpp" line="465"/>
+        <location filename="../../src/controller/MainController.cpp" line="460"/>
         <source>Connecting...</source>
         <translation>Connecting...</translation>
     </message>
     <message>
-        <location filename="../../src/controller/MainController.cpp" line="467"/>
+        <location filename="../../src/controller/MainController.cpp" line="462"/>
         <source>Disconnected</source>
         <translation>Disconnected</translation>
     </message>
     <message>
-        <location filename="../../src/controller/MainController.cpp" line="469"/>
+        <location filename="../../src/controller/MainController.cpp" line="464"/>
         <source>Connection failed</source>
         <translation>Connection failed</translation>
     </message>
     <message>
-        <location filename="../../src/controller/MainController.cpp" line="475"/>
+        <location filename="../../src/controller/MainController.cpp" line="470"/>
         <source>Reconnecting (attempt %1)</source>
         <translation>Reconnecting (attempt %1)</translation>
     </message>
     <message>
-        <location filename="../../src/controller/MainController.cpp" line="477"/>
+        <location filename="../../src/controller/MainController.cpp" line="472"/>
         <source>, retry in %1s</source>
         <translation>, retry in %1s</translation>
     </message>
     <message>
-        <location filename="../../src/controller/MainController.cpp" line="512"/>
-        <location filename="../../src/controller/MainController.cpp" line="516"/>
+        <location filename="../../src/controller/MainController.cpp" line="507"/>
+        <location filename="../../src/controller/MainController.cpp" line="511"/>
         <source>Never</source>
         <translation>Never</translation>
     </message>
