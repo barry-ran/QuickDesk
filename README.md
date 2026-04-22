@@ -129,6 +129,7 @@ AI Config
 - Bidirectional clipboard sync
 - Adaptive frame rate and bitrate
 - Frame rate boost mode (Office / Gaming)
+- Privacy screen mode — blacks out the host's physical display and blocks local keyboard/mouse input during remote control, protecting session privacy (Windows 10 2004+)
 
 ### Connection Management
 - 9-digit Device ID + temporary access code mechanism
@@ -409,11 +410,12 @@ QuickDesk/
 - [x] **Device memory & history retrieval (auto-profiling, operation logs, failure patterns)**
 - [x] **Workflow recording & playback (record, replay, parameterize)**
 - [x] **Trust layer & safety (risk assessment, confirmation dialogs, emergency stop, audit log)**
+- [x] **Privacy screen — blacks out host physical display and blocks local input during remote sessions**
+- [x] File transfer
+- [x] Audio streaming
+- [x] Unattended access
 - [ ] Linux support
-- [ ] File transfer
-- [ ] Audio streaming
 - [ ] iOS / Android clients
-- [ ] Unattended access
 - [ ] Address book & device groups
 
 ## Contributing
