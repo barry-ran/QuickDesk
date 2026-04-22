@@ -41,6 +41,11 @@ Rectangle {
     // when VideoLayout has not been received yet.
     property int remoteDipWidth: 0
     property int remoteDipHeight: 0
+
+    // Display offset in the global desktop coordinate space (DIPs).
+    // Added to mouse coordinates so the host maps input to the correct monitor.
+    property int remoteOffsetX: 0
+    property int remoteOffsetY: 0
     
     color: "#1a1a1a"  // Dark background
     focus: inputEnabled  // Enable keyboard focus when input is enabled
@@ -88,9 +93,13 @@ Rectangle {
         var remoteX = Math.round(relativeX * targetWidth / rect.width);
         var remoteY = Math.round(relativeY * targetHeight / rect.height);
 
-        // Clamp to valid range
+        // Clamp to valid range within this display
         remoteX = Math.max(0, Math.min(targetWidth - 1, remoteX));
         remoteY = Math.max(0, Math.min(targetHeight - 1, remoteY));
+
+        // Add display offset for multi-monitor coordinate mapping
+        remoteX += remoteOffsetX;
+        remoteY += remoteOffsetY;
 
         return { x: remoteX, y: remoteY };
     }
@@ -294,6 +303,17 @@ Rectangle {
             if (deviceId === root.deviceId) {
                 root.remoteDipWidth = widthDips
                 root.remoteDipHeight = heightDips
+            }
+        }
+
+        function onDisplayListChanged(deviceId, displays, activeDisplayIndex) {
+            if (deviceId === root.deviceId && activeDisplayIndex >= 0 &&
+                activeDisplayIndex < displays.length) {
+                var d = displays[activeDisplayIndex]
+                root.remoteDipWidth = d.width || 0
+                root.remoteDipHeight = d.height || 0
+                root.remoteOffsetX = d.positionX || 0
+                root.remoteOffsetY = d.positionY || 0
             }
         }
     }

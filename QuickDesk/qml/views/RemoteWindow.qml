@@ -25,6 +25,10 @@ Window {
     property bool showVideoStats: false  // Toggle video stats overlay
     property var closingConnections: ({})  // Guard against re-entrant closeConnection calls
     property bool emergencyStopActive: false
+
+    // Multi-monitor: display list per device. Map: deviceId -> { displays: [], activeIndex: 0 }
+    property var displayListMap: ({})
+    property int displayListVersion: 0  // Increment to notify changes
     
     // C++ ConnectionListModel — only affected delegates are created/destroyed
     ConnectionListModel {
@@ -440,6 +444,20 @@ Window {
                 return stats ? (stats.supportsPrivacyScreen || false) : false
             }
             emergencyStopActive: remoteWindow.emergencyStopActive
+            displayList: {
+                var devId = currentTabIndex >= 0 && currentTabIndex < connectionModel.count
+                    ? connectionModel.deviceIdAt(currentTabIndex) : ""
+                var _ = remoteWindow.displayListVersion  // force re-evaluate on change
+                var info = devId ? remoteWindow.displayListMap[devId] : null
+                return info ? info.displays : []
+            }
+            activeDisplayIndex: {
+                var devId = currentTabIndex >= 0 && currentTabIndex < connectionModel.count
+                    ? connectionModel.deviceIdAt(currentTabIndex) : ""
+                var _ = remoteWindow.displayListVersion
+                var info = devId ? remoteWindow.displayListMap[devId] : null
+                return info ? info.activeIndex : -1
+            }
             videoInfo: {
                 var devId = currentTabIndex >= 0 && currentTabIndex < connectionModel.count 
                     ? connectionModel.deviceIdAt(currentTabIndex) 
@@ -644,6 +662,24 @@ Window {
                 supportsPrivacyScreen: supportsPrivacyScreen
             })
             remoteWindow.performanceStatsMap = newStatsMap
+        }
+    }
+
+    // Monitor display list changes (multi-monitor)
+    Connections {
+        target: remoteWindow.clientManager
+
+        function onDisplayListChanged(deviceId, displays, activeDisplayIndex) {
+            var newMap = Object.assign({}, remoteWindow.displayListMap)
+            newMap[deviceId] = {
+                displays: displays,
+                activeIndex: activeDisplayIndex
+            }
+            remoteWindow.displayListMap = newMap
+            remoteWindow.displayListVersion++
+            console.log("Display list updated for", deviceId,
+                        ": displays=", displays.length,
+                        ", active=", activeDisplayIndex)
         }
     }
 
