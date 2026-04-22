@@ -37,6 +37,10 @@ Item {
     property bool privacyScreenActive: false
     property bool emergencyStopActive: false
 
+    // Multi-monitor display list
+    property var displayList: []        // Array of display objects from displayListChanged
+    property int activeDisplayIndex: -1 // Currently active display index
+
     // Active file transfer count (for badge display)
     property int activeTransferCount: 0
 
@@ -214,7 +218,98 @@ Item {
         id: floatingMenu
         parent: root.parent
         width: 220
-        
+
+        // Display switcher header (multi-monitor) — shown above menu items
+        header: Component {
+            Column {
+                visible: root.displayList && root.displayList.length > 1
+                width: parent ? parent.width : 0
+                spacing: Theme.spacingXSmall
+
+                Text {
+                    text: qsTr("Displays")
+                    font.pixelSize: 11
+                    color: Theme.textSecondary
+                    leftPadding: Theme.spacingSmall
+                }
+
+                Row {
+                    leftPadding: Theme.spacingSmall
+                    spacing: Theme.spacingXSmall
+
+                    Repeater {
+                        model: (root.displayList && root.displayList.length > 1)
+                               ? root.displayList.length : 0
+
+                        Rectangle {
+                            required property int index
+                            readonly property bool isActive: index === root.activeDisplayIndex
+                            readonly property bool isHovered: displayMouseArea.containsMouse
+
+                            width: 36
+                            height: 30
+                            radius: Theme.radiusSmall
+                            color: isActive ? Theme.accent
+                                   : isHovered ? Theme.surfaceHover
+                                   : "transparent"
+                            border.color: isActive ? Theme.accent : Theme.border
+                            border.width: 1
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: (parent.index + 1).toString()
+                                font.pixelSize: 13
+                                font.bold: parent.isActive
+                                color: parent.isActive
+                                       ? Theme.textOnPrimary : Theme.text
+                            }
+
+                            MouseArea {
+                                id: displayMouseArea
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                hoverEnabled: true
+                                onClicked: {
+                                    if (parent.index !== root.activeDisplayIndex &&
+                                        root.clientManager && root.deviceId) {
+                                        root.clientManager.selectDisplay(
+                                            root.deviceId, parent.index)
+                                        var d = root.displayList ? root.displayList[parent.index] : null
+                                        var label = qsTr("Display") + " " + (parent.index + 1)
+                                        if (d && d.displayName) label += " (" + d.displayName + ")"
+                                        root.showToast(qsTr("Switched to %1").arg(label),
+                                                       QDToast.Type.Success)
+                                    }
+                                }
+                            }
+
+                            ToolTip.visible: displayHoverHandler.hovered
+                            ToolTip.text: {
+                                var label = qsTr("Display") + " " + (index + 1)
+                                var d = root.displayList ? root.displayList[index] : null
+                                if (!d) return label
+                                if (d.displayName) label += " - " + d.displayName
+                                label += "\n" + (d.width || 0) + "×" + (d.height || 0)
+                                return label
+                            }
+                            ToolTip.delay: 400
+
+                            HoverHandler { id: displayHoverHandler }
+                        }
+                    }
+                }
+
+                // Separator
+                Rectangle {
+                    width: parent ? parent.width - Theme.spacingSmall * 2 : 0
+                    height: 1
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    color: Theme.border
+                    visible: root.displayList && root.displayList.length > 1
+                }
+            }
+        }
+
         // Smart Boost submenu (帧率提升)
         QDMenuItem {
             id: smartBoostMenuItem

@@ -387,6 +387,24 @@ void ClientManager::setAudioEnabled(const QString& deviceId, bool enabled)
     m_messaging->sendMessage(message);
 }
 
+void ClientManager::selectDisplay(const QString& deviceId, int displayIndex)
+{
+    if (!m_messaging || !m_messaging->isReady()) {
+        LOG_WARN("Cannot select display: messaging not ready");
+        return;
+    }
+    QString connId = connectionIdFor(deviceId);
+    if (connId.isEmpty()) return;
+
+    LOG_INFO("Selecting display {} for {}", displayIndex, deviceId.toStdString());
+
+    QJsonObject message;
+    message["type"] = "selectDisplay";
+    message["connectionId"] = connId;
+    message["displayId"] = QString::number(displayIndex);
+    m_messaging->sendMessage(message);
+}
+
 void ClientManager::sendAction(const QString& deviceId, const QString& action)
 {
     if (!m_messaging || !m_messaging->isReady()) {
@@ -638,7 +656,7 @@ void ClientManager::onMessageReceived(const QJsonObject& message)
 {
     QString type = message["type"].toString();
 
-    if (type != "videoFrameReady" && type != "performanceStatsUpdate" && type != "videoLayoutChanged" && type != "routeChanged") {
+    if (type != "videoFrameReady" && type != "performanceStatsUpdate" && type != "displayListChanged" && type != "routeChanged") {
         LOG_DEBUG("Client received message: {}", type.toStdString());
     }
 
@@ -674,8 +692,8 @@ void ClientManager::onMessageReceived(const QJsonObject& message)
         handleCursorShapeChanged(message);
     } else if (type == "performanceStatsUpdate") {
         handlePerformanceStatsUpdate(message);
-    } else if (type == "videoLayoutChanged") {
-        handleVideoLayoutChanged(message);
+    } else if (type == "displayListChanged") {
+        handleDisplayListChanged(message);
     } else if (type == "routeChanged") {
         handleRouteChanged(message);
     } else if (type == "hostCapabilities") {
@@ -1086,19 +1104,29 @@ void ClientManager::handlePerformanceStatsUpdate(const QJsonObject& message)
     emit performanceStatsUpdated(deviceId, stats);
 }
 
-void ClientManager::handleVideoLayoutChanged(const QJsonObject& message)
+void ClientManager::handleDisplayListChanged(const QJsonObject& message)
 {
     QString connId = message["connectionId"].toString();
     QString deviceId = findDeviceId(connId);
     if (deviceId.isEmpty()) return;
 
-    int widthDips = message["widthDips"].toInt();
-    int heightDips = message["heightDips"].toInt();
+    QJsonArray displays = message["displays"].toArray();
+    int activeDisplayIndex = message["activeDisplayIndex"].toInt(0);
 
-    LOG_DEBUG("VideoLayout changed: device={}, dips={}x{}",
-              deviceId.toStdString(), widthDips, heightDips);
+    LOG_DEBUG("DisplayList changed: device={}, displays={}, active={}",
+              deviceId.toStdString(), displays.size(), activeDisplayIndex);
 
-    emit videoLayoutChanged(deviceId, widthDips, heightDips);
+    // Emit the new displayListChanged signal with full display info.
+    emit displayListChanged(deviceId, displays, activeDisplayIndex);
+
+    // Also emit the legacy videoLayoutChanged for backward compatibility.
+    // Use the active display's dimensions.
+    if (activeDisplayIndex >= 0 && activeDisplayIndex < displays.size()) {
+        QJsonObject activeDisplay = displays[activeDisplayIndex].toObject();
+        int widthDips = activeDisplay["width"].toInt();
+        int heightDips = activeDisplay["height"].toInt();
+        emit videoLayoutChanged(deviceId, widthDips, heightDips);
+    }
 }
 
 void ClientManager::handleRouteChanged(const QJsonObject& message)

@@ -110,6 +110,9 @@ public:
     // Audio control
     Q_INVOKABLE void setAudioEnabled(const QString& deviceId, bool enabled);
 
+    // Display selection (multi-monitor)
+    Q_INVOKABLE void selectDisplay(const QString& deviceId, int displayIndex);
+
     // Remote actions (Ctrl+Alt+Del, Lock Screen)
     Q_INVOKABLE void sendAction(const QString& deviceId, const QString& action);
     Q_INVOKABLE bool supportsSendAttentionSequence(const QString& deviceId) const;
@@ -192,6 +195,10 @@ signals:
     void videoLayoutChanged(const QString& deviceId,
                             int widthDips, int heightDips);
 
+    void displayListChanged(const QString& deviceId,
+                            const QJsonArray& displays,
+                            int activeDisplayIndex);
+
     void routeChanged(const QString& deviceId,
                       const QVariantMap& routeInfo);
 
@@ -267,7 +274,7 @@ private:
     void handleDisconnectAllResponse(const QJsonObject& message);
     void handleCursorShapeChanged(const QJsonObject& message);
     void handlePerformanceStatsUpdate(const QJsonObject& message);
-    void handleVideoLayoutChanged(const QJsonObject& message);
+    void handleDisplayListChanged(const QJsonObject& message);
     void handleRouteChanged(const QJsonObject& message);
     void handleHostCapabilities(const QJsonObject& message);
     void handleFileTransferProgress(const QJsonObject& message);

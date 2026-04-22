@@ -9,6 +9,7 @@ Controls.Popup {
     
     property list<QtObject> menuItems
     default property list<QtObject> contentData  // 改为 QtObject 以接受 Component
+    property Component header: null  // Optional header component rendered above menu items
     
     // ============ Size & Style ============
     
@@ -67,6 +68,12 @@ Controls.Popup {
         }
         
         // 如果使用 menuItems 属性（数组方式）
+        Loader {
+            width: parent.width
+            active: control.header !== null
+            sourceComponent: control.header
+        }
+
         Repeater {
             model: control.menuItems.length > 0 ? control.menuItems : []
             delegate: Item {
