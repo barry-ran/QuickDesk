@@ -245,6 +245,22 @@ rm -rf "$publish_path/QuickDesk.app/Contents/translations"
 # Clean stale files that would break code signing
 find "$frameworks_dir/quickdesk_host.app" -name "*.log" -delete 2>/dev/null
 
+# macdeployqt creates symlinks under Contents/Resources/qml/QtQuick/Controls/<Style>/
+# that point at Contents/PlugIns/quick/libqtquickcontrols2<style>*.dylib so the QML
+# engine can pick up styles by name. We strip those style plugins above to slim the
+# bundle, which leaves the symlinks dangling. `codesign --deep --strict` then trips
+# over them with "No such file or directory" and the whole bundle is rejected as
+# damaged. Remove every broken symlink before signing.
+echo "[*] removing dangling symlinks left by Qt cleanup..."
+removed_links=0
+while IFS= read -r -d '' link; do
+    if [ ! -e "$link" ]; then
+        rm -f "$link"
+        removed_links=$((removed_links + 1))
+    fi
+done < <(find "$publish_path/QuickDesk.app" -type l -print0 2>/dev/null)
+echo "[*] removed $removed_links dangling symlink(s)"
+
 echo "[*] ad-hoc code signing (inside-out)..."
 # Strict inside-out order is required so that codesign can seal the outer
 # bundle. Any unsigned Mach-O found while sealing the parent will produce
