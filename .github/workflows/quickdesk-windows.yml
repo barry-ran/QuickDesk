@@ -110,6 +110,10 @@ jobs:
         shell: pwsh
         run: choco install windowsdriverkit11 -y --no-progress
 
+      - name: Setup MSBuild
+        if: steps.vdd-check.outputs.exists == 'true'
+        uses: microsoft/setup-msbuild@v2
+
       - name: Build Virtual Display Driver
         if: steps.vdd-check.outputs.exists == 'true'
         shell: cmd
@@ -153,5 +157,20 @@ jobs:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: publish/QuickDesk-win-x64-setup.exe
           asset_name: QuickDesk-win-x64-${{ steps.version.outputs.ref-name }}-setup.exe
+          tag: ${{ github.ref }}
+          overwrite: true
+
+      - name: Package WebClient
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        run: Compress-Archive -Path WebClient/dist/* -DestinationPath publish/QuickDesk-WebClient.zip
+
+      - name: Upload WebClient to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: publish/QuickDesk-WebClient.zip
+          asset_name: QuickDesk-WebClient-${{ steps.version.outputs.ref-name }}.zip
           tag: ${{ github.ref }}
           overwrite: true
