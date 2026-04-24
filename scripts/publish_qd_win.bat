@@ -172,6 +172,19 @@ if exist "%release_path%\skills" (
 )
 echo=
 
+:: copy virtual display driver files (from build_vdd_win.bat output)
+set vdd_output=%script_path%..\output\x64\%build_mode%\drivers\vdd
+if exist "%vdd_output%\quickdesk_display.dll" (
+    echo [*] copying virtual display driver...
+    if not exist "%publish_path%drivers\vdd\" mkdir "%publish_path%drivers\vdd\"
+    xcopy "%vdd_output%\*" "%publish_path%drivers\vdd\" /E /Y /Q >nul
+    echo [*] virtual display driver copied
+) else (
+    echo [!] warning: virtual display driver not found in %vdd_output%
+    echo [!] skipping VDD ^(run build_vdd_win.bat first if needed^)
+)
+echo=
+
 :: add Qt dependencies (specify qml path)
 echo [*] running windeployqt to add Qt dependencies...
 windeployqt --qmldir "%script_path%..\QuickDesk\qml" "%publish_path%\QuickDesk.exe"

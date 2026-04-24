@@ -130,6 +130,7 @@ AI Config
 - Adaptive frame rate and bitrate
 - Frame rate boost mode (Office / Gaming)
 - Privacy screen mode — blacks out the host's physical display and blocks local keyboard/mouse input during remote control, protecting session privacy (Windows 10 2004+)
+- Virtual display — creates virtual monitors via IDD driver for multi-screen extension, headless server remote access, privacy isolation, and resolution adaptation (Windows 10 2004+, requires virtual display driver installation)
 
 ### Connection Management
 - 9-digit Device ID + temporary access code mechanism
@@ -249,6 +250,47 @@ Go to [Releases](https://github.com/barry-ran/QuickDesk/releases) to download th
 2. The host will automatically generate a **Device ID** and **Access Code**
 3. On the client, enter the host's Device ID and Access Code, then click **Connect**
 4. You're now remotely controlling the host machine
+
+### Silent install (Windows installer)
+
+The Windows package is built with **Inno Setup** (`scripts/installer/quickdesk.iss`). Standard Inno command-line switches apply:
+
+| Switch | Meaning |
+|--------|---------|
+| `/SILENT` | No wizard pages; progress window may appear |
+| `/VERYSILENT` | Fully unattended (no progress window) |
+| `/DIR="path"` | Install directory (optional) |
+| `/TASKS="..."` | Comma-separated tasks from `[Tasks]` |
+
+Available tasks:
+
+| Task | Description |
+|------|-------------|
+| `desktopicon` | Create desktop shortcut |
+| `startmenuicon` | Create Start Menu shortcut |
+| `vdd` | Install virtual display driver (IDD) and related files, required for virtual display feature |
+
+All three tasks are selected by default (`Flags: checkedonce` — checked on first install, preserves user choice on upgrades). To skip the virtual display driver, explicitly exclude `vdd` via `/TASKS`.
+
+Examples:
+
+```bat
+REM Default tasks (includes virtual display driver when selected in script defaults)
+QuickDesk-win-x64-setup.exe /VERYSILENT
+
+REM Explicit tasks
+QuickDesk-win-x64-setup.exe /VERYSILENT /TASKS="desktopicon,startmenuicon,vdd"
+
+REM Install without virtual display driver
+QuickDesk-win-x64-setup.exe /VERYSILENT /TASKS="desktopicon,startmenuicon"
+
+REM Custom install path
+QuickDesk-win-x64-setup.exe /VERYSILENT /DIR="D:\QuickDesk"
+```
+
+After a silent install, **QuickDesk.exe is not auto-launched** (`skipifsilent` in the installer script), but the **QuickDeskHost** Windows service is still installed and started when configured in `[Run]`.
+
+Administrator rights are required (`PrivilegesRequired=admin` in the script).
 
 ## Build from Source
 
@@ -422,6 +464,7 @@ QuickDesk/
 - [x] **Workflow recording & playback (record, replay, parameterize)**
 - [x] **Trust layer & safety (risk assessment, confirmation dialogs, emergency stop, audit log)**
 - [x] **Privacy screen — blacks out host physical display and blocks local input during remote sessions**
+- [x] **Virtual display — IDD virtual display driver for multi-screen extension, headless remote, and resolution adaptation**
 - [x] File transfer
 - [x] Audio streaming
 - [x] Unattended access

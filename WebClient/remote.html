@@ -150,6 +150,27 @@
         .menu-arrow { font-size: 16px; opacity: 0.5; margin-left: auto; }
         .menu-check { font-size: 13px; color: var(--accent); margin-left: auto; }
 
+        /* Display header */
+        .display-header { padding: 8px 12px 4px; }
+        .display-header-label {
+            font-size: 11px; font-weight: 600; color: rgba(255,255,255,0.45);
+            letter-spacing: 1px; margin-bottom: 6px; text-transform: uppercase;
+        }
+        .display-header-strip { display: flex; gap: 6px; margin-bottom: 4px; }
+        .display-tile {
+            width: 36px; height: 28px; border-radius: 4px;
+            background: rgba(255,255,255,0.08);
+            border: 1.5px solid rgba(255,255,255,0.15);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 13px; font-weight: 600; color: rgba(255,255,255,0.7);
+            cursor: pointer; transition: all 0.15s;
+        }
+        .display-tile:hover { background: rgba(255,255,255,0.15); border-color: rgba(255,255,255,0.3); }
+        .display-tile.active {
+            background: var(--accent); border-color: var(--accent);
+            color: #fff; box-shadow: 0 0 8px rgba(64, 169, 255, 0.4);
+        }
+
         /* Stats overlay */
         #statsOverlay {
             display: none;

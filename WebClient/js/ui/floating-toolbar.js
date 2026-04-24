@@ -33,7 +33,12 @@ export class FloatingToolbar extends EventTarget {
         this._supportsLock = false;
         this._supportsFileTransfer = false;
         this._supportsPrivacyScreen = false;
+        this._supportsVirtualDisplay = false;
         this._privacyScreenActive = false;
+
+        this._displayList = [];
+        this._activeDisplayIndex = -1;
+        this._virtualDisplays = [];
 
         this._remoteWidth = 0;
         this._remoteHeight = 0;
@@ -124,6 +129,8 @@ export class FloatingToolbar extends EventTarget {
             { textKey: 'menu.uploadFile', icon: '📤', action: 'uploadFile', id: 'uploadMenuItem', hidden: true },
             { textKey: 'menu.downloadFile', icon: '📥', action: 'downloadFile', id: 'downloadMenuItem', hidden: true },
             { textKey: 'menu.transfers', icon: '📊', action: 'showTransfers', id: 'transfersMenuItem', hidden: true },
+            { type: 'separator', id: 'vdSeparator', hidden: true },
+            { textKey: 'menu.virtualDisplay', icon: '🖥️', hasSubmenu: true, action: 'submenu-virtualDisplay', id: 'vdMenuItem', hidden: true },
             { type: 'separator' },
             { textKey: 'menu.disconnect', icon: '✕', action: 'disconnect', destructive: true },
         ];
@@ -201,6 +208,10 @@ export class FloatingToolbar extends EventTarget {
             { text: '5 MiB', value: 5242880, checkGroup: 'bitrate' },
             { text: '2 MiB', value: 2097152, checkGroup: 'bitrate' },
         ]);
+
+        this._submenus.virtualDisplay = this._createVirtualDisplaySubmenu();
+
+        this._displayHeader = this._createDisplayHeader();
     }
 
     /** @private */
@@ -276,7 +287,9 @@ export class FloatingToolbar extends EventTarget {
             const submenu = this._submenus[key];
             if (!submenu) return;
 
-            if (key === 'resolution') {
+            if (key === 'virtualDisplay') {
+                this._refreshVirtualDisplaySubmenu();
+            } else if (key === 'resolution') {
                 const origItem = submenu.querySelector('#resOriginal .menu-text');
                 if (origItem) {
                     origItem.textContent = this._originalWidth > 0
@@ -384,6 +397,138 @@ export class FloatingToolbar extends EventTarget {
         this._hideMenu();
     }
 
+    /** @private */
+    _createDisplayHeader() {
+        const header = document.createElement('div');
+        header.className = 'display-header';
+        header.style.display = 'none';
+        return header;
+    }
+
+    updateDisplayList(displays, activeIndex) {
+        this._displayList = displays || [];
+        this._activeDisplayIndex = activeIndex;
+        this._refreshDisplayHeader();
+    }
+
+    /** @private */
+    _refreshDisplayHeader() {
+        if (!this._displayHeader) return;
+        this._displayHeader.innerHTML = '';
+
+        if (this._displayList.length <= 1) {
+            this._displayHeader.style.display = 'none';
+            return;
+        }
+
+        const label = document.createElement('div');
+        label.className = 'display-header-label';
+        label.textContent = t('menu.displays');
+        this._displayHeader.appendChild(label);
+
+        const strip = document.createElement('div');
+        strip.className = 'display-header-strip';
+
+        for (let i = 0; i < this._displayList.length; i++) {
+            const tile = document.createElement('div');
+            tile.className = 'display-tile' + (i === this._activeDisplayIndex ? ' active' : '');
+            tile.textContent = String(i + 1);
+            tile.title = this._displayList[i].displayName ||
+                `${this._displayList[i].width}x${this._displayList[i].height}`;
+            tile.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (i !== this._activeDisplayIndex) {
+                    this.dispatchEvent(new CustomEvent('action', {
+                        detail: { action: 'selectDisplay', index: i }
+                    }));
+                    this._hideMenu();
+                }
+            });
+            strip.appendChild(tile);
+        }
+
+        this._displayHeader.appendChild(strip);
+        this._displayHeader.style.display = 'block';
+    }
+
+    /** @private */
+    _createVirtualDisplaySubmenu() {
+        const submenu = document.createElement('div');
+        submenu.className = 'floating-submenu';
+        submenu.style.display = 'none';
+        submenu.addEventListener('mousedown', (e) => e.preventDefault());
+        this.container.appendChild(submenu);
+        return submenu;
+    }
+
+    updateVirtualDisplays(displays) {
+        this._virtualDisplays = (displays || []).filter(d => d.active);
+    }
+
+    /** @private */
+    _refreshVirtualDisplaySubmenu() {
+        const submenu = this._submenus.virtualDisplay;
+        if (!submenu) return;
+        submenu.innerHTML = '';
+
+        const presets = [
+            { w: 1920, h: 1080, hz: 60 },
+            { w: 2560, h: 1440, hz: 60 },
+            { w: 3840, h: 2160, hz: 60 },
+            { w: 1280, h: 720, hz: 60 },
+        ];
+
+        for (const p of presets) {
+            const el = document.createElement('div');
+            el.className = 'menu-item';
+            el.innerHTML = `<span class="menu-text">${t('menu.addDisplay', { resolution: `${p.w}×${p.h}`, hz: p.hz })}</span>`;
+            el.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.dispatchEvent(new CustomEvent('action', {
+                    detail: { action: 'createVirtualDisplay', width: p.w, height: p.h, refreshRate: p.hz }
+                }));
+                this._hideMenu();
+            });
+            submenu.appendChild(el);
+        }
+
+        if (this._virtualDisplays.length > 0) {
+            const sep = document.createElement('div');
+            sep.className = 'menu-separator';
+            submenu.appendChild(sep);
+
+            for (const vd of this._virtualDisplays) {
+                const el = document.createElement('div');
+                el.className = 'menu-item';
+                el.innerHTML = `<span class="menu-text">${t('menu.removeDisplay', { index: vd.index, resolution: `${vd.width}×${vd.height}` })}</span>`;
+                el.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.dispatchEvent(new CustomEvent('action', {
+                        detail: { action: 'removeVirtualDisplay', index: vd.index }
+                    }));
+                    this._hideMenu();
+                });
+                submenu.appendChild(el);
+            }
+
+            const sep2 = document.createElement('div');
+            sep2.className = 'menu-separator';
+            submenu.appendChild(sep2);
+
+            const removeAllEl = document.createElement('div');
+            removeAllEl.className = 'menu-item';
+            removeAllEl.innerHTML = `<span class="menu-text">${t('menu.removeAllDisplays')}</span>`;
+            removeAllEl.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.dispatchEvent(new CustomEvent('action', {
+                    detail: { action: 'removeAllVirtualDisplays' }
+                }));
+                this._hideMenu();
+            });
+            submenu.appendChild(removeAllEl);
+        }
+    }
+
     // ==================== Submenu positioning ====================
 
     /** @private */
@@ -464,6 +609,14 @@ export class FloatingToolbar extends EventTarget {
 
     _showMenu() {
         this._menuVisible = true;
+        this._refreshDisplayHeader();
+
+        if (this._displayHeader) {
+            if (this._displayHeader.parentNode !== this._menuElement) {
+                this._menuElement.insertBefore(this._displayHeader, this._menuElement.firstChild);
+            }
+        }
+
         const btnRect = this._element.getBoundingClientRect();
         const containerRect = this.container.getBoundingClientRect();
 
@@ -492,11 +645,12 @@ export class FloatingToolbar extends EventTarget {
         this._menuElement.style.display = 'none';
     }
 
-    setActionSupport(supportsSAS, supportsLock, supportsFileTransfer = false, supportsPrivacyScreen = false) {
+    setActionSupport(supportsSAS, supportsLock, supportsFileTransfer = false, supportsPrivacyScreen = false, supportsVirtualDisplay = false) {
         this._supportsSAS = supportsSAS;
         this._supportsLock = supportsLock;
         this._supportsFileTransfer = supportsFileTransfer;
         this._supportsPrivacyScreen = supportsPrivacyScreen;
+        this._supportsVirtualDisplay = supportsVirtualDisplay;
 
         const sasItem = this._menuElement.querySelector('#sasMenuItem');
         const lockItem = this._menuElement.querySelector('#lockMenuItem');
@@ -504,6 +658,8 @@ export class FloatingToolbar extends EventTarget {
         const uploadItem = this._menuElement.querySelector('#uploadMenuItem');
         const uploadSep = this._menuElement.querySelector('#uploadSeparator');
         const privacyItem = this._menuElement.querySelector('#privacyScreenMenuItem');
+        const vdItem = this._menuElement.querySelector('#vdMenuItem');
+        const vdSep = this._menuElement.querySelector('#vdSeparator');
 
         if (sasItem) sasItem.style.display = supportsSAS ? '' : 'none';
         if (lockItem) lockItem.style.display = supportsLock ? '' : 'none';
@@ -512,6 +668,8 @@ export class FloatingToolbar extends EventTarget {
             (supportsSAS || supportsLock || supportsPrivacyScreen) ? '' : 'none';
         if (uploadItem) uploadItem.style.display = supportsFileTransfer ? '' : 'none';
         if (uploadSep) uploadSep.style.display = supportsFileTransfer ? '' : 'none';
+        if (vdItem) vdItem.style.display = supportsVirtualDisplay ? '' : 'none';
+        if (vdSep) vdSep.style.display = supportsVirtualDisplay ? '' : 'none';
 
         const downloadItem = this._menuElement.querySelector('#downloadMenuItem');
         if (downloadItem) downloadItem.style.display = supportsFileTransfer ? '' : 'none';
@@ -537,9 +695,12 @@ export class FloatingToolbar extends EventTarget {
         if (this._submenus) {
             Object.values(this._submenus).forEach(s => s.remove());
         }
+        if (this._displayHeader) {
+            this._displayHeader.remove();
+        }
         this._hideMenu();
         this._buildMenu();
-        this.setActionSupport(this._supportsSAS, this._supportsLock, this._supportsFileTransfer, this._supportsPrivacyScreen);
+        this.setActionSupport(this._supportsSAS, this._supportsLock, this._supportsFileTransfer, this._supportsPrivacyScreen, this._supportsVirtualDisplay);
     }
 
     /** @private */
@@ -562,5 +723,6 @@ export class FloatingToolbar extends EventTarget {
         if (this._submenus) {
             Object.values(this._submenus).forEach(s => s.remove());
         }
+        if (this._displayHeader) this._displayHeader.remove();
     }
 }

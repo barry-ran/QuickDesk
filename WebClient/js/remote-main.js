@@ -40,6 +40,9 @@ class RemoteDesktopApp {
         this._pendingAudioTrack = null;
         this._remoteWidth = 0;
         this._remoteHeight = 0;
+        this._currentDisplayList = [];
+        this._activeDisplayIndex = 0;
+        this._supportsVirtualDisplay = false;
     }
 
     /**
@@ -194,12 +197,20 @@ class RemoteDesktopApp {
             });
 
             this.dcHandler.addEventListener('hostCapabilities', (e) => {
-                const { supportsSendAttentionSequence, supportsLockWorkstation, supportsFileTransfer, supportsPrivacyScreen } = e.detail;
+                const { supportsSendAttentionSequence, supportsLockWorkstation, supportsFileTransfer, supportsPrivacyScreen, supportsVirtualDisplay } = e.detail;
                 this._log(t('log.negotiatedCaps', { sas: supportsSendAttentionSequence, lock: supportsLockWorkstation, ft: supportsFileTransfer }));
+                this._supportsVirtualDisplay = supportsVirtualDisplay;
                 if (this.floatingToolbar) {
                     this.floatingToolbar.setActionSupport(
-                        supportsSendAttentionSequence, supportsLockWorkstation, supportsFileTransfer, supportsPrivacyScreen);
+                        supportsSendAttentionSequence, supportsLockWorkstation, supportsFileTransfer, supportsPrivacyScreen, supportsVirtualDisplay);
                 }
+                if (supportsVirtualDisplay) {
+                    this._sendVirtualDisplayCommand({ action: 'query' });
+                }
+            });
+
+            this.dcHandler.addEventListener('extensionMessage', (e) => {
+                this._onExtensionMessage(e.detail);
             });
 
             this.dcHandler.addEventListener('fileTransferStarted', (e) => {
@@ -386,27 +397,47 @@ class RemoteDesktopApp {
 
         this._log(t('log.videoLayout', { count: layout.videoTracks.length }));
 
-        let primaryTrack = null;
-        if (layout.primaryScreenId !== undefined) {
+        this._currentDisplayList = layout.videoTracks;
+
+        let selectedTrack = null;
+        let selectedIndex = 0;
+
+        if (this._selectedStreamId) {
             for (let i = 0; i < layout.videoTracks.length; i++) {
-                const vt = layout.videoTracks[i];
-                if (vt.screenId === layout.primaryScreenId) {
-                    primaryTrack = vt;
+                if (layout.videoTracks[i].mediaStreamId === this._selectedStreamId) {
+                    selectedTrack = layout.videoTracks[i];
+                    selectedIndex = i;
                     break;
                 }
             }
         }
-        if (!primaryTrack) primaryTrack = layout.videoTracks[0];
 
-        this._log(t('log.selectMonitor', { width: primaryTrack.width, height: primaryTrack.height }));
-        this._remoteWidth = primaryTrack.width;
-        this._remoteHeight = primaryTrack.height;
+        if (!selectedTrack) {
+            if (layout.primaryScreenId !== undefined) {
+                for (let i = 0; i < layout.videoTracks.length; i++) {
+                    if (layout.videoTracks[i].screenId === layout.primaryScreenId) {
+                        selectedTrack = layout.videoTracks[i];
+                        selectedIndex = i;
+                        break;
+                    }
+                }
+            }
+            if (!selectedTrack) {
+                selectedTrack = layout.videoTracks[0];
+                selectedIndex = 0;
+            }
+        }
+
+        this._log(t('log.selectMonitor', { width: selectedTrack.width, height: selectedTrack.height }));
+        this._remoteWidth = selectedTrack.width;
+        this._remoteHeight = selectedTrack.height;
+        this._activeDisplayIndex = selectedIndex;
 
         const resEl = document.getElementById('connResolution');
-        if (resEl) resEl.textContent = `${primaryTrack.width}x${primaryTrack.height}`;
+        if (resEl) resEl.textContent = `${selectedTrack.width}x${selectedTrack.height}`;
 
-        if (primaryTrack.mediaStreamId && !this._selectedStreamId) {
-            this._selectedStreamId = primaryTrack.mediaStreamId;
+        if (selectedTrack.mediaStreamId) {
+            this._selectedStreamId = selectedTrack.mediaStreamId;
             if (this._receivedStreams) {
                 const targetStream = this._receivedStreams.get(this._selectedStreamId);
                 if (targetStream) {
@@ -419,10 +450,14 @@ class RemoteDesktopApp {
         }
 
         if (this.mouseHandler) {
-            this.mouseHandler.setRemoteResolution(primaryTrack.width, primaryTrack.height);
+            this.mouseHandler.setRemoteResolution(selectedTrack.width, selectedTrack.height);
         }
         if (this.touchHandler) {
-            this.touchHandler.setRemoteResolution(primaryTrack.width, primaryTrack.height);
+            this.touchHandler.setRemoteResolution(selectedTrack.width, selectedTrack.height);
+        }
+
+        if (this.floatingToolbar) {
+            this.floatingToolbar.updateDisplayList(layout.videoTracks, selectedIndex);
         }
     }
 
@@ -475,7 +510,7 @@ class RemoteDesktopApp {
 
     _sendInitialConfig() {
         this.dcHandler.sendCapabilities(
-            'sendAttentionSequenceAction lockWorkstationAction fileTransfer privacyScreen');
+            'sendAttentionSequenceAction lockWorkstationAction fileTransfer privacyScreen virtualDisplay');
         this.dcHandler.sendAudioControl({ enable: true });
         this._log(t('log.sentConfig'));
     }
@@ -529,8 +564,110 @@ class RemoteDesktopApp {
             case 'showTransfers':
                 this._toggleTransferPanel();
                 break;
+            case 'selectDisplay':
+                this._selectDisplay(detail.index);
+                break;
+            case 'createVirtualDisplay':
+                this._sendVirtualDisplayCommand({
+                    action: 'create',
+                    width: detail.width,
+                    height: detail.height,
+                    refreshRate: detail.refreshRate,
+                });
+                break;
+            case 'removeVirtualDisplay':
+                this._sendVirtualDisplayCommand({
+                    action: 'remove',
+                    index: detail.index,
+                });
+                break;
+            case 'removeAllVirtualDisplays':
+                this._sendVirtualDisplayCommand({ action: 'removeAll' });
+                break;
         }
     }
+
+    // ==================== Display Switching ====================
+
+    _selectDisplay(index) {
+        if (!this._currentDisplayList || index < 0 || index >= this._currentDisplayList.length) return;
+
+        const track = this._currentDisplayList[index];
+        if (!track.mediaStreamId) return;
+
+        this._selectedStreamId = track.mediaStreamId;
+        this._activeDisplayIndex = index;
+        this._remoteWidth = track.width;
+        this._remoteHeight = track.height;
+
+        if (this._receivedStreams) {
+            const targetStream = this._receivedStreams.get(this._selectedStreamId);
+            if (targetStream) {
+                const video = document.getElementById('remoteVideo');
+                if (video) {
+                    const combinedStream = new MediaStream();
+                    if (this._pendingAudioTrack && this._pendingAudioTrack.readyState === 'live') {
+                        combinedStream.addTrack(this._pendingAudioTrack);
+                    }
+                    for (const vt of targetStream.getVideoTracks()) {
+                        combinedStream.addTrack(vt);
+                    }
+                    video.srcObject = combinedStream;
+                }
+            }
+        }
+
+        if (this.mouseHandler) this.mouseHandler.setRemoteResolution(track.width, track.height);
+        if (this.touchHandler) this.touchHandler.setRemoteResolution(track.width, track.height);
+
+        const resEl = document.getElementById('connResolution');
+        if (resEl) resEl.textContent = `${track.width}x${track.height}`;
+
+        if (this.floatingToolbar) {
+            this.floatingToolbar.updateDisplayList(this._currentDisplayList, index);
+        }
+
+        this._log(t('log.switchDisplay', { index }));
+    }
+
+    // ==================== Virtual Display ====================
+
+    _sendVirtualDisplayCommand(command) {
+        if (!this.dcHandler || !this._supportsVirtualDisplay) return;
+        this.dcHandler.sendExtensionMessage('qd-virtual-display', JSON.stringify(command));
+    }
+
+    _onExtensionMessage(msg) {
+        if (!msg || msg.type !== 'qd-virtual-display') return;
+
+        let state;
+        try {
+            state = JSON.parse(msg.data);
+        } catch (e) {
+            return;
+        }
+
+        const type = state.type || '';
+        if (type === 'created') {
+            this._log(t('log.vdCreated', { index: state.index, resolution: `${state.width}x${state.height}` }));
+            this._sendVirtualDisplayCommand({ action: 'query' });
+        } else if (type === 'removed') {
+            this._log(t('log.vdRemoved', { index: state.index }));
+            this._sendVirtualDisplayCommand({ action: 'query' });
+        } else if (type === 'removedAll') {
+            this._log(t('log.vdRemovedAll'));
+            if (this.floatingToolbar) this.floatingToolbar.updateVirtualDisplays([]);
+        } else if (type === 'state') {
+            const displays = state.displays || [];
+            const active = displays.filter(d => d.active);
+            this._log(t('log.vdQuery', { count: active.length }));
+            if (this.floatingToolbar) this.floatingToolbar.updateVirtualDisplays(displays);
+        } else if (type === 'error') {
+            this._log(t('log.vdError', { message: state.message || 'Unknown' }), 'warning');
+        }
+    }
+
+    // ==================== File Transfer ====================
 
     _setupDragDrop(target) {
         if (!target) return;

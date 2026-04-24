@@ -35,6 +35,8 @@ Item {
     property bool supportsFileTransfer: false
     property bool supportsPrivacyScreen: false
     property bool privacyScreenActive: false
+    property bool supportsVirtualDisplay: false
+    property var virtualDisplays: []  // Active virtual displays [{index, width, height, refreshRate}]
     property bool emergencyStopActive: false
 
     // Multi-monitor display list
@@ -594,6 +596,45 @@ Item {
             }
         }
 
+        QDMenuItem {
+            visible: root.supportsVirtualDisplay
+            text: qsTr("Virtual Display")
+            iconText: FluentIconGlyph.tVMonitorGlyph
+            hasSubmenu: true
+            onTriggered: {
+                var parentMenu = floatingMenu
+                var submenu = virtualDisplayMenu
+                var windowWidth = root.parent ? root.parent.width : 1920
+                var windowHeight = root.parent ? root.parent.height : 1080
+
+                var itemHeight = Theme.buttonHeightMedium
+                var menuPadding = Theme.spacingSmall
+                var estimatedSubmenuHeight = (7 * itemHeight) + (menuPadding * 2) + (Theme.spacingXSmall * 7)
+
+                var menuY = parentMenu.y + menuPadding
+                var spaceBottom = windowHeight - menuY
+                if (spaceBottom < estimatedSubmenuHeight) {
+                    menuY = Math.max(Theme.spacingSmall, Math.min(menuY, windowHeight - estimatedSubmenuHeight - Theme.spacingSmall))
+                }
+
+                var rightX = parentMenu.x + parentMenu.width + Theme.spacingSmall
+                var spaceRight = windowWidth - rightX
+                var menuX
+                if (spaceRight >= submenu.width + Theme.spacingSmall) {
+                    menuX = rightX
+                } else {
+                    menuX = parentMenu.x - submenu.width - Theme.spacingSmall
+                    if (menuX < Theme.spacingSmall) {
+                        menuX = Theme.spacingSmall
+                    }
+                }
+
+                virtualDisplayMenu.x = menuX
+                virtualDisplayMenu.y = menuY
+                virtualDisplayMenu.open()
+            }
+        }
+
         QDMenuSeparator {
             visible: root.supportsFileTransfer
         }
@@ -947,6 +988,140 @@ Item {
                 if (root.clientManager) {
                     root.clientManager.setBitrate(root.deviceId, 2097152)
                     root.showToast(qsTr("Bitrate: 2 MiB"), QDToast.Type.Success)
+                }
+            }
+        }
+    }
+
+    // Virtual Display submenu
+    QDMenu {
+        id: virtualDisplayMenu
+        parent: root.parent
+        width: 220
+
+        onClosed: {
+            if (floatingMenu.opened) {
+                floatingMenu.close()
+            }
+        }
+
+        QDMenuItem {
+            text: qsTr("Add 1920×1080 @60Hz")
+            iconText: FluentIconGlyph.addGlyph
+            onTriggered: {
+                if (root.clientManager) {
+                    root.clientManager.createVirtualDisplay(root.deviceId, 1920, 1080, 60)
+                    root.showToast(qsTr("Creating virtual display: 1920×1080"), QDToast.Type.Info)
+                }
+            }
+        }
+
+        QDMenuItem {
+            text: qsTr("Add 2560×1440 @60Hz")
+            iconText: FluentIconGlyph.addGlyph
+            onTriggered: {
+                if (root.clientManager) {
+                    root.clientManager.createVirtualDisplay(root.deviceId, 2560, 1440, 60)
+                    root.showToast(qsTr("Creating virtual display: 2560×1440"), QDToast.Type.Info)
+                }
+            }
+        }
+
+        QDMenuItem {
+            text: qsTr("Add 3840×2160 @60Hz")
+            iconText: FluentIconGlyph.addGlyph
+            onTriggered: {
+                if (root.clientManager) {
+                    root.clientManager.createVirtualDisplay(root.deviceId, 3840, 2160, 60)
+                    root.showToast(qsTr("Creating virtual display: 3840×2160"), QDToast.Type.Info)
+                }
+            }
+        }
+
+        QDMenuItem {
+            text: qsTr("Add 1280×720 @60Hz")
+            iconText: FluentIconGlyph.addGlyph
+            onTriggered: {
+                if (root.clientManager) {
+                    root.clientManager.createVirtualDisplay(root.deviceId, 1280, 720, 60)
+                    root.showToast(qsTr("Creating virtual display: 1280×720"), QDToast.Type.Info)
+                }
+            }
+        }
+
+        QDMenuSeparator {
+            visible: root.virtualDisplays && root.virtualDisplays.length > 0
+        }
+
+        QDMenuItem {
+            visible: root.virtualDisplays && root.virtualDisplays.length > 0
+            readonly property var vd: (root.virtualDisplays && root.virtualDisplays.length > 0) ? root.virtualDisplays[0] : null
+            text: vd ? (qsTr("Remove #%1").arg(vd.index) + (vd.width > 0 ? (" (" + vd.width + "×" + vd.height + ")") : "")) : ""
+            iconText: FluentIconGlyph.cancelGlyph
+            isDestructive: true
+            onTriggered: {
+                if (root.clientManager && vd) {
+                    root.clientManager.removeVirtualDisplay(root.deviceId, vd.index)
+                    root.showToast(qsTr("Removing virtual display #%1").arg(vd.index), QDToast.Type.Info)
+                }
+            }
+        }
+
+        QDMenuItem {
+            visible: root.virtualDisplays && root.virtualDisplays.length > 1
+            readonly property var vd: (root.virtualDisplays && root.virtualDisplays.length > 1) ? root.virtualDisplays[1] : null
+            text: vd ? (qsTr("Remove #%1").arg(vd.index) + (vd.width > 0 ? (" (" + vd.width + "×" + vd.height + ")") : "")) : ""
+            iconText: FluentIconGlyph.cancelGlyph
+            isDestructive: true
+            onTriggered: {
+                if (root.clientManager && vd) {
+                    root.clientManager.removeVirtualDisplay(root.deviceId, vd.index)
+                    root.showToast(qsTr("Removing virtual display #%1").arg(vd.index), QDToast.Type.Info)
+                }
+            }
+        }
+
+        QDMenuItem {
+            visible: root.virtualDisplays && root.virtualDisplays.length > 2
+            readonly property var vd: (root.virtualDisplays && root.virtualDisplays.length > 2) ? root.virtualDisplays[2] : null
+            text: vd ? (qsTr("Remove #%1").arg(vd.index) + (vd.width > 0 ? (" (" + vd.width + "×" + vd.height + ")") : "")) : ""
+            iconText: FluentIconGlyph.cancelGlyph
+            isDestructive: true
+            onTriggered: {
+                if (root.clientManager && vd) {
+                    root.clientManager.removeVirtualDisplay(root.deviceId, vd.index)
+                    root.showToast(qsTr("Removing virtual display #%1").arg(vd.index), QDToast.Type.Info)
+                }
+            }
+        }
+
+        QDMenuItem {
+            visible: root.virtualDisplays && root.virtualDisplays.length > 3
+            readonly property var vd: (root.virtualDisplays && root.virtualDisplays.length > 3) ? root.virtualDisplays[3] : null
+            text: vd ? (qsTr("Remove #%1").arg(vd.index) + (vd.width > 0 ? (" (" + vd.width + "×" + vd.height + ")") : "")) : ""
+            iconText: FluentIconGlyph.cancelGlyph
+            isDestructive: true
+            onTriggered: {
+                if (root.clientManager && vd) {
+                    root.clientManager.removeVirtualDisplay(root.deviceId, vd.index)
+                    root.showToast(qsTr("Removing virtual display #%1").arg(vd.index), QDToast.Type.Info)
+                }
+            }
+        }
+
+        QDMenuSeparator {
+            visible: root.virtualDisplays && root.virtualDisplays.length > 0
+        }
+
+        QDMenuItem {
+            visible: root.virtualDisplays && root.virtualDisplays.length > 0
+            text: qsTr("Remove All")
+            iconText: FluentIconGlyph.cancelGlyph
+            isDestructive: true
+            onTriggered: {
+                if (root.clientManager) {
+                    root.clientManager.removeAllVirtualDisplays(root.deviceId)
+                    root.showToast(qsTr("Removing all virtual displays"), QDToast.Type.Info)
                 }
             }
         }

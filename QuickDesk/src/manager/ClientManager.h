@@ -49,6 +49,7 @@ struct ConnectionInfo {
     bool supportsLockWorkstation = false;
     bool supportsFileTransfer = false;
     bool supportsPrivacyScreen = false;
+    bool supportsVirtualDisplay = false;
 };
 
 /**
@@ -121,6 +122,14 @@ public:
     // Privacy screen
     Q_INVOKABLE void togglePrivacyScreen(const QString& deviceId, bool enabled);
     Q_INVOKABLE bool supportsPrivacyScreen(const QString& deviceId) const;
+
+    // Virtual display
+    Q_INVOKABLE void createVirtualDisplay(const QString& deviceId,
+                                           int width, int height, int refreshRate);
+    Q_INVOKABLE void removeVirtualDisplay(const QString& deviceId, int index);
+    Q_INVOKABLE void removeAllVirtualDisplays(const QString& deviceId);
+    Q_INVOKABLE void queryVirtualDisplays(const QString& deviceId);
+    Q_INVOKABLE bool supportsVirtualDisplay(const QString& deviceId) const;
 
     // File transfer (Client -> Host upload)
     Q_INVOKABLE void startFileUpload(const QString& deviceId, const QUrl& fileUrl);
@@ -206,7 +215,8 @@ signals:
                                  bool supportsSendAttentionSequence,
                                  bool supportsLockWorkstation,
                                  bool supportsFileTransfer,
-                                 bool supportsPrivacyScreen);
+                                 bool supportsPrivacyScreen,
+                                 bool supportsVirtualDisplay);
 
     void fileTransferProgress(const QString& deviceId,
                               const QString& transferId,
@@ -236,6 +246,9 @@ signals:
     void fileDownloadError(const QString& deviceId,
                            const QString& transferId,
                            const QString& errorMessage);
+
+    void virtualDisplayStateChanged(const QString& deviceId,
+                                    const QJsonObject& state);
 
 private slots:
     void onMessageReceived(const QJsonObject& message);
@@ -285,6 +298,7 @@ private:
     void handleFileDownloadComplete(const QJsonObject& message);
     void handleFileDownloadError(const QJsonObject& message);
     void handleSkillBridgeResponse(const QJsonObject& message);
+    void handleVirtualDisplayState(const QJsonObject& message);
     
     void sendMouseEvent(const QString& deviceId, const QString& eventType,
                         int x, int y, int button,

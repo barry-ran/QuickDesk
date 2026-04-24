@@ -28,6 +28,7 @@ export class DataChannelHandler extends EventTarget {
         this.supportsLockWorkstation = false;
         this.supportsFileTransfer = false;
         this.supportsPrivacyScreen = false;
+        this.supportsVirtualDisplay = false;
 
         this._nextFileTransferId = 1;
         this._activeUploads = new Map();
@@ -829,8 +830,9 @@ export class DataChannelHandler extends EventTarget {
         this.supportsLockWorkstation = hostSet.has('lockWorkstationAction');
         this.supportsFileTransfer = hostSet.has('fileTransfer');
         this.supportsPrivacyScreen = hostSet.has('privacyScreen');
+        this.supportsVirtualDisplay = hostSet.has('virtualDisplay');
 
-        console.log(`[DataChannel] Host caps: SAS=${this.supportsSendAttentionSequence} Lock=${this.supportsLockWorkstation} FileTransfer=${this.supportsFileTransfer} PrivacyScreen=${this.supportsPrivacyScreen}`);
+        console.log(`[DataChannel] Host caps: SAS=${this.supportsSendAttentionSequence} Lock=${this.supportsLockWorkstation} FileTransfer=${this.supportsFileTransfer} PrivacyScreen=${this.supportsPrivacyScreen} VD=${this.supportsVirtualDisplay}`);
 
         // Create "actions" outgoing data channel if any action is supported.
         if ((this.supportsSendAttentionSequence || this.supportsLockWorkstation || this.supportsPrivacyScreen) && this._pc) {
@@ -857,6 +859,7 @@ export class DataChannelHandler extends EventTarget {
                 supportsLockWorkstation: this.supportsLockWorkstation,
                 supportsFileTransfer: this.supportsFileTransfer,
                 supportsPrivacyScreen: this.supportsPrivacyScreen,
+                supportsVirtualDisplay: this.supportsVirtualDisplay,
             }
         }));
     }

@@ -29,6 +29,10 @@ Window {
     // Multi-monitor: display list per device. Map: deviceId -> { displays: [], activeIndex: 0 }
     property var displayListMap: ({})
     property int displayListVersion: 0  // Increment to notify changes
+
+    // Virtual displays per device. Map: deviceId -> [{index, width, height, refreshRate}]
+    property var virtualDisplayMap: ({})
+    property int virtualDisplayVersion: 0
     
     // C++ ConnectionListModel — only affected delegates are created/destroyed
     ConnectionListModel {
@@ -443,6 +447,18 @@ Window {
                 var stats = devId ? remoteWindow.getPerformanceStats(devId) : null
                 return stats ? (stats.supportsPrivacyScreen || false) : false
             }
+            supportsVirtualDisplay: {
+                var devId = currentTabIndex >= 0 && currentTabIndex < connectionModel.count 
+                    ? connectionModel.deviceIdAt(currentTabIndex) : ""
+                var stats = devId ? remoteWindow.getPerformanceStats(devId) : null
+                return stats ? (stats.supportsVirtualDisplay || false) : false
+            }
+            virtualDisplays: {
+                var devId = currentTabIndex >= 0 && currentTabIndex < connectionModel.count
+                    ? connectionModel.deviceIdAt(currentTabIndex) : ""
+                var _ = remoteWindow.virtualDisplayVersion
+                return devId ? (remoteWindow.virtualDisplayMap[devId] || []) : []
+            }
             emergencyStopActive: remoteWindow.emergencyStopActive
             displayList: {
                 var devId = currentTabIndex >= 0 && currentTabIndex < connectionModel.count
@@ -652,16 +668,38 @@ Window {
     Connections {
         target: remoteWindow.clientManager
 
-        function onHostCapabilitiesChanged(deviceId, supportsSendAttentionSequence, supportsLockWorkstation, supportsFileTransfer, supportsPrivacyScreen) {
+        function onHostCapabilitiesChanged(deviceId, supportsSendAttentionSequence, supportsLockWorkstation, supportsFileTransfer, supportsPrivacyScreen, supportsVirtualDisplay) {
             var current = remoteWindow.performanceStatsMap[deviceId] || {}
             var newStatsMap = Object.assign({}, remoteWindow.performanceStatsMap)
             newStatsMap[deviceId] = Object.assign({}, current, {
                 supportsSendAttentionSequence: supportsSendAttentionSequence,
                 supportsLockWorkstation: supportsLockWorkstation,
                 supportsFileTransfer: supportsFileTransfer,
-                supportsPrivacyScreen: supportsPrivacyScreen
+                supportsPrivacyScreen: supportsPrivacyScreen,
+                supportsVirtualDisplay: supportsVirtualDisplay
             })
             remoteWindow.performanceStatsMap = newStatsMap
+        }
+    }
+
+    // Monitor virtual display state changes
+    Connections {
+        target: remoteWindow.clientManager
+
+        function onVirtualDisplayStateChanged(deviceId, state) {
+            var type = state.type || ""
+            if (type === "created" || type === "removed" || type === "removedAll") {
+                // Re-query to get the latest list
+                remoteWindow.clientManager.queryVirtualDisplays(deviceId)
+            } else if (type === "state") {
+                var displays = state.displays || []
+                var newMap = Object.assign({}, remoteWindow.virtualDisplayMap)
+                newMap[deviceId] = displays
+                remoteWindow.virtualDisplayMap = newMap
+                remoteWindow.virtualDisplayVersion++
+            } else if (type === "error") {
+                console.warn("Virtual display error:", state.message)
+            }
         }
     }
 

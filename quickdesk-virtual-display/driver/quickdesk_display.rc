@@ -1,0 +1,11 @@
+#include <windows.h>
+#include <ntverp.h>
+
+#define VER_FILETYPE                VFT_DLL
+#define VER_FILESUBTYPE             VFT_UNKNOWN
+#define VER_FILEDESCRIPTION_STR     "UMDF Indirect Display Driver Sample"
+#define VER_INTERNALNAME_STR        "quickdesk_display"
+#define VER_ORIGINALFILENAME_STR    "quickdesk_display.dll"
+
+#include "common.ver"
+

@@ -133,6 +133,7 @@ AI配置
 - 自适应帧率与码率
 - 帧率增强模式（办公 / 游戏）
 - 隐私屏幕模式 —— 远程控制时黑屏被控端物理显示器并阻断本地键鼠输入，保护操作隐私（Windows 10 2004+）
+- 虚拟屏 —— 通过 IDD 驱动创建虚拟显示器，支持多屏扩展、Headless 服务器远程、隐私隔离及分辨率自适应（Windows 10 2004+，需安装虚拟显示器驱动）
 
 ### 连接管理
 - 9 位设备 ID + 临时访问码机制
@@ -252,6 +253,47 @@ graph TD
 2. 被控端会自动生成 **设备 ID** 和 **访问码**
 3. 在主控端输入被控端的设备 ID 和访问码，点击**连接**
 4. 连接成功后即可远程控制
+
+### 静默安装（Windows 安装包）
+
+Windows 安装程序由 **Inno Setup** 生成（`scripts/installer/quickdesk.iss`），可使用 Inno 标准命令行参数：
+
+| 参数 | 说明 |
+|------|------|
+| `/SILENT` | 不显示向导页，可能仍显示进度窗口 |
+| `/VERYSILENT` | 完全无人值守（不显示进度窗口） |
+| `/DIR="路径"` | 指定安装目录（可选） |
+| `/TASKS="..."` | 逗号分隔的任务列表，对应脚本 `[Tasks]` |
+
+可选任务：
+
+| 任务名 | 说明 |
+|--------|------|
+| `desktopicon` | 创建桌面快捷方式 |
+| `startmenuicon` | 创建开始菜单快捷方式 |
+| `vdd` | 安装虚拟显示器驱动（IDD）及相关文件，虚拟屏功能所需 |
+
+三个任务默认均为勾选（`Flags: checkedonce`，首次安装默认勾选，升级安装保留用户上次选择）。若不需要虚拟显示器驱动，可通过 `/TASKS` 显式排除 `vdd`。
+
+示例：
+
+```bat
+REM 使用安装程序默认勾选的任务（通常包含虚拟显示器驱动）
+QuickDesk-win-x64-setup.exe /VERYSILENT
+
+REM 显式指定任务
+QuickDesk-win-x64-setup.exe /VERYSILENT /TASKS="desktopicon,startmenuicon,vdd"
+
+REM 不安装虚拟显示器驱动及对应文件
+QuickDesk-win-x64-setup.exe /VERYSILENT /TASKS="desktopicon,startmenuicon"
+
+REM 指定安装目录
+QuickDesk-win-x64-setup.exe /VERYSILENT /DIR="D:\QuickDesk"
+```
+
+静默安装完成后，**不会自动启动 QuickDesk 主界面**（安装脚本中为 `skipifsilent`），但 **`QuickDeskHost` Windows 服务**仍按 `[Run]` 段配置执行安装与启动。
+
+安装需要**管理员权限**（脚本中 `PrivilegesRequired=admin`）。
 
 ## 从源码编译
 
@@ -425,6 +467,7 @@ QuickDesk/
 - [x] **工作流录制与回放（录制、回放、参数化）**
 - [x] **人机协同与信任层（风险评估、确认弹窗、急停、审计日志）**
 - [x] **隐私屏幕 —— 远程控制时黑屏被控端物理显示器，阻断本地输入**
+- [x] **虚拟屏 —— IDD 虚拟显示器驱动，支持多屏扩展、Headless 远程、分辨率自适应**
 - [x] 文件传输
 - [x] 音频传输
 - [x] 无人值守访问

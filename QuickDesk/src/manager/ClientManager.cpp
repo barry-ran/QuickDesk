@@ -452,6 +452,86 @@ bool ClientManager::supportsPrivacyScreen(const QString& deviceId) const
     return it.value().supportsPrivacyScreen;
 }
 
+void ClientManager::createVirtualDisplay(const QString& deviceId,
+                                          int width, int height, int refreshRate)
+{
+    if (!m_messaging || !m_messaging->isReady()) {
+        LOG_WARN("Cannot create virtual display: messaging not ready");
+        return;
+    }
+    QString connId = connectionIdFor(deviceId);
+    if (connId.isEmpty()) return;
+
+    QJsonObject data;
+    data["action"] = "create";
+    data["width"] = width;
+    data["height"] = height;
+    data["refreshRate"] = refreshRate;
+
+    QJsonObject msg;
+    msg["type"] = "virtualDisplayCommand";
+    msg["connectionId"] = connId;
+    msg["data"] = QString::fromUtf8(QJsonDocument(data).toJson(QJsonDocument::Compact));
+    m_messaging->sendMessage(msg);
+}
+
+void ClientManager::removeVirtualDisplay(const QString& deviceId, int index)
+{
+    if (!m_messaging || !m_messaging->isReady()) return;
+    QString connId = connectionIdFor(deviceId);
+    if (connId.isEmpty()) return;
+
+    QJsonObject data;
+    data["action"] = "remove";
+    data["index"] = index;
+
+    QJsonObject msg;
+    msg["type"] = "virtualDisplayCommand";
+    msg["connectionId"] = connId;
+    msg["data"] = QString::fromUtf8(QJsonDocument(data).toJson(QJsonDocument::Compact));
+    m_messaging->sendMessage(msg);
+}
+
+void ClientManager::removeAllVirtualDisplays(const QString& deviceId)
+{
+    if (!m_messaging || !m_messaging->isReady()) return;
+    QString connId = connectionIdFor(deviceId);
+    if (connId.isEmpty()) return;
+
+    QJsonObject data;
+    data["action"] = "removeAll";
+
+    QJsonObject msg;
+    msg["type"] = "virtualDisplayCommand";
+    msg["connectionId"] = connId;
+    msg["data"] = QString::fromUtf8(QJsonDocument(data).toJson(QJsonDocument::Compact));
+    m_messaging->sendMessage(msg);
+}
+
+void ClientManager::queryVirtualDisplays(const QString& deviceId)
+{
+    if (!m_messaging || !m_messaging->isReady()) return;
+    QString connId = connectionIdFor(deviceId);
+    if (connId.isEmpty()) return;
+
+    QJsonObject data;
+    data["action"] = "query";
+
+    QJsonObject msg;
+    msg["type"] = "virtualDisplayCommand";
+    msg["connectionId"] = connId;
+    msg["data"] = QString::fromUtf8(QJsonDocument(data).toJson(QJsonDocument::Compact));
+    m_messaging->sendMessage(msg);
+}
+
+bool ClientManager::supportsVirtualDisplay(const QString& deviceId) const
+{
+    auto it = m_connections.find(deviceId);
+    if (it == m_connections.end())
+        return false;
+    return it.value().supportsVirtualDisplay;
+}
+
 void ClientManager::startFileUpload(const QString& deviceId, const QUrl& fileUrl)
 {
     if (!m_messaging || !m_messaging->isReady()) {
@@ -714,6 +794,8 @@ void ClientManager::onMessageReceived(const QJsonObject& message)
         handleFileDownloadError(message);
     } else if (type == "skillBridgeResponse") {
         handleSkillBridgeResponse(message);
+    } else if (type == "virtualDisplayState") {
+        handleVirtualDisplayState(message);
     } else if (type == "setFramerateResponse" || type == "setResolutionResponse" || type == "setFramerateBoostResponse" || type == "setBitrateResponse") {
         bool success = message["success"].toBool();
         if (!success) {
@@ -1280,6 +1362,7 @@ void ClientManager::handleHostCapabilities(const QJsonObject& message)
     bool supportsLock = message["supportsLockWorkstation"].toBool();
     bool supportsFile = message["supportsFileTransfer"].toBool();
     bool supportsPrivacy = message["supportsPrivacyScreen"].toBool();
+    bool supportsVD = message["supportsVirtualDisplay"].toBool();
 
     auto it = m_connections.find(deviceId);
     if (it != m_connections.end()) {
@@ -1287,12 +1370,13 @@ void ClientManager::handleHostCapabilities(const QJsonObject& message)
         it->supportsLockWorkstation = supportsLock;
         it->supportsFileTransfer = supportsFile;
         it->supportsPrivacyScreen = supportsPrivacy;
+        it->supportsVirtualDisplay = supportsVD;
     }
 
-    LOG_INFO("Host capabilities for {}: SAS={} Lock={} FileTransfer={} PrivacyScreen={}",
-             deviceId.toStdString(), supportsSAS, supportsLock, supportsFile, supportsPrivacy);
+    LOG_INFO("Host capabilities for {}: SAS={} Lock={} FileTransfer={} PrivacyScreen={} VirtualDisplay={}",
+             deviceId.toStdString(), supportsSAS, supportsLock, supportsFile, supportsPrivacy, supportsVD);
 
-    emit hostCapabilitiesChanged(deviceId, supportsSAS, supportsLock, supportsFile, supportsPrivacy);
+    emit hostCapabilitiesChanged(deviceId, supportsSAS, supportsLock, supportsFile, supportsPrivacy, supportsVD);
 }
 
 void ClientManager::handleFileTransferProgress(const QJsonObject& message)
@@ -1413,6 +1497,22 @@ void ClientManager::handleSkillBridgeResponse(const QJsonObject& message)
     QJsonObject response = doc.isObject() ? doc.object() : QJsonObject{{"raw", data}};
 
     emit skillBridgeResponseReceived(deviceId, response);
+}
+
+void ClientManager::handleVirtualDisplayState(const QJsonObject& message)
+{
+    QString connId = message["connectionId"].toString();
+    QString deviceId = findDeviceId(connId);
+    if (deviceId.isEmpty()) return;
+
+    QString data = message["data"].toString();
+    QJsonDocument doc = QJsonDocument::fromJson(data.toUtf8());
+    QJsonObject state = doc.isObject() ? doc.object() : QJsonObject{{"raw", data}};
+
+    LOG_INFO("Virtual display state for {}: {}", deviceId.toStdString(),
+             data.toStdString());
+
+    emit virtualDisplayStateChanged(deviceId, state);
 }
 
 } // namespace quickdesk

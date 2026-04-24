@@ -58,6 +58,10 @@ chinesesimplified.WelcomeLabel2=即将在您的计算机上安装 [name/ver]。%
 [CustomMessages]
 english.CreateStartMenuShortcut=Create a Start Menu shortcut
 chinesesimplified.CreateStartMenuShortcut=创建开始菜单快捷方式
+english.VirtualDisplayDriver=Virtual Display Driver:
+english.InstallVirtualDisplayDriver=Install virtual display driver (required for virtual display feature)
+chinesesimplified.VirtualDisplayDriver=虚拟显示器驱动：
+chinesesimplified.InstallVirtualDisplayDriver=安装虚拟显示器驱动（虚拟屏功能需要）
 
 [Code]
 var
@@ -146,6 +150,12 @@ begin
   if FileExists(ExpandConstant('{app}\quickdesk_host.exe')) then
     Exec(ExpandConstant('{app}\quickdesk_host.exe'), '--uninstall-service', '',
          SW_HIDE, ewWaitUntilTerminated, ResultCode);
+
+  // Remove old virtual display driver so the new version can be installed cleanly.
+  if FileExists(ExpandConstant('{app}\drivers\vdd\nefconw.exe')) then
+    Exec(ExpandConstant('{app}\drivers\vdd\nefconw.exe'),
+         '--remove-device-node --hardware-id Root\QuickDesk\VDD --class-guid "{4D36E968-E325-11CE-BFC1-08002BE10318}"',
+         '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   Result := '';
 end;
 
@@ -161,15 +171,23 @@ begin
     if FileExists(ExpandConstant('{app}\quickdesk_host.exe')) then
       Exec(ExpandConstant('{app}\quickdesk_host.exe'), '--uninstall-service', '',
            SW_HIDE, ewWaitUntilTerminated, ResultCode);
+
+    // Remove virtual display driver (cleanup regardless of install-time choice).
+    if FileExists(ExpandConstant('{app}\drivers\vdd\nefconw.exe')) then
+      Exec(ExpandConstant('{app}\drivers\vdd\nefconw.exe'),
+           '--remove-device-node --hardware-id Root\QuickDesk\VDD --class-guid "{4D36E968-E325-11CE-BFC1-08002BE10318}"',
+           '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   end;
 end;
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: checkedonce
 Name: "startmenuicon"; Description: "{cm:CreateStartMenuShortcut}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: checkedonce
+Name: "vdd"; Description: "{cm:InstallVirtualDisplayDriver}"; GroupDescription: "{cm:VirtualDisplayDriver}"; Flags: checkedonce
 
 [Files]
-Source: "{#MyPublishDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#MyPublishDir}\*"; DestDir: "{app}"; Excludes: "\drivers\vdd\*"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#MyPublishDir}\drivers\vdd\*"; DestDir: "{app}\drivers\vdd"; Flags: ignoreversion recursesubdirs createallsubdirs; Tasks: vdd
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: startmenuicon
@@ -177,6 +195,10 @@ Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"; Tasks: start
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]
+; Virtual display driver installation (only if user selected the task).
+Filename: "{app}\drivers\vdd\nefconw.exe"; Parameters: "--remove-device-node --hardware-id Root\QuickDesk\VDD --class-guid ""{{4D36E968-E325-11CE-BFC1-08002BE10318}}"""; StatusMsg: "Removing old virtual display driver..."; Flags: runhidden waituntilterminated; Tasks: vdd
+Filename: "{app}\drivers\vdd\nefconw.exe"; Parameters: "--create-device-node --class-name Display --class-guid ""{{4D36E968-E325-11CE-BFC1-08002BE10318}}"" --hardware-id Root\QuickDesk\VDD --no-duplicates"; StatusMsg: "Creating virtual display device..."; Flags: runhidden waituntilterminated; Tasks: vdd
+Filename: "{app}\drivers\vdd\nefconw.exe"; Parameters: "--install-driver --inf-path ""{app}\drivers\vdd\quickdesk_display.inf"""; StatusMsg: "Installing virtual display driver..."; Flags: runhidden waituntilterminated; Tasks: vdd
 ; Install the QuickDeskHost Windows service (runs as SYSTEM).
 ; Pass --log-dir and --config-dir so that the service worker stores logs and
 ; config in the same location as the Qt child-process mode.

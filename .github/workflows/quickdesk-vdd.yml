@@ -1,0 +1,60 @@
+name: QuickDesk Virtual Display Driver
+
+on:
+  push:
+    paths:
+      - 'quickdesk-virtual-display/**'
+      - '.github/workflows/quickdesk-vdd.yml'
+  pull_request:
+    paths:
+      - 'quickdesk-virtual-display/**'
+      - '.github/workflows/quickdesk-vdd.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  build:
+    name: Build VDD
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check solution exists
+        id: check
+        shell: pwsh
+        run: |
+          if (Test-Path "quickdesk-virtual-display\quickdesk-virtual-display.sln") {
+            echo "exists=true" >> $env:GITHUB_OUTPUT
+          } else {
+            echo "exists=false" >> $env:GITHUB_OUTPUT
+            Write-Host "::warning::VDD solution not found, skipping build"
+          }
+
+      - name: Install WDK
+        if: steps.check.outputs.exists == 'true'
+        shell: pwsh
+        run: choco install windowsdriverkit11 -y --no-progress
+
+      - name: Build driver
+        if: steps.check.outputs.exists == 'true'
+        shell: cmd
+        run: call scripts\build_vdd_win.bat Release
+
+      - name: Get version
+        if: steps.check.outputs.exists == 'true'
+        id: version
+        shell: bash
+        run: |
+          echo "ref-name=${GITHUB_REF##*/}" >> $GITHUB_OUTPUT
+
+      - name: Upload driver artifact
+        if: steps.check.outputs.exists == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: quickdesk-vdd-${{ steps.version.outputs.ref-name }}
+          path: output/x64/Release/drivers/vdd/
