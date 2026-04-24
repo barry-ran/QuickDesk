@@ -40,6 +40,10 @@ jobs:
         shell: pwsh
         run: choco install windowsdriverkit11 -y --no-progress
 
+      - name: Setup MSBuild
+        if: steps.check.outputs.exists == 'true'
+        uses: microsoft/setup-msbuild@v2
+
       - name: Build driver
         if: steps.check.outputs.exists == 'true'
         shell: cmd
