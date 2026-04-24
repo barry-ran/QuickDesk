@@ -57,7 +57,7 @@ echo ---------------------------------------------------------------
 echo build driver
 echo ---------------------------------------------------------------
 
-msbuild "%vdd_sln%" /p:Configuration=%build_mode% /p:Platform=x64 /m
+msbuild "%vdd_sln%" /p:Configuration=%build_mode% /p:Platform=x64 /m /t:quickdesk_display
 
 if %errorlevel% neq 0 (
     echo [!] driver build failed with error %errorlevel%

@@ -38,7 +38,13 @@ jobs:
       - name: Install WDK
         if: steps.check.outputs.exists == 'true'
         shell: pwsh
-        run: choco install windowsdriverkit11 -y --no-progress
+        run: |
+          # Download and install WDK 10.0.26100 (matches windows-latest SDK)
+          $url = 'https://go.microsoft.com/fwlink/?linkid=2272234'
+          $installer = "$env:TEMP\wdksetup.exe"
+          Invoke-WebRequest -Uri $url -OutFile $installer -UseBasicParsing
+          Start-Process -FilePath $installer -ArgumentList '/quiet','/norestart' -Wait
+          Write-Host 'WDK installed'
 
       - name: Setup MSBuild
         if: steps.check.outputs.exists == 'true'
@@ -47,7 +53,8 @@ jobs:
       - name: Build driver
         if: steps.check.outputs.exists == 'true'
         shell: cmd
-        run: call scripts\build_vdd_win.bat Release
+        run: |
+          call scripts\build_vdd_win.bat Release
 
       - name: Get version
         if: steps.check.outputs.exists == 'true'
