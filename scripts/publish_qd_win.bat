@@ -172,16 +172,25 @@ if exist "%release_path%\skills" (
 )
 echo=
 
-:: copy virtual display driver files (from build_vdd_win.bat output)
+:: copy virtual display driver files
+:: Priority: build output > prebuilt directory
 set vdd_output=%script_path%..\output\x64\%build_mode%\drivers\vdd
+set vdd_prebuilt=%script_path%..\quickdesk-virtual-display\prebuilt\x64
 if exist "%vdd_output%\quickdesk_display.dll" (
-    echo [*] copying virtual display driver...
+    echo [*] copying virtual display driver from build output...
     if not exist "%publish_path%drivers\vdd\" mkdir "%publish_path%drivers\vdd\"
     xcopy "%vdd_output%\*" "%publish_path%drivers\vdd\" /E /Y /Q >nul
-    echo [*] virtual display driver copied
+    echo [*] virtual display driver copied ^(from build output^)
+) else if exist "%vdd_prebuilt%\quickdesk_display.dll" (
+    echo [*] copying virtual display driver from prebuilt...
+    if not exist "%publish_path%drivers\vdd\" mkdir "%publish_path%drivers\vdd\"
+    xcopy "%vdd_prebuilt%\*" "%publish_path%drivers\vdd\" /E /Y /Q >nul
+    echo [*] virtual display driver copied ^(from prebuilt^)
 ) else (
-    echo [!] warning: virtual display driver not found in %vdd_output%
-    echo [!] skipping VDD ^(run build_vdd_win.bat first if needed^)
+    echo [!] warning: virtual display driver not found
+    echo [!] checked: %vdd_output%
+    echo [!] checked: %vdd_prebuilt%
+    echo [!] skipping VDD ^(build locally or add prebuilt files^)
 )
 echo=
 

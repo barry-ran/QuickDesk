@@ -36,3 +36,8 @@ ARM64/
 # Third-party tools (downloaded, not tracked)
 tools/
 *.exe
+
+# Keep prebuilt driver binaries for CI packaging
+# (must be at the end to override *.dll, *.exe, *.cat, x64/ rules above)
+!prebuilt/
+!prebuilt/**
