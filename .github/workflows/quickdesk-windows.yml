@@ -5,7 +5,6 @@ on:
     paths:
       - 'QuickDesk/**'
       - 'quickdesk-mcp/**'
-      - 'quickdesk-virtual-display/**'
       - 'cmake/**'
       - 'scripts/**'
       - 'WebClient/**'
@@ -15,7 +14,6 @@ on:
     paths:
       - 'QuickDesk/**'
       - 'quickdesk-mcp/**'
-      - 'quickdesk-virtual-display/**'
       - 'cmake/**'
       - 'scripts/**'
       - 'WebClient/**'
@@ -93,38 +91,6 @@ jobs:
       - name: Build WebClient
         shell: cmd
         run: call scripts\build_webclient_win.bat
-
-      - name: Check VDD solution exists
-        id: vdd-check
-        shell: pwsh
-        run: |
-          if (Test-Path "quickdesk-virtual-display\quickdesk-virtual-display.sln") {
-            echo "exists=true" >> $env:GITHUB_OUTPUT
-          } else {
-            echo "exists=false" >> $env:GITHUB_OUTPUT
-            Write-Host "::notice::VDD solution not found, skipping driver build"
-          }
-
-      - name: Install WDK
-        if: steps.vdd-check.outputs.exists == 'true'
-        shell: pwsh
-        run: |
-          # Download and install WDK 10.0.26100 (matches windows-latest SDK)
-          $url = 'https://go.microsoft.com/fwlink/?linkid=2272234'
-          $installer = "$env:TEMP\wdksetup.exe"
-          Invoke-WebRequest -Uri $url -OutFile $installer -UseBasicParsing
-          Start-Process -FilePath $installer -ArgumentList '/quiet','/norestart' -Wait
-          Write-Host 'WDK installed'
-
-      - name: Setup MSBuild
-        if: steps.vdd-check.outputs.exists == 'true'
-        uses: microsoft/setup-msbuild@v2
-
-      - name: Build Virtual Display Driver
-        if: steps.vdd-check.outputs.exists == 'true'
-        shell: cmd
-        run: |
-          call scripts\build_vdd_win.bat Release
 
       - name: Publish
         shell: cmd
