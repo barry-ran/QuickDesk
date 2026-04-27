@@ -60,8 +60,12 @@ echo ---------------------------------------------------------------
 msbuild "%vdd_sln%" /p:Configuration=%build_mode% /p:Platform=x64 /m /t:quickdesk_display /p:SpectreMitigation=false /p:SignMode=Off /p:EnableInf2cat=false
 
 if %errorlevel% neq 0 (
-    echo [!] driver build failed with error %errorlevel%
-    goto return
+    REM InfVerif may cause non-zero exit even though DLL was built successfully.
+    if not exist "%vdd_project%\x64\%build_mode%\quickdesk_display.dll" (
+        echo [!] driver build failed with error %errorlevel%
+        goto return
+    )
+    echo [*] msbuild exited with warnings/errors but DLL was produced, continuing...
 )
 
 echo=
@@ -74,19 +78,24 @@ if not exist "%output_path%" (
     mkdir "%output_path%"
 )
 
-:: copy driver files (UMDF IDD driver outputs .dll, not .sys)
+:: copy driver files from $(OutDir) = quickdesk-virtual-display\x64\Release\
 echo [*] copying driver files...
-set driver_out=%vdd_project%\driver\x64\%build_mode%\quickdesk_display
+set driver_out=%vdd_project%\x64\%build_mode%
 if exist "%driver_out%\quickdesk_display.dll" (
     copy /y "%driver_out%\quickdesk_display.dll" "%output_path%\" >nul
+    echo [*] copied quickdesk_display.dll
 ) else (
     echo [!] warning: quickdesk_display.dll not found in %driver_out%
 )
 if exist "%driver_out%\quickdesk_display.inf" (
     copy /y "%driver_out%\quickdesk_display.inf" "%output_path%\" >nul
+    echo [*] copied quickdesk_display.inf
+) else (
+    echo [!] warning: quickdesk_display.inf not found in %driver_out%
 )
 if exist "%driver_out%\quickdesk_display.cat" (
     copy /y "%driver_out%\quickdesk_display.cat" "%output_path%\" >nul
+    echo [*] copied quickdesk_display.cat
 )
 
 :: copy nefconw tool
