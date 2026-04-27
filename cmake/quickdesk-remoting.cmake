@@ -1,6 +1,6 @@
 include(FetchContent)
 
-set(CRASHPAD_URL https://github.com/barry-ran/quickdesk-remoting/releases/download/v0.0.8)
+set(CRASHPAD_URL https://github.com/barry-ran/quickdesk-remoting/releases/download/v0.0.9)
 if(WIN32)
     set(CRASHPAD_URL ${CRASHPAD_URL}/Windows-${QD_CPU_ARCH}.zip)
 elseif(APPLE)
