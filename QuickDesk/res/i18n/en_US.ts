@@ -183,267 +183,338 @@
 <context>
     <name>FloatingToolButton</name>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="230"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="232"/>
         <source>Displays</source>
         <translation>Displays</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="278"/>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="288"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="280"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="290"/>
         <source>Display</source>
         <translation>Display</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="280"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="282"/>
         <source>Switched to %1</source>
         <translation>Switched to %1</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="316"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="318"/>
         <source>Smart Boost</source>
         <translation>Smart Boost</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="364"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="366"/>
         <source>Target Framerate</source>
         <translation>Target Framerate</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="412"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="414"/>
         <source>Resolution</source>
         <translation>Resolution</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="465"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="467"/>
         <source>Bitrate</source>
         <translation>Bitrate</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="512"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="514"/>
         <source>Fit Window</source>
         <translation>Fit Window</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="518"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="520"/>
         <source>Window resized to fit remote desktop</source>
         <translation>Window resized to fit remote desktop</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="524"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="526"/>
         <source>Video Stats</source>
         <translation>Video Stats</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="533"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="535"/>
         <source>Mute Audio</source>
         <translation>Mute Audio</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="533"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="535"/>
         <source>Unmute Audio</source>
         <translation>Unmute Audio</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="541"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="543"/>
         <source>Audio: Enabled</source>
         <translation>Audio: Enabled</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="541"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="543"/>
         <source>Audio: Muted</source>
         <translation>Audio: Muted</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="555"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="557"/>
         <source>Send Ctrl+Alt+Del</source>
         <translation>Send Ctrl+Alt+Del</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="561"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="563"/>
         <source>Ctrl+Alt+Del sent</source>
         <translation>Ctrl+Alt+Del sent</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="568"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="570"/>
         <source>Lock Screen</source>
         <translation>Lock Screen</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="574"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="576"/>
         <source>Lock screen sent</source>
         <translation>Lock screen sent</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="581"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="583"/>
         <source>Disable Privacy Screen</source>
         <translation>Disable Privacy Screen</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="581"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="583"/>
         <source>Privacy Screen</source>
         <translation>Privacy Screen</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="590"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="592"/>
         <source>Privacy Screen: On</source>
         <translation>Privacy Screen: On</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="590"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="592"/>
         <source>Privacy Screen: Off</source>
         <translation>Privacy Screen: Off</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="603"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="601"/>
+        <source>Virtual Display</source>
+        <translation>Virtual Display</translation>
+    </message>
+    <message>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="644"/>
         <source>Upload File</source>
         <translation>Upload File</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="613"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="654"/>
         <source>Download File</source>
         <translation>Download File</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="623"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="664"/>
         <source>Transfers</source>
         <translation>Transfers</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="635"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="676"/>
         <source>Deactivate Emergency Stop</source>
         <translation>Deactivate Emergency Stop</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="635"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="676"/>
         <source>Emergency Stop</source>
         <translation>Emergency Stop</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="646"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="687"/>
         <source>Disconnect</source>
         <translation>Disconnect</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="671"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="712"/>
         <source>Off</source>
         <translation>Off</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="676"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="717"/>
         <source>Smart Boost: Off</source>
         <translation>Smart Boost: Off</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="681"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="722"/>
         <source>Office</source>
         <translation>Office</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="686"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="727"/>
         <source>Smart Boost: Office Mode</source>
         <translation>Smart Boost: Office Mode</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="691"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="732"/>
         <source>Gaming</source>
         <translation>Gaming</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="696"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="737"/>
         <source>Smart Boost: Gaming Mode</source>
         <translation>Smart Boost: Gaming Mode</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="721"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="762"/>
         <source>Target Framerate: 60 FPS</source>
         <translation>Target Framerate: 60 FPS</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="733"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="774"/>
         <source>Target Framerate: 30 FPS</source>
         <translation>Target Framerate: 30 FPS</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="745"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="786"/>
         <source>Target Framerate: 15 FPS</source>
         <translation>Target Framerate: 15 FPS</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="757"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="798"/>
         <source>Target Framerate: 5 FPS</source>
         <translation>Target Framerate: 5 FPS</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="779"/>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="781"/>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="794"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="820"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="822"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="835"/>
         <source>Original</source>
         <translation>Original</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="794"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="835"/>
         <source>Resolution: </source>
         <translation>Resolution: </translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="809"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="850"/>
         <source>Resolution: 3840x2160 (4K)</source>
         <translation>Resolution: 3840x2160 (4K)</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="820"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="861"/>
         <source>Resolution: 2560x1440 (2K)</source>
         <translation>Resolution: 2560x1440 (2K)</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="831"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="872"/>
         <source>Resolution: 1920x1080 (FHD)</source>
         <translation>Resolution: 1920x1080 (FHD)</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="842"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="883"/>
         <source>Resolution: 1600x900</source>
         <translation>Resolution: 1600x900</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="853"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="894"/>
         <source>Resolution: 1366x768</source>
         <translation>Resolution: 1366x768</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="864"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="905"/>
         <source>Resolution: 1280x720</source>
         <translation>Resolution: 1280x720</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="875"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="916"/>
         <source>Resolution: 1024x768</source>
         <translation>Resolution: 1024x768</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="901"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="942"/>
         <source>Bitrate: 100 MiB</source>
         <translation>Bitrate: 100 MiB</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="913"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="954"/>
         <source>Bitrate: 50 MiB</source>
         <translation>Bitrate: 50 MiB</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="925"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="966"/>
         <source>Bitrate: 10 MiB</source>
         <translation>Bitrate: 10 MiB</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="937"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="978"/>
         <source>Bitrate: 5 MiB</source>
         <translation>Bitrate: 5 MiB</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="949"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="990"/>
         <source>Bitrate: 2 MiB</source>
         <translation>Bitrate: 2 MiB</translation>
+    </message>
+    <message>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="1031"/>
+        <source>Add 1920×1080 @60Hz</source>
+        <translation>Add 1920×1080 @60Hz</translation>
+    </message>
+    <message>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="1036"/>
+        <source>Creating virtual display: 1920×1080</source>
+        <translation>Creating virtual display: 1920×1080</translation>
+    </message>
+    <message>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="1020"/>
+        <source>Add 2560×1440 @60Hz</source>
+        <translation>Add 2560×1440 @60Hz</translation>
+    </message>
+    <message>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="1025"/>
+        <source>Creating virtual display: 2560×1440</source>
+        <translation>Creating virtual display: 2560×1440</translation>
+    </message>
+    <message>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="1009"/>
+        <source>Add 3840×2160 @60Hz</source>
+        <translation>Add 3840×2160 @60Hz</translation>
+    </message>
+    <message>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="1014"/>
+        <source>Creating virtual display: 3840×2160</source>
+        <translation>Creating virtual display: 3840×2160</translation>
+    </message>
+    <message>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="1042"/>
+        <source>Add 1280×720 @60Hz</source>
+        <translation>Add 1280×720 @60Hz</translation>
+    </message>
+    <message>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="1047"/>
+        <source>Creating virtual display: 1280×720</source>
+        <translation>Creating virtual display: 1280×720</translation>
+    </message>
+    <message>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="1059"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="1073"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="1087"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="1101"/>
+        <source>Remove #%1</source>
+        <translation>Remove #%1</translation>
+    </message>
+    <message>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="1065"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="1079"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="1093"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="1107"/>
+        <source>Removing virtual display #%1</source>
+        <translation>Removing virtual display #%1</translation>
+    </message>
+    <message>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="1118"/>
+        <source>Remove All</source>
+        <translation>Remove All</translation>
+    </message>
+    <message>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="1124"/>
+        <source>Removing all virtual displays</source>
+        <translation>Removing all virtual displays</translation>
     </message>
 </context>
 <context>
@@ -1185,88 +1256,88 @@
         <translation>QuickDesk - Remote Desktop</translation>
     </message>
     <message>
-        <location filename="../../qml/views/RemoteWindow.qml" line="488"/>
-        <location filename="../../qml/views/RemoteWindow.qml" line="1101"/>
+        <location filename="../../qml/views/RemoteWindow.qml" line="504"/>
+        <location filename="../../qml/views/RemoteWindow.qml" line="1139"/>
         <source>Emergency stop deactivated</source>
         <translation>Emergency stop deactivated</translation>
     </message>
     <message>
-        <location filename="../../qml/views/RemoteWindow.qml" line="492"/>
+        <location filename="../../qml/views/RemoteWindow.qml" line="508"/>
         <source>Emergency stop activated - all AI operations halted</source>
         <translation>Emergency stop activated - all AI operations halted</translation>
     </message>
     <message>
-        <location filename="../../qml/views/RemoteWindow.qml" line="712"/>
+        <location filename="../../qml/views/RemoteWindow.qml" line="750"/>
         <source>Select Files to Upload</source>
         <translation>Select Files to Upload</translation>
     </message>
     <message>
-        <location filename="../../qml/views/RemoteWindow.qml" line="803"/>
+        <location filename="../../qml/views/RemoteWindow.qml" line="841"/>
         <source>Upload complete: %1</source>
         <translation>Upload complete: %1</translation>
     </message>
     <message>
-        <location filename="../../qml/views/RemoteWindow.qml" line="822"/>
+        <location filename="../../qml/views/RemoteWindow.qml" line="860"/>
         <source>Upload failed: %1</source>
         <translation>Upload failed: %1</translation>
     </message>
     <message>
-        <location filename="../../qml/views/RemoteWindow.qml" line="854"/>
+        <location filename="../../qml/views/RemoteWindow.qml" line="892"/>
         <source>Download complete: %1</source>
         <translation>Download complete: %1</translation>
     </message>
     <message>
-        <location filename="../../qml/views/RemoteWindow.qml" line="863"/>
+        <location filename="../../qml/views/RemoteWindow.qml" line="901"/>
         <source>Download failed: %1</source>
         <translation>Download failed: %1</translation>
     </message>
     <message>
-        <location filename="../../qml/views/RemoteWindow.qml" line="872"/>
+        <location filename="../../qml/views/RemoteWindow.qml" line="910"/>
         <source>File Transfers</source>
         <translation>File Transfers</translation>
     </message>
     <message>
-        <location filename="../../qml/views/RemoteWindow.qml" line="885"/>
+        <location filename="../../qml/views/RemoteWindow.qml" line="923"/>
         <source>No Transfers</source>
         <translation>No Transfers</translation>
     </message>
     <message>
-        <location filename="../../qml/views/RemoteWindow.qml" line="886"/>
+        <location filename="../../qml/views/RemoteWindow.qml" line="924"/>
         <source>Use the menu to upload or download files</source>
         <translation>Use the menu to upload or download files</translation>
     </message>
     <message>
-        <location filename="../../qml/views/RemoteWindow.qml" line="968"/>
+        <location filename="../../qml/views/RemoteWindow.qml" line="1006"/>
         <source>Cancelled</source>
         <translation>Cancelled</translation>
     </message>
     <message>
-        <location filename="../../qml/views/RemoteWindow.qml" line="982"/>
+        <location filename="../../qml/views/RemoteWindow.qml" line="1020"/>
         <source>Open File</source>
         <translation>Open File</translation>
     </message>
     <message>
-        <location filename="../../qml/views/RemoteWindow.qml" line="991"/>
+        <location filename="../../qml/views/RemoteWindow.qml" line="1029"/>
         <source>Open Folder</source>
         <translation>Open Folder</translation>
     </message>
     <message>
-        <location filename="../../qml/views/RemoteWindow.qml" line="1000"/>
+        <location filename="../../qml/views/RemoteWindow.qml" line="1038"/>
         <source>Delete File</source>
         <translation>Delete File</translation>
     </message>
     <message>
-        <location filename="../../qml/views/RemoteWindow.qml" line="1004"/>
+        <location filename="../../qml/views/RemoteWindow.qml" line="1042"/>
         <source>File deleted</source>
         <translation>File deleted</translation>
     </message>
     <message>
-        <location filename="../../qml/views/RemoteWindow.qml" line="1061"/>
+        <location filename="../../qml/views/RemoteWindow.qml" line="1099"/>
         <source>Clear Completed</source>
         <translation>Clear Completed</translation>
     </message>
     <message>
-        <location filename="../../qml/views/RemoteWindow.qml" line="1097"/>
+        <location filename="../../qml/views/RemoteWindow.qml" line="1135"/>
         <source>Emergency stop activated: </source>
         <translation>Emergency stop activated: </translation>
     </message>
@@ -1664,27 +1735,27 @@
 <context>
     <name>quickdesk::ClientManager</name>
     <message>
-        <location filename="../../src/manager/ClientManager.cpp" line="1028"/>
+        <location filename="../../src/manager/ClientManager.cpp" line="1110"/>
         <source>Authentication failed</source>
         <translation>Authentication failed</translation>
     </message>
     <message>
-        <location filename="../../src/manager/ClientManager.cpp" line="1029"/>
+        <location filename="../../src/manager/ClientManager.cpp" line="1111"/>
         <source>Channel error</source>
         <translation>Channel error</translation>
     </message>
     <message>
-        <location filename="../../src/manager/ClientManager.cpp" line="1030"/>
+        <location filename="../../src/manager/ClientManager.cpp" line="1112"/>
         <source>Connection timeout</source>
         <translation>Connection timeout</translation>
     </message>
     <message>
-        <location filename="../../src/manager/ClientManager.cpp" line="1031"/>
+        <location filename="../../src/manager/ClientManager.cpp" line="1113"/>
         <source>Network error</source>
         <translation>Network error</translation>
     </message>
     <message>
-        <location filename="../../src/manager/ClientManager.cpp" line="1032"/>
+        <location filename="../../src/manager/ClientManager.cpp" line="1114"/>
         <source>Connection failed (error code: %1)</source>
         <translation>Connection failed (error code: %1)</translation>
     </message>
