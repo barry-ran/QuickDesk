@@ -1006,12 +1006,12 @@ Item {
         }
 
         QDMenuItem {
-            text: qsTr("Add 1920×1080 @60Hz")
+            text: qsTr("Add 3840×2160 @60Hz")
             iconText: FluentIconGlyph.addGlyph
             onTriggered: {
                 if (root.clientManager) {
-                    root.clientManager.createVirtualDisplay(root.deviceId, 1920, 1080, 60)
-                    root.showToast(qsTr("Creating virtual display: 1920×1080"), QDToast.Type.Info)
+                    root.clientManager.createVirtualDisplay(root.deviceId, 3840, 2160, 60)
+                    root.showToast(qsTr("Creating virtual display: 3840×2160"), QDToast.Type.Info)
                 }
             }
         }
@@ -1028,12 +1028,12 @@ Item {
         }
 
         QDMenuItem {
-            text: qsTr("Add 3840×2160 @60Hz")
+            text: qsTr("Add 1920×1080 @60Hz")
             iconText: FluentIconGlyph.addGlyph
             onTriggered: {
                 if (root.clientManager) {
-                    root.clientManager.createVirtualDisplay(root.deviceId, 3840, 2160, 60)
-                    root.showToast(qsTr("Creating virtual display: 3840×2160"), QDToast.Type.Info)
+                    root.clientManager.createVirtualDisplay(root.deviceId, 1920, 1080, 60)
+                    root.showToast(qsTr("Creating virtual display: 1920×1080"), QDToast.Type.Info)
                 }
             }
         }
