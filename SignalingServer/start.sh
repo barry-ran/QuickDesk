@@ -31,6 +31,33 @@ gosu postgres psql -tc "SELECT 1 FROM pg_database WHERE datname='${DB_NAME:-quic
 echo "[quickdesk] Starting Redis..."
 redis-server --daemonize yes --dir "$REDIS_DIR" --appendonly yes --bind 127.0.0.1
 
+# Wait for Redis to be ready
+echo "[quickdesk] Waiting for Redis to be ready..."
+REDIS_READY=0
+for i in $(seq 1 30); do
+    if redis-cli ping 2>/dev/null | grep -q PONG; then
+        echo "[quickdesk] Redis is ready."
+        REDIS_READY=1
+        break
+    fi
+    sleep 1
+done
+
+# If Redis is stuck (likely corrupted AOF), reset persistence and restart
+if [ "$REDIS_READY" -eq 0 ]; then
+    echo "[quickdesk] WARNING: Redis not ready after 30s, likely corrupted AOF. Resetting persistence data..."
+    redis-cli shutdown nosave 2>/dev/null || true
+    rm -rf "$REDIS_DIR/appendonlydir" "$REDIS_DIR/dump.rdb"
+    redis-server --daemonize yes --dir "$REDIS_DIR" --appendonly yes --bind 127.0.0.1
+    sleep 2
+    if redis-cli ping 2>/dev/null | grep -q PONG; then
+        echo "[quickdesk] Redis restarted successfully with clean state."
+    else
+        echo "[quickdesk] ERROR: Redis still not ready after reset. Exiting."
+        exit 1
+    fi
+fi
+
 # ---- Signaling Server ----
 echo "[quickdesk] Starting signaling server..."
 cd /opt/quickdesk
