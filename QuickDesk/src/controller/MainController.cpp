@@ -185,11 +185,15 @@ MainController::MainController(QObject* parent)
 
     // Auth: on logout, notify server device is no longer logged in + stop sync
     connect(m_authManager.get(), &AuthManager::loggedOut, this, [this]() {
+        m_cloudDeviceManager->stopSync();
+    });
+
+    // Notify server before token is cleared (loggedOut fires after token is gone)
+    connect(m_authManager.get(), &AuthManager::loggingOut, this, [this]() {
         QString deviceId = m_hostManager->deviceId();
         if (!deviceId.isEmpty()) {
             m_cloudDeviceManager->deviceLogout(deviceId);
         }
-        m_cloudDeviceManager->stopSync();
     });
 
     // Sync access code changes from cloud devices to recent connections

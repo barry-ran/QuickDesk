@@ -297,6 +297,8 @@ void AuthManager::fetchUserInfo()
 
 void AuthManager::clearSession()
 {
+    emit loggingOut();
+
     m_isLoggedIn = false;
     m_username.clear();
     m_userId = 0;

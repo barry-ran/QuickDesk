@@ -49,6 +49,7 @@ signals:
     void loginFailed(const QString& errorCode, const QString& errorMsg);
     void registerSuccess();
     void registerFailed(const QString& errorCode, const QString& errorMsg);
+    void loggingOut(); // emitted before token is cleared
     void loggedOut();
     void smsCodeSent();
     void smsCodeFailed(const QString& errorCode, const QString& errorMsg);
