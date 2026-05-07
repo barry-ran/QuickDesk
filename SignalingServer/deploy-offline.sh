@@ -111,7 +111,8 @@ export IMAGE_TAG
 
 # ---- 2. Start ----
 echo "[2/3] Starting services (IMAGE_TAG=$IMAGE_TAG)..."
-docker compose up -d --force-recreate
+docker compose down 2>/dev/null || true
+docker compose up -d
 
 # ---- 3. Health check ----
 echo "[3/3] Waiting for server to become healthy..."

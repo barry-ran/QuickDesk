@@ -14,7 +14,7 @@ chown -R postgres:postgres "$PG_DATA" "$LOG_DIR"
 # ---- PostgreSQL ----
 if [ ! -f "$PG_DATA/PG_VERSION" ]; then
     echo "[quickdesk] Initializing PostgreSQL..."
-    gosu postgres /usr/lib/postgresql/15/bin/initdb -D "$PG_DATA" --auth-local=trust --auth-host=md5
+    gosu postgres /usr/lib/postgresql/15/bin/initdb -D "$PG_DATA" --auth-local=trust --auth-host=md5 --encoding=UTF8 --locale=C.UTF-8
     echo "host all all 0.0.0.0/0 md5" >> "$PG_DATA/pg_hba.conf"
     echo "listen_addresses = '127.0.0.1'" >> "$PG_DATA/postgresql.conf"
 fi
@@ -25,7 +25,7 @@ sleep 2
 gosu postgres psql -tc "SELECT 1 FROM pg_roles WHERE rolname='${DB_USER:-quickdesk}'" | grep -q 1 || \
     gosu postgres psql -c "CREATE USER ${DB_USER:-quickdesk} WITH PASSWORD '${DB_PASSWORD:-quickdesk123}';"
 gosu postgres psql -tc "SELECT 1 FROM pg_database WHERE datname='${DB_NAME:-quickdesk}'" | grep -q 1 || \
-    gosu postgres psql -c "CREATE DATABASE ${DB_NAME:-quickdesk} OWNER ${DB_USER:-quickdesk};"
+    gosu postgres psql -c "CREATE DATABASE ${DB_NAME:-quickdesk} OWNER ${DB_USER:-quickdesk} ENCODING 'UTF8' LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8' TEMPLATE template0;"
 
 # ---- Redis ----
 echo "[quickdesk] Starting Redis..."
