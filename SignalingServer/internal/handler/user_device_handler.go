@@ -205,8 +205,7 @@ func (h *UserDeviceHandler) AutoBindDevice(c *gin.Context) {
 	}
 
 	// Update device ownership
-	device.UserID = &authedUserID
-	h.db.Save(&device)
+	h.db.Model(&models.Device{}).Where("device_id = ?", req.DeviceID).Update("user_id", authedUserID)
 
 	// Upsert UserDevice: reactivate if exists but inactive, create otherwise
 	var existing models.UserDevice
@@ -263,8 +262,7 @@ func (h *UserDeviceHandler) UpdateAccessCode(c *gin.Context) {
 		return
 	}
 
-	device.AccessCode = req.AccessCode
-	h.db.Save(&device)
+	h.db.Model(&models.Device{}).Where("device_id = ?", deviceID).Update("access_code", req.AccessCode)
 
 	h.notifySync(authedUserID, gin.H{
 		"type":        "device_access_code_changed",
