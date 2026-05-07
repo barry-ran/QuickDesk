@@ -144,6 +144,8 @@ func main() {
 			userAPI.GET("/devices/logs", userDeviceHandler.GetUserDeviceLogs)
 			userAPI.PUT("/devices/:device_id/access-code", userDeviceHandler.UpdateAccessCode)
 			userAPI.PUT("/devices/:device_id/remark", userDeviceHandler.UpdateDeviceRemark)
+			userAPI.POST("/devices/:device_id/login", userDeviceHandler.DeviceLogin)
+			userAPI.POST("/devices/:device_id/logout", userDeviceHandler.DeviceLogout)
 			userAPI.GET("/favorites", userDeviceHandler.GetFavorites)
 			userAPI.POST("/favorites", userDeviceHandler.AddFavorite)
 			userAPI.PUT("/favorites/:device_id", userDeviceHandler.UpdateFavorite)

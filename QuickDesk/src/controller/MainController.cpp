@@ -168,6 +168,7 @@ MainController::MainController(QObject* parent)
         QString deviceId = m_hostManager->deviceId();
         if (!deviceId.isEmpty()) {
             m_cloudDeviceManager->autoBindDevice(deviceId);
+            m_cloudDeviceManager->deviceLogin(deviceId);
         }
         // Start sync WebSocket
         m_cloudDeviceManager->startSync();
@@ -182,8 +183,12 @@ MainController::MainController(QObject* parent)
         }
     });
 
-    // Auth: on logout, stop sync + clear data
+    // Auth: on logout, notify server device is no longer logged in + stop sync
     connect(m_authManager.get(), &AuthManager::loggedOut, this, [this]() {
+        QString deviceId = m_hostManager->deviceId();
+        if (!deviceId.isEmpty()) {
+            m_cloudDeviceManager->deviceLogout(deviceId);
+        }
         m_cloudDeviceManager->stopSync();
     });
 
@@ -778,6 +783,7 @@ void MainController::onHostReady(const QString& deviceId, const QString& accessC
         // Auto-bind if user is already logged in (loginSuccess may have fired before hostReady)
         if (m_authManager->isLoggedIn() && !deviceId.isEmpty()) {
             m_cloudDeviceManager->autoBindDevice(deviceId);
+            m_cloudDeviceManager->deviceLogin(deviceId);
             if (!accessCode.isEmpty()) {
                 m_cloudDeviceManager->syncAccessCode(deviceId, accessCode);
             }

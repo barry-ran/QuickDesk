@@ -128,6 +128,51 @@ void CloudDeviceManager::unbindDevice(const QString& deviceId)
         });
 }
 
+void CloudDeviceManager::deviceLogin(const QString& deviceId)
+{
+    if (!m_authManager->isLoggedIn() || deviceId.isEmpty()) return;
+
+    QUrl url(httpBaseUrl() + "api/v1/user/devices/" + deviceId + "/login");
+    auto headers = authHeaders();
+
+    infra::HttpRequest::instance().sendPostRequest(
+        url, headers, QString(), kRequestTimeoutMs,
+        [this, deviceId](int statusCode, const std::string& errorMsg, const std::string& data) {
+            Q_UNUSED(data);
+            QMetaObject::invokeMethod(this, [this, statusCode, errorMsg, deviceId]() {
+                if (statusCode != 200 || !errorMsg.empty()) {
+                    LOG_WARN("[CloudDeviceManager] deviceLogin failed: {}", errorMsg);
+                    return;
+                }
+                LOG_INFO("[CloudDeviceManager] Device login marked: {}", deviceId.toStdString());
+            });
+        });
+}
+
+void CloudDeviceManager::deviceLogout(const QString& deviceId)
+{
+    if (deviceId.isEmpty()) return;
+    // Allow calling even if not logged in (token may still be valid briefly)
+    QString token = m_authManager->token();
+    if (token.isEmpty()) return;
+
+    QUrl url(httpBaseUrl() + "api/v1/user/devices/" + deviceId + "/logout");
+    auto headers = authHeaders();
+
+    infra::HttpRequest::instance().sendPostRequest(
+        url, headers, QString(), kRequestTimeoutMs,
+        [this, deviceId](int statusCode, const std::string& errorMsg, const std::string& data) {
+            Q_UNUSED(data);
+            QMetaObject::invokeMethod(this, [this, statusCode, errorMsg, deviceId]() {
+                if (statusCode != 200 || !errorMsg.empty()) {
+                    LOG_WARN("[CloudDeviceManager] deviceLogout failed: {}", errorMsg);
+                    return;
+                }
+                LOG_INFO("[CloudDeviceManager] Device logout marked: {}", deviceId.toStdString());
+            });
+        });
+}
+
 void CloudDeviceManager::setDeviceRemark(const QString& deviceId, const QString& remark)
 {
     if (!m_authManager->isLoggedIn()) return;

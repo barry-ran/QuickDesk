@@ -222,6 +222,8 @@ func (h *WSHandler) HandleWebSocket(c *gin.Context) {
 		h.NotifyDeviceOnlineStatus(deviceID, true)
 		defer func() {
 			h.deviceService.SetDeviceOnline(context.Background(), deviceID, false)
+			// Clear logged_in when device disconnects from signaling
+			h.db.Model(&models.Device{}).Where("device_id = ?", deviceID).Update("logged_in", false)
 			h.NotifyDeviceOnlineStatus(deviceID, false)
 		}()
 	}
@@ -652,5 +654,6 @@ func (h *WSHandler) NotifyDeviceOnlineStatus(deviceID string, online bool) {
 	h.NotifyUserSync(*device.UserID, map[string]interface{}{
 		"type":      msgType,
 		"device_id": deviceID,
+		"logged_in": device.LoggedIn,
 	})
 }

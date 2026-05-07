@@ -26,6 +26,8 @@ public:
     Q_INVOKABLE void fetchMyDevices();
     Q_INVOKABLE void autoBindDevice(const QString& deviceId);
     Q_INVOKABLE void unbindDevice(const QString& deviceId);
+    Q_INVOKABLE void deviceLogin(const QString& deviceId);
+    Q_INVOKABLE void deviceLogout(const QString& deviceId);
     Q_INVOKABLE void setDeviceRemark(const QString& deviceId, const QString& remark);
     Q_INVOKABLE void syncAccessCode(const QString& deviceId, const QString& accessCode);
     Q_INVOKABLE QString getDeviceAccessCode(const QString& deviceId) const;

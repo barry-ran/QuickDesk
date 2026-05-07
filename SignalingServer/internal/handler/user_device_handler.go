@@ -424,3 +424,59 @@ func (h *UserDeviceHandler) RemoveFavorite(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"message": "取消收藏成功"})
 }
+
+// DeviceLogin handles POST /api/v1/user/devices/:device_id/login
+// Called when a user logs in on a device, marks the device as actively logged in.
+func (h *UserDeviceHandler) DeviceLogin(c *gin.Context) {
+	deviceID := c.Param("device_id")
+	userIDVal, _ := c.Get("authed_user_id")
+	authedUserID := userIDVal.(uint)
+
+	var device models.Device
+	if result := h.db.Where("device_id = ?", deviceID).First(&device); result.Error != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "设备不存在"})
+		return
+	}
+
+	if device.UserID != nil && *device.UserID != 0 && *device.UserID != authedUserID {
+		c.JSON(http.StatusForbidden, gin.H{"error": "无权操作此设备"})
+		return
+	}
+
+	h.db.Model(&models.Device{}).Where("device_id = ?", deviceID).Update("logged_in", true)
+
+	h.notifySync(authedUserID, gin.H{
+		"type":      "device_logged_in",
+		"device_id": deviceID,
+	})
+
+	c.JSON(http.StatusOK, gin.H{"message": "设备登录状态已更新"})
+}
+
+// DeviceLogout handles POST /api/v1/user/devices/:device_id/logout
+// Called when a user logs out on a device, marks the device as not logged in.
+func (h *UserDeviceHandler) DeviceLogout(c *gin.Context) {
+	deviceID := c.Param("device_id")
+	userIDVal, _ := c.Get("authed_user_id")
+	authedUserID := userIDVal.(uint)
+
+	var device models.Device
+	if result := h.db.Where("device_id = ?", deviceID).First(&device); result.Error != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "设备不存在"})
+		return
+	}
+
+	if device.UserID != nil && *device.UserID != 0 && *device.UserID != authedUserID {
+		c.JSON(http.StatusForbidden, gin.H{"error": "无权操作此设备"})
+		return
+	}
+
+	h.db.Model(&models.Device{}).Where("device_id = ?", deviceID).Update("logged_in", false)
+
+	h.notifySync(authedUserID, gin.H{
+		"type":      "device_logged_out",
+		"device_id": deviceID,
+	})
+
+	c.JSON(http.StatusOK, gin.H{"message": "设备登出状态已更新"})
+}
