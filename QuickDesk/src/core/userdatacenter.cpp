@@ -61,6 +61,11 @@ bool UserDataCenter::updateDeviceLastConnected(const QString& deviceId)
     return m_userDataDB->updateDeviceLastConnected(deviceId);
 }
 
+bool UserDataCenter::updateDevicePassword(const QString& deviceId, const QString& encryptedPassword)
+{
+    return m_userDataDB->updateDevicePassword(deviceId, encryptedPassword);
+}
+
 bool UserDataCenter::cleanOldDevices(int maxCount)
 {
     return m_userDataDB->cleanOldDevices(maxCount);

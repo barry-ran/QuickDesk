@@ -320,6 +320,26 @@ bool UserDataDataBase::updateDeviceLastConnected(const QString& deviceId)
     return true;
 }
 
+bool UserDataDataBase::updateDevicePassword(const QString& deviceId, const QString& encryptedPassword)
+{
+    QString sql = QString(R"(
+        UPDATE %1 SET access_password = :access_password
+        WHERE device_id = :device_id
+    )").arg(kRemoteDevicesTable);
+
+    QSqlQuery query(QSqlDatabase::database(kDeviceDb));
+    query.prepare(sql);
+    query.bindValue(":access_password", encryptedPassword);
+    query.bindValue(":device_id", deviceId);
+
+    if (!query.exec()) {
+        LOG_ERROR("[database] update device password failed: {}", query.lastError().text().toStdString());
+        return false;
+    }
+
+    return query.numRowsAffected() > 0;
+}
+
 bool UserDataDataBase::cleanOldDevices(int maxCount)
 {
     // Keep only the most recent maxCount devices (excluding favorites)

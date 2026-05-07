@@ -48,6 +48,9 @@ public:
     // Update device last connected time
     Q_INVOKABLE void updateDeviceConnected(const QString& deviceId);
 
+    // Update device password (for access code sync from cloud)
+    Q_INVOKABLE bool updateDevicePassword(const QString& deviceId, const QString& newPassword);
+
 signals:
     void deviceListChanged();
     void deviceAdded(const QString& deviceId);

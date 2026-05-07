@@ -187,6 +187,18 @@ MainController::MainController(QObject* parent)
         m_cloudDeviceManager->stopSync();
     });
 
+    // Sync access code changes from cloud devices to recent connections
+    connect(m_cloudDeviceManager.get(), &CloudDeviceManager::myDevicesChanged, this, [this]() {
+        for (const auto& v : m_cloudDeviceManager->myDevices()) {
+            QVariantMap device = v.toMap();
+            QString deviceId = device["device_id"].toString();
+            QString accessCode = device["access_code"].toString();
+            if (!deviceId.isEmpty() && !accessCode.isEmpty()) {
+                m_remoteDeviceManager->updateDevicePassword(deviceId, accessCode);
+            }
+        }
+    });
+
     // WebSocket API Server
     m_wsApiServer = std::make_unique<WebSocketApiServer>(this, this);
     connect(m_wsApiServer.get(), &WebSocketApiServer::listeningChanged,

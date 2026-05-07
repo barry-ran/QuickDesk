@@ -28,6 +28,7 @@ public:
     bool getRemoteDevice(const QString& deviceId, RemoteDevice& device);
     bool getAllRemoteDevices(QVector<RemoteDevice>& devices);
     bool updateDeviceLastConnected(const QString& deviceId);
+    bool updateDevicePassword(const QString& deviceId, const QString& encryptedPassword);
     bool cleanOldDevices(int maxCount);
 
 private:

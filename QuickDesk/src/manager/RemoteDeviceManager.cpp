@@ -126,6 +126,34 @@ void RemoteDeviceManager::updateDeviceConnected(const QString& deviceId)
     }
 }
 
+bool RemoteDeviceManager::updateDevicePassword(const QString& deviceId, const QString& newPassword)
+{
+    if (deviceId.isEmpty() || newPassword.isEmpty()) {
+        return false;
+    }
+
+    // Check if device exists in recent connections
+    core::RemoteDevice device;
+    if (!m_dataCenter.getRemoteDevice(deviceId, device)) {
+        return false;  // Device not in recent connections, nothing to update
+    }
+
+    QString encrypted = encryptPassword(newPassword);
+    if (!m_dataCenter.updateDevicePassword(deviceId, encrypted)) {
+        LOG_ERROR("[RemoteDeviceManager] Failed to update password for device: {}", deviceId.toStdString());
+        return false;
+    }
+
+    // Reload device list
+    m_devices.clear();
+    if (m_dataCenter.getAllRemoteDevices(m_devices)) {
+        emit deviceListChanged();
+    }
+
+    LOG_INFO("[RemoteDeviceManager] Updated password for device: {}", deviceId.toStdString());
+    return true;
+}
+
 QString RemoteDeviceManager::encryptPassword(const QString& password) const
 {
     // Simple XOR encryption with Base64 encoding
