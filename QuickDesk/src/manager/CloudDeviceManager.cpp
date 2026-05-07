@@ -139,7 +139,7 @@ void CloudDeviceManager::deviceLogin(const QString& deviceId)
         url, headers, QString(), kRequestTimeoutMs,
         [this, deviceId](int statusCode, const std::string& errorMsg, const std::string& data) {
             Q_UNUSED(data);
-            QMetaObject::invokeMethod(this, [this, statusCode, errorMsg, deviceId]() {
+            QMetaObject::invokeMethod(this, [statusCode, errorMsg, deviceId]() {
                 if (statusCode != 200 || !errorMsg.empty()) {
                     LOG_WARN("[CloudDeviceManager] deviceLogin failed: {}", errorMsg);
                     return;
@@ -163,7 +163,7 @@ void CloudDeviceManager::deviceLogout(const QString& deviceId)
         url, headers, QString(), kRequestTimeoutMs,
         [this, deviceId](int statusCode, const std::string& errorMsg, const std::string& data) {
             Q_UNUSED(data);
-            QMetaObject::invokeMethod(this, [this, statusCode, errorMsg, deviceId]() {
+            QMetaObject::invokeMethod(this, [statusCode, errorMsg, deviceId]() {
                 if (statusCode != 200 || !errorMsg.empty()) {
                     LOG_WARN("[CloudDeviceManager] deviceLogout failed: {}", errorMsg);
                     return;
