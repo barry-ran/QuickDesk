@@ -52,13 +52,13 @@
 import { ref, inject, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ConnectionHistory } from '../../js/storage/connection-history.js'
-import { userApi } from '../api/userApi'
+import { userApi, DEFAULT_SERVER } from '../api/userApi'
 
 const { t } = useI18n()
 const showToast = inject('showToast')
 const authState = inject('authState')
 
-const serverUrl = ref(localStorage.getItem('quickdesk_signaling_url') || 'ws://qdsignaling.quickcoder.cc:8000')
+const serverUrl = ref(localStorage.getItem('quickdesk_signaling_url') || DEFAULT_SERVER)
 const deviceId = ref('')
 const accessCode = ref('')
 const accessCodeInput = ref(null)

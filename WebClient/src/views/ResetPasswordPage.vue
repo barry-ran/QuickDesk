@@ -51,8 +51,7 @@ const smsCountdown = ref(0)
 let smsTimer = null
 
 function ensureBaseUrl() {
-  const url = localStorage.getItem('quickdesk_signaling_url') || ''
-  if (url) userApi.setBaseUrl(url)
+  userApi.setBaseUrl(userApi.getServerUrl())
 }
 
 function apiError(r) {

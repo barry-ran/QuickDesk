@@ -3,6 +3,8 @@
 
 const TOKEN_KEY = 'quickdesk_user_token'
 const USER_INFO_KEY = 'quickdesk_user_info'
+const SERVER_URL_KEY = 'quickdesk_signaling_url'
+export const DEFAULT_SERVER = 'ws://qdsignaling.quickcoder.cc:8000'
 
 class UserApi {
   constructor() {
@@ -15,6 +17,17 @@ class UserApi {
     if (u.startsWith('wss://')) u = u.replace(/^wss:\/\//, 'https://')
     else if (u.startsWith('ws://')) u = u.replace(/^ws:\/\//, 'http://')
     this._baseUrl = u
+  }
+
+  ensureBaseUrl() {
+    if (!this._baseUrl) {
+      const url = localStorage.getItem(SERVER_URL_KEY) || DEFAULT_SERVER
+      this.setBaseUrl(url)
+    }
+  }
+
+  getServerUrl() {
+    return localStorage.getItem(SERVER_URL_KEY) || DEFAULT_SERVER
   }
 
   getToken() { return localStorage.getItem(TOKEN_KEY) }
@@ -42,6 +55,7 @@ class UserApi {
   }
 
   async _req(method, path, body) {
+    this.ensureBaseUrl()
     try {
       const opts = { method, headers: this._headers() }
       if (body !== undefined) opts.body = JSON.stringify(body)

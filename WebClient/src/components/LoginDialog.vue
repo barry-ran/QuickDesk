@@ -158,8 +158,7 @@ function apiError(r) {
 }
 
 function ensureBaseUrl() {
-  const url = localStorage.getItem('quickdesk_signaling_url') || ''
-  if (url) userApi.setBaseUrl(url)
+  userApi.setBaseUrl(userApi.getServerUrl())
 }
 
 async function sendSms(scene) {
