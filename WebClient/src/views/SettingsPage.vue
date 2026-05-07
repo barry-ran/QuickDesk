@@ -30,12 +30,12 @@
 <script setup>
 import { ref, inject } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { userApi } from '../api/userApi'
+import { userApi, DEFAULT_SERVER } from '../api/userApi'
 
 const { t } = useI18n()
 const showToast = inject('showToast')
 
-const serverUrl = ref(localStorage.getItem('quickdesk_signaling_url') || '')
+const serverUrl = ref(localStorage.getItem('quickdesk_signaling_url') || DEFAULT_SERVER)
 const videoCodec = ref(localStorage.getItem('quickdesk_video_codec') || 'AV1')
 
 function saveServerUrl() {

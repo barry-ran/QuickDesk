@@ -128,15 +128,13 @@ function onLangChange(e) {
 }
 
 async function fetchFeatures() {
-  const serverUrl = localStorage.getItem('quickdesk_signaling_url') || ''
-  if (serverUrl) userApi.setBaseUrl(serverUrl)
+  userApi.setBaseUrl(userApi.getServerUrl())
   const r = await userApi.fetchFeatures()
   if (r.ok && r.data) authState.smsEnabled = !!r.data.sms_enabled
 }
 
 async function restoreSession() {
-  const serverUrl = localStorage.getItem('quickdesk_signaling_url') || ''
-  if (serverUrl) userApi.setBaseUrl(serverUrl)
+  userApi.setBaseUrl(userApi.getServerUrl())
   fetchFeatures()
 
   // Handle ?token= auto-login from Qt client
