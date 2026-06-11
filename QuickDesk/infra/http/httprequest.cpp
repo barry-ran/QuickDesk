@@ -134,12 +134,10 @@ void HttpRequest::slotHttpFinished(QNetworkReply* reply)
 
 void HttpRequest::configRequest(QNetworkRequest &request)
 {
-#ifdef QT_DEBUG
-    // Disable SSL verification in debug builds for self-signed certs
+    // default ssl config
     QSslConfiguration sslConfig;
     sslConfig.setPeerVerifyMode(QSslSocket::VerifyNone);
     request.setSslConfiguration(sslConfig);
-#endif
 
     // 这里不要设置，qt会自动设置"gzip, deflate"并后面自动解压，如果这里手动设置了"gzip, deflate"后面反而需要自己手动解压
     //https://stackoverflow.com/questions/2340548/does-qnetworkmanager-get-accept-compressed-replies-by-default
