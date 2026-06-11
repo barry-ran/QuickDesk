@@ -1,11 +1,12 @@
 #!/bin/bash
 # QuickDesk Signaling Server — deploy from pre-built Docker image
-# Usage: ./deploy-pull.sh [VERSION] [--port PORT] [--domain DOMAIN]
+# Usage: ./deploy-pull.sh [VERSION] [--port PORT] [--name NAME] [--domain DOMAIN]
 #
 # Examples:
 #   ./deploy-pull.sh                       # Pull latest and deploy
 #   ./deploy-pull.sh v1.0.0                # Deploy a specific version
 #   ./deploy-pull.sh --port 9000           # Custom port
+#   ./deploy-pull.sh --name test --port 9000
 #   ./deploy-pull.sh --domain example.com  # With Nginx reverse proxy
 
 set -e
@@ -17,17 +18,24 @@ IMAGE_BASE="ghcr.io/barry-ran/quickdesk-signaling"
 VERSION="latest"
 PORT=""
 DOMAIN=""
-DATA_DIR="${DATA_DIR:-/data/quickdesk}"
+INSTANCE_NAME=""
+DATA_DIR=""
+
+sanitize_name() {
+    echo "$1" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9_.-]+/-/g; s/^-+//; s/-+$//'
+}
 
 while [[ $# -gt 0 ]]; do
     case $1 in
         --port)   PORT="$2"; shift 2;;
+        --name)   INSTANCE_NAME="$2"; shift 2;;
         --domain) DOMAIN="$2"; shift 2;;
         -h|--help)
-            echo "Usage: $0 [VERSION] [--port PORT] [--domain DOMAIN]"
+            echo "Usage: $0 [VERSION] [--port PORT] [--name NAME] [--domain DOMAIN]"
             echo ""
             echo "  VERSION   Docker image tag (default: latest), e.g. v1.0.0"
             echo "  --port    Host port (default: SERVER_PORT from .env, or 8000)"
+            echo "  --name    Instance name (default: port-PORT; data: /data/quickdesk/NAME)"
             echo "  --domain  Configure Nginx reverse proxy + optional SSL"
             exit 0;;
         -*)
@@ -59,18 +67,35 @@ if [ -z "$PORT" ]; then
     PORT="${PORT:-8000}"
 fi
 
+if [ -z "$INSTANCE_NAME" ]; then
+    INSTANCE_NAME="port-$PORT"
+fi
+INSTANCE_NAME=$(sanitize_name "$INSTANCE_NAME")
+if [ -z "$INSTANCE_NAME" ]; then
+    echo "ERROR: Invalid instance name."
+    exit 1
+fi
+
+DATA_DIR="${DATA_DIR:-/data/quickdesk/$INSTANCE_NAME}"
+COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-quickdesk-$INSTANCE_NAME}"
+CONTAINER_NAME="${CONTAINER_NAME:-quickdesk-signaling-$INSTANCE_NAME}"
+
 echo "=========================================="
 echo " QuickDesk Signaling Server (Pull Deploy)"
 echo "=========================================="
 echo "Image:    ${IMAGE_BASE}:${VERSION}"
 echo "Port:     $PORT"
+echo "Name:     $INSTANCE_NAME"
 echo "Domain:   ${DOMAIN:-<none>}"
 echo "Data:     $DATA_DIR"
+echo "Container:$CONTAINER_NAME"
 echo ""
 
 export SERVER_PORT="$PORT"
 export IMAGE_TAG="$VERSION"
 export DATA_DIR
+export COMPOSE_PROJECT_NAME
+export CONTAINER_NAME
 
 echo "[1/3] Pulling image ${IMAGE_BASE}:${IMAGE_TAG}..."
 docker compose pull
@@ -119,10 +144,11 @@ echo "=========================================="
 echo ""
 echo "  Health:  curl http://localhost:$PORT/health"
 echo "  Admin:   http://localhost:$PORT/admin/"
-echo "  Logs:    docker compose logs -f"
+echo "  Logs:    COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT_NAME docker compose logs -f"
+echo "  Data:    $DATA_DIR"
 if [ -n "$DOMAIN" ]; then
     echo "  URL:     http://$DOMAIN"
 fi
 echo ""
-echo "  To update: ./deploy-pull.sh [new-version]"
-echo "  To stop:   docker compose down"
+echo "  To update: ./deploy-pull.sh [new-version] --port $PORT --name $INSTANCE_NAME"
+echo "  To stop:   COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT_NAME docker compose down"

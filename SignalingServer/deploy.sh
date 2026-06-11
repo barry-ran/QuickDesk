@@ -1,6 +1,6 @@
 #!/bin/bash
 # QuickDesk Signaling Server — build image locally and deploy
-# Usage: ./deploy.sh [--port PORT] [--domain DOMAIN]
+# Usage: ./deploy.sh [--port PORT] [--name NAME] [--domain DOMAIN]
 #
 # This script builds the Docker image directly (docker build), then runs
 # the container. For docker-compose based deployment, use deploy-build.sh.
@@ -17,18 +17,25 @@ cd "$SCRIPT_DIR"
 
 PORT=""
 DOMAIN=""
-CONTAINER_NAME="quickdesk-signaling"
+INSTANCE_NAME=""
+CONTAINER_NAME=""
 IMAGE_NAME="quickdesk-signaling"
-DATA_DIR="/data/quickdesk"
+DATA_DIR=""
+
+sanitize_name() {
+    echo "$1" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9_.-]+/-/g; s/^-+//; s/-+$//'
+}
 
 while [[ $# -gt 0 ]]; do
     case $1 in
         --port)   PORT="$2"; shift 2;;
+        --name)   INSTANCE_NAME="$2"; shift 2;;
         --domain) DOMAIN="$2"; shift 2;;
         -h|--help)
-            echo "Usage: $0 [--port PORT] [--domain DOMAIN]"
+            echo "Usage: $0 [--port PORT] [--name NAME] [--domain DOMAIN]"
             echo ""
             echo "  --port    Host port (default: SERVER_PORT from .env, or 8000)"
+            echo "  --name    Instance name (default: port-PORT; data: /data/quickdesk/NAME)"
             echo "  --domain  Configure Nginx reverse proxy + optional SSL"
             exit 0;;
         *) echo "Unknown option: $1"; exit 1;;
@@ -57,12 +64,26 @@ if [ -z "$PORT" ]; then
     PORT="${PORT:-8000}"
 fi
 
+if [ -z "$INSTANCE_NAME" ]; then
+    INSTANCE_NAME="port-$PORT"
+fi
+INSTANCE_NAME=$(sanitize_name "$INSTANCE_NAME")
+if [ -z "$INSTANCE_NAME" ]; then
+    echo "ERROR: Invalid instance name."
+    exit 1
+fi
+
+DATA_DIR="${DATA_DIR:-/data/quickdesk/$INSTANCE_NAME}"
+CONTAINER_NAME="${CONTAINER_NAME:-quickdesk-signaling-$INSTANCE_NAME}"
+
 echo "=========================================="
 echo " QuickDesk Signaling Server (Direct Build)"
 echo "=========================================="
 echo "Port:     $PORT"
+echo "Name:     $INSTANCE_NAME"
 echo "Domain:   ${DOMAIN:-<none>}"
 echo "Data:     $DATA_DIR"
+echo "Container:$CONTAINER_NAME"
 echo ""
 
 # ---- 1. Build ----
@@ -143,6 +164,7 @@ echo ""
 echo "  Health:  curl http://localhost:$PORT/health"
 echo "  Admin:   http://localhost:$PORT/admin/"
 echo "  Logs:    docker logs -f $CONTAINER_NAME"
+echo "  Data:    $DATA_DIR"
 if [ -n "$DOMAIN" ]; then
     echo "  URL:     http://$DOMAIN"
 fi

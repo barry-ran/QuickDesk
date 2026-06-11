@@ -57,22 +57,52 @@ These parameters can be preset in `.env` or configured later in the admin panel 
 
 ### Persistent Data Directory
 
-All Docker deployment scripts store user data on the host at `/data/quickdesk` by default. Data is not stored inside the Docker image:
+All Docker deployment scripts store user data on the host at `/data/quickdesk/<instance-name>` by default. Data is not stored inside the Docker image. If `--name` is omitted, the instance name is derived from the port, for example port `8000` becomes `port-8000`:
 
 | Data | Host directory | Container directory |
 |------|----------------|---------------------|
-| PostgreSQL | `/data/quickdesk/postgres` | `/data/postgres` |
-| Redis | `/data/quickdesk/redis` | `/data/redis` |
+| PostgreSQL | `/data/quickdesk/<instance-name>/postgres` | `/data/postgres` |
+| Redis | `/data/quickdesk/<instance-name>/redis` | `/data/redis` |
 
-Rebuilding the image, restarting the container, or running `docker compose up -d` does not clear this directory. Data only disappears if `/data/quickdesk` is manually deleted, or if you switch to a different `DATA_DIR` and mount a new empty directory.
+Rebuilding the image, restarting the container, or running `docker compose up -d` does not clear this directory. Data only disappears if the instance data directory is manually deleted, or if you switch to a different `DATA_DIR` and mount a new empty directory.
 
-To customize the data directory, set `DATA_DIR` before running the deploy script:
+To customize the data directory, set `DATA_DIR` before running the deploy script. `DATA_DIR` should point to one instance's dedicated directory; do not share one directory across multiple instances:
 
 ```bash
-DATA_DIR=/data/quickdesk ./deploy-build.sh
-DATA_DIR=/data/quickdesk ./deploy-pull.sh
-DATA_DIR=/data/quickdesk ./deploy-offline.sh quickdesk-signaling-image.tar.gz
+DATA_DIR=/data/quickdesk/test ./deploy-build.sh --name test --port 8000
+DATA_DIR=/data/quickdesk/prod ./deploy-pull.sh --name prod --port 9000
+DATA_DIR=/data/quickdesk/offline ./deploy-offline.sh quickdesk-signaling-image.tar.gz --name offline --port 10000
 ```
+
+### Multiple Instances on One Host
+
+You can deploy multiple independent signaling servers on the same physical host. Use a different port for each instance. If `--name` is omitted, the script uses `port-PORT` as the instance name and automatically isolates the container name, Compose project name and data directory:
+
+```bash
+# Instance 1: data directory /data/quickdesk/port-8000
+./deploy-build.sh --port 8000
+
+# Instance 2: data directory /data/quickdesk/port-9000
+./deploy-build.sh --port 9000
+```
+
+You can also specify explicit instance names:
+
+```bash
+./deploy-build.sh --name test --port 8000
+./deploy-build.sh --name prod --port 9000
+```
+
+Data directories:
+
+```text
+/data/quickdesk/test/postgres
+/data/quickdesk/test/redis
+/data/quickdesk/prod/postgres
+/data/quickdesk/prod/redis
+```
+
+To stop a Compose instance, use the `To stop` command printed by the deploy script to avoid stopping another instance by mistake.
 
 ### Option 1: Pull Pre-built Image (Recommended)
 
@@ -89,6 +119,9 @@ chmod +x deploy-pull.sh
 
 # Custom port
 ./deploy-pull.sh --port 9000
+
+# Multiple instances (independent data directory /data/quickdesk/test)
+./deploy-pull.sh --name test --port 9000
 ```
 
 ### Option 2: Build from Source
@@ -101,6 +134,9 @@ chmod +x deploy-build.sh
 
 # Custom port
 ./deploy-build.sh --port 9000
+
+# Multiple instances (independent data directory /data/quickdesk/test)
+./deploy-build.sh --name test --port 9000
 ```
 
 ### Option 3: Offline Deploy
@@ -115,6 +151,9 @@ For servers without internet access. Download the offline image from GitHub Acti
 # 2. Transfer to the target server and deploy
 chmod +x deploy-offline.sh
 ./deploy-offline.sh quickdesk-signaling-image.tar.gz
+
+# Multiple instances (independent data directory /data/quickdesk/test)
+./deploy-offline.sh quickdesk-signaling-image.tar.gz --name test --port 9000
 ```
 
 ### Legacy Deploy Script
@@ -127,6 +166,9 @@ chmod +x deploy.sh
 
 # With domain and Nginx
 ./deploy.sh --port 8000 --domain your-domain.com
+
+# Multiple instances (independent data directory /data/quickdesk/test)
+./deploy.sh --name test --port 9000
 ```
 
 ### Post-Deployment Setup
