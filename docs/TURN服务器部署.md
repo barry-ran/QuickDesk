@@ -13,7 +13,7 @@ coturn 支持两种鉴权机制，**二选一，不可同时使用：**
 | **长期静态凭据** | `lt-cred-mech` + `user=` | 静态用户，简单部署 |
 | **REST API / HMAC 临时凭据** | `use-auth-secret` + `static-auth-secret=` | 与 QuickDesk 信令服务器集成；凭据有时效性、按需生成 |
 
-在生产环境中与 QuickDesk 信令服务器配合使用时，**推荐 REST API 模式** —— 信令服务器通过 `/api/v1/ice-config` 接口自动生成短期 TURN 凭据，客户端无需持有静态密码。
+在生产环境中与 QuickDesk 信令服务器配合使用时，**推荐 REST API 模式** —— 信令服务器通过 `/v1/ice-config` 接口自动生成短期 TURN 凭据，客户端无需持有静态密码。
 
 ---
 
@@ -137,7 +137,7 @@ fingerprint
 
 # ~~~ 模式二：REST API / HMAC 临时凭据（推荐）~~~
 # 与 QuickDesk 信令服务器集成时使用此模式。
-# 信令服务器利用这个共享密钥，通过 /api/v1/ice-config 接口
+# 信令服务器利用这个共享密钥，通过 /v1/ice-config 接口
 # 为每个客户端实时生成有时效限制的 TURN 凭据（通常 1 小时有效）。
 # 即使凭据被截获，过期后也无法再使用，安全性更高。
 #
@@ -245,7 +245,7 @@ TURN_URLS=turn:115.190.196.189:3478
 STUN_URLS=stun:115.190.196.189:3478
 ```
 
-配置完成后，信令服务器将通过 `/api/v1/ice-config` 接口为客户端返回短期凭据：
+配置完成后，信令服务器将通过 `/v1/ice-config` 接口为客户端返回短期凭据：
 
 ```json
 {

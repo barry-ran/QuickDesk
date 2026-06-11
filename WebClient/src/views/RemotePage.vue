@@ -17,7 +17,10 @@
           <label>{{ $t('connect.accessCode') }}</label>
           <input ref="accessCodeInput" v-model="accessCode" class="form-input" type="password" :placeholder="$t('connect.accessCodePlaceholder')" autocomplete="off" @keyup.enter="connect" />
         </div>
-        <button class="btn btn-primary btn-full" @click="connect">{{ $t('connect.button') }}</button>
+        <div v-if="errorMsg" class="hint error" style="margin-bottom:8px;">{{ errorMsg }}</div>
+        <button class="btn btn-primary btn-full" :disabled="connecting" @click="connect">
+          {{ connecting ? '...' : $t('connect.button') }}
+        </button>
       </div>
 
       <!-- Connection History -->
@@ -53,6 +56,8 @@ import { ref, inject, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ConnectionHistory } from '../../js/storage/connection-history.js'
 import { userApi, DEFAULT_SERVER } from '../api/userApi'
+import { userSync } from '../api/userSync'
+import { openRemoteSession } from '../utils/remoteLauncher'
 
 const { t } = useI18n()
 const showToast = inject('showToast')
@@ -64,25 +69,59 @@ const accessCode = ref('')
 const accessCodeInput = ref(null)
 const history = ref(ConnectionHistory.getAll())
 const favorites = ref([])
+const connecting = ref(false)
+const errorMsg = ref('')
 
 function saveServerUrl() {
   localStorage.setItem('quickdesk_signaling_url', serverUrl.value)
   userApi.setBaseUrl(serverUrl.value)
 }
 
-function connect() {
+// §2.18 / §2.6: verify first, then open remote.html with the one-shot
+// signal_token. The plaintext access_code is handed off via sessionStorage
+// (see utils/remoteLauncher.js).
+async function connect() {
+  errorMsg.value = ''
   if (!deviceId.value || !accessCode.value) {
     showToast(t('connect.inputRequired'), 'error')
     return
   }
   saveServerUrl()
-  const codec = localStorage.getItem('quickdesk_video_codec') || 'AV1'
-  const params = new URLSearchParams({ server: serverUrl.value, device: deviceId.value, code: accessCode.value, codec })
-  const url = `remote.html?${params}`
-  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
-  if (isMobile) window.location.href = url
-  else window.open(url, `quickdesk_${deviceId.value}`)
-  showToast(t('connect.connecting', { deviceId: deviceId.value }), 'info')
+  connecting.value = true
+  try {
+    const v = await userApi.verifyAccessCode(deviceId.value, accessCode.value)
+    if (!v.ok) {
+      errorMsg.value = errorForCode(v.code, v.error, v.retryAfter)
+      showToast(errorMsg.value, 'error')
+      return
+    }
+    const signalToken = v.data?.signal_token
+    if (!signalToken) {
+      errorMsg.value = t('toast.networkError')
+      return
+    }
+    openRemoteSession({
+      deviceId: deviceId.value,
+      signalToken,
+      accessCode: accessCode.value,
+    })
+    showToast(t('connect.connecting', { deviceId: deviceId.value }), 'info')
+  } finally {
+    connecting.value = false
+  }
+}
+
+function errorForCode(code, fallback, retryAfter) {
+  // §2.10 / §2.15: TOO_MANY_ATTEMPTS carries Retry-After seconds.
+  if (code === 'TOO_MANY_ATTEMPTS' && retryAfter > 0) {
+    return t('errors.TOO_MANY_ATTEMPTS_RETRY', { seconds: retryAfter })
+  }
+  if (code) {
+    const key = `errors.${code}`
+    const str = t(key)
+    if (str !== key) return str
+  }
+  return fallback || t('toast.networkError')
 }
 
 function fillFromHistory(item) {
@@ -112,8 +151,11 @@ async function toggleFavorite(id) {
 
 async function loadFavorites() {
   if (!authState.isLoggedIn) return
+  // Prefer realtime cache; fall back to HTTP if empty.
+  const cached = userSync.getFavorites()
+  if (cached.length) { favorites.value = cached; return }
   const r = await userApi.fetchFavorites()
-  if (r.ok && r.data) favorites.value = r.data.favorites || []
+  if (r.ok && r.data) favorites.value = Array.isArray(r.data.items) ? r.data.items : []
 }
 
 function formatTime(ts) {
@@ -133,17 +175,25 @@ function onMessage(e) {
   if (id) { ConnectionHistory.save(id, srv); history.value = ConnectionHistory.getAll() }
 }
 
-// Apply URL params (for direct links)
+function onFavoritesChanged(e) {
+  favorites.value = e.detail.favorites.slice()
+}
+
+// Apply URL params (for direct links). We deliberately DROP any ?code=
+// param since plaintext access codes must not be in URLs (§2.18).
 const params = new URLSearchParams(window.location.search)
 if (params.get('server')) serverUrl.value = params.get('server')
 if (params.get('device')) deviceId.value = params.get('device')
-if (params.get('code')) accessCode.value = params.get('code')
 
 onMounted(() => {
   window.addEventListener('message', onMessage)
   loadFavorites()
+  userSync.addEventListener('favorites-changed', onFavoritesChanged)
 })
-onUnmounted(() => window.removeEventListener('message', onMessage))
+onUnmounted(() => {
+  window.removeEventListener('message', onMessage)
+  userSync.removeEventListener('favorites-changed', onFavoritesChanged)
+})
 </script>
 
 <style scoped>

@@ -35,7 +35,7 @@ const router = createRouter({
 
 router.beforeEach((to) => {
   if (to.meta.public) return
-  const token = localStorage.getItem('quickdesk_admin_token')
+  const token = localStorage.getItem('quickdesk_admin_access_token')
   if (!token) {
     return '/login'
   }

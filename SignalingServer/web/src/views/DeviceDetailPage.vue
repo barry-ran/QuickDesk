@@ -3,9 +3,23 @@
     <div class="page-header">
       <el-button :icon="ArrowLeft" @click="router.back()">{{ t('common.back') }}</el-button>
       <h2>{{ t('devices.detail') }}</h2>
+      <!-- Admin actions (§2.2 / §2.17):
+             • forceUnbind keeps the row, clears user_id + logged_in_intent
+             • rotateSecret invalidates current device_secret (host re-provisions)
+             • delete removes the row entirely -->
+      <div class="header-actions">
+        <el-button type="warning" size="small" @click="handleForceUnbind" :disabled="!device.device_id">
+          {{ t('devices.forceUnbind') }}
+        </el-button>
+        <el-button type="danger" size="small" @click="handleRotateSecret" :disabled="!device.device_id">
+          {{ t('devices.rotateSecret') }}
+        </el-button>
+        <el-button type="danger" size="small" plain @click="handleDelete" :disabled="!device.device_id">
+          {{ t('common.delete') }}
+        </el-button>
+      </div>
     </div>
 
-    <!-- Device Info -->
     <el-card shadow="never" class="info-card">
       <template #header>
         <div class="card-header">
@@ -21,12 +35,11 @@
         <el-descriptions-item label="UUID">{{ device.device_uuid }}</el-descriptions-item>
         <el-descriptions-item :label="t('devices.os')">{{ device.os }}{{ device.os_version ? ' ' + device.os_version : '' }}</el-descriptions-item>
         <el-descriptions-item :label="t('devices.appVersion')">{{ device.app_version || '-' }}</el-descriptions-item>
-        <el-descriptions-item :label="t('devices.lastSeen')">{{ formatDate(device.last_seen) }}</el-descriptions-item>
+        <el-descriptions-item :label="t('devices.lastSeen')">{{ formatDate(device.last_seen_at || device.last_seen) }}</el-descriptions-item>
         <el-descriptions-item :label="t('devices.createdAt')">{{ formatDate(device.created_at) }}</el-descriptions-item>
       </el-descriptions>
     </el-card>
 
-    <!-- Bound User -->
     <el-card shadow="never" class="info-card" v-if="boundUser">
       <template #header>
         <div class="card-header">
@@ -44,7 +57,6 @@
       </el-descriptions>
     </el-card>
 
-    <!-- Connection History -->
     <el-card shadow="never" class="info-card">
       <template #header>
         <div class="card-header">
@@ -53,9 +65,9 @@
         </div>
       </template>
       <el-table :data="connectionHistory" stripe style="width: 100%" size="small">
-        <el-table-column prop="time" :label="t('dashboard.time')" width="180" />
-        <el-table-column prop="action" :label="t('dashboard.activity')" width="150" />
-        <el-table-column prop="details" :label="t('dashboard.details')" show-overflow-tooltip />
+        <el-table-column prop="created_at" :label="t('dashboard.time')" width="180" />
+        <el-table-column prop="device_name" :label="t('dashboard.activity')" width="150" />
+        <el-table-column prop="error_msg" :label="t('dashboard.details')" show-overflow-tooltip />
         <el-table-column prop="status" :label="t('common.status')" width="100">
           <template #default="{ row }">
             <el-tag :type="row.status === 'success' ? 'success' : 'warning'" size="small">
@@ -73,9 +85,14 @@
 import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter, useRoute } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, Monitor, User, Connection } from '@element-plus/icons-vue'
-import { getDeviceDetail } from '../api/admin_device.js'
+import {
+  getDeviceDetail,
+  deleteDevice,
+  forceUnbindDevice,
+  rotateDeviceSecret,
+} from '../api/admin_device.js'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -94,17 +111,75 @@ function formatDate(dateStr) {
 async function loadDetail() {
   const deviceId = route.params.deviceId
   if (!deviceId) return
-
   loading.value = true
   try {
+    // §2.2: GET /v1/admin/devices/:id returns a flat device object
+    // (admin_devices_handler.go::deviceAdminJSON) with an embedded
+    // `user` key when the device is bound, plus recent
+    // `connection_history` rows for this device.
     const data = await getDeviceDetail(deviceId)
     device.value = data.device || data
-    boundUser.value = data.boundUser || null
-    connectionHistory.value = data.connectionHistory || []
+    boundUser.value = data.user || data.boundUser || data.bound_user || null
+    connectionHistory.value = data.connectionHistory || data.connection_history || []
   } catch (e) {
     ElMessage.error(t('devices.loadFailed') + ': ' + e.message)
   } finally {
     loading.value = false
+  }
+}
+
+async function handleForceUnbind() {
+  try {
+    await ElMessageBox.confirm(
+      t('devices.forceUnbindConfirm'),
+      t('common.confirm'),
+      { type: 'warning' },
+    )
+  } catch { return }
+  try {
+    await forceUnbindDevice(device.value.device_id)
+    ElMessage.success(t('common.success'))
+    loadDetail()
+  } catch (e) {
+    ElMessage.error(e.message)
+  }
+}
+
+async function handleRotateSecret() {
+  try {
+    await ElMessageBox.confirm(
+      t('devices.rotateSecretConfirm'),
+      t('common.confirm'),
+      { type: 'warning' },
+    )
+  } catch { return }
+  try {
+    // §2.17: server returns {device_id, device_secret} (plaintext, once).
+    // We intentionally don't surface the plaintext in UI — the host is
+    // expected to re-provision on the next 401 and never needs a human
+    // to copy the secret around. We show a success toast acknowledging
+    // the rotation and leave further recovery to the host's auto flow.
+    await rotateDeviceSecret(device.value.device_id)
+    ElMessage.success(t('devices.rotateSecretSuccess'))
+  } catch (e) {
+    ElMessage.error(e.message)
+  }
+}
+
+async function handleDelete() {
+  try {
+    await ElMessageBox.confirm(
+      t('devices.deleteConfirm'),
+      t('common.confirm'),
+      { type: 'warning' },
+    )
+  } catch { return }
+  try {
+    await deleteDevice(device.value.device_id)
+    ElMessage.success(t('common.success'))
+    router.back()
+  } catch (e) {
+    ElMessage.error(e.message)
   }
 }
 
@@ -130,6 +205,12 @@ onMounted(loadDetail)
   font-size: 22px;
   font-weight: 600;
   color: #303133;
+}
+
+.header-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
 }
 
 .info-card {

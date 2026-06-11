@@ -1,69 +1,67 @@
-import { authFetch } from './auth.js'
+// /v1/admin/admins/* — admin account CRUD plus 2FA self-service.
+//
+// 2FA endpoints use sub-resource style (not colon-action) because
+// gin/httprouter treats `2fa:setup` and `2fa:verify` as competing
+// wildcards on the same path segment — see §6 W1/W4 in design doc:
+//   POST   /v1/admin/admins/me/2fa/setup
+//   POST   /v1/admin/admins/me/2fa/verify
+//   DELETE /v1/admin/admins/me/2fa
+//
+// List/details follow the standard cursor envelope {items, next_cursor}.
 
-const BASE_URL = '/api/v1/admin'
+import { authJson } from './auth.js'
 
-export async function getAdminUsers() {
-  const res = await authFetch(`${BASE_URL}/users`)
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  return res.json()
+const BASE = '/v1/admin'
+
+// ----- Admin accounts (super_admin only writes; reads OK for any admin) --
+
+export function getAdminUsers() {
+  return authJson(`${BASE}/admins`)
 }
 
-export async function createAdminUser(userData) {
-  const res = await authFetch(`${BASE_URL}/users`, {
+export function getAdminUser(id) {
+  return authJson(`${BASE}/admins/${id}`)
+}
+
+export function createAdminUser(payload) {
+  return authJson(`${BASE}/admins`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(userData)
+    body: JSON.stringify(payload),
   })
-  if (!res.ok) {
-    const error = await res.json()
-    throw new Error(error.error || `HTTP ${res.status}`)
-  }
-  return res.json()
 }
 
-export async function updateAdminUser(id, userData) {
-  const res = await authFetch(`${BASE_URL}/users/${id}`, {
-    method: 'PUT',
+// PATCH per §2.2 (replaces the legacy PUT-with-full-body).
+export function updateAdminUser(id, payload) {
+  return authJson(`${BASE}/admins/${id}`, {
+    method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(userData)
+    body: JSON.stringify(payload),
   })
-  if (!res.ok) {
-    const error = await res.json()
-    throw new Error(error.error || `HTTP ${res.status}`)
-  }
-  return res.json()
 }
 
-export async function deleteAdminUser(id) {
-  const res = await authFetch(`${BASE_URL}/users/${id}`, {
-    method: 'DELETE'
-  })
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  return res.json()
+export function deleteAdminUser(id) {
+  return authJson(`${BASE}/admins/${id}`, { method: 'DELETE' })
 }
 
-export async function setup2FA() {
-  const res = await authFetch(`${BASE_URL}/2fa/setup`, { method: 'POST' })
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  return res.json()
+// ----- Self-service 2FA --------------------------------------------------
+
+export function setup2FA() {
+  return authJson(`${BASE}/admins/me/2fa/setup`, { method: 'POST' })
 }
 
-export async function verify2FA(code) {
-  const res = await authFetch(`${BASE_URL}/2fa/verify`, {
+export function verify2FA(code) {
+  return authJson(`${BASE}/admins/me/2fa/verify`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ code })
+    body: JSON.stringify({ code }),
   })
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  return res.json()
 }
 
-export async function disable2FA(code) {
-  const res = await authFetch(`${BASE_URL}/2fa`, {
+export function disable2FA(code) {
+  return authJson(`${BASE}/admins/me/2fa`, {
     method: 'DELETE',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ code })
+    body: JSON.stringify({ code }),
   })
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  return res.json()
 }

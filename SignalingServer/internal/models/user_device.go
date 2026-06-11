@@ -3,24 +3,25 @@ package models
 import "time"
 
 // UserDevice records the binding relationship between a user and a device.
-// A binding is created when the user successfully connects to a device.
+// Created when the user binds/takes over a device (POST /v1/me/devices) and
+// flipped to status=false on unbind or takeover. `remark` lets a user label
+// devices they've connected to (e.g. "mom's laptop") without affecting the
+// device's own display name.
 type UserDevice struct {
-	ID           uint      `gorm:"primaryKey" json:"id"`
-	UserID       uint      `gorm:"not null;index" json:"user_id"`
-	DeviceID     string    `gorm:"size:9;not null;index" json:"device_id"`
-	DeviceName   string    `gorm:"size:100" json:"device_name"`                    // user-defined label
-	BindType     string    `gorm:"size:20;default:'manual'" json:"bind_type"`      // manual / auto
-	Status       bool      `gorm:"default:true" json:"status"`                     // true=active, false=unbound
-	LastConnect  time.Time `json:"last_connect"`
-	ConnectCount int       `gorm:"default:0" json:"connect_count"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	ID            uint      `gorm:"primaryKey" json:"id"`
+	UserID        uint      `gorm:"not null;uniqueIndex:idx_user_device;index" json:"user_id"`
+	DeviceID      string    `gorm:"size:9;not null;uniqueIndex:idx_user_device;index" json:"device_id"`
+	Remark        string    `gorm:"size:128" json:"remark"`
+	FirstBoundAt  time.Time `json:"first_bound_at"`
+	LastConnectAt time.Time `json:"last_connect_at"`
+	ConnectCount  int       `gorm:"default:0" json:"connect_count"`
+	Status        bool      `gorm:"not null;default:true" json:"status"` // true = active binding, false = unbound/taken-over
 
-	// BelongsTo
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+
+	// Preload target.
 	User User `gorm:"foreignKey:UserID" json:"user,omitempty"`
 }
 
-// TableName overrides the default table name.
-func (UserDevice) TableName() string {
-	return "user_devices"
-}
+func (UserDevice) TableName() string { return "user_devices" }

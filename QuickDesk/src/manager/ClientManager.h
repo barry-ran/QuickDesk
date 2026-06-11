@@ -78,8 +78,12 @@ public:
     QJsonObject getIceConfig() const;
 
     // Connection management — all identified by deviceId
+    // |signalToken| (§2.6) is the one-shot token Qt obtained from
+    // POST /v1/devices/:id/access-code:verify; passed straight to the
+    // Chromium client process as the WS first-frame credential.
     Q_INVOKABLE QString connectToHost(const QString& deviceId,
                                       const QString& accessCode,
+                                      const QString& signalToken,
                                       const QString& serverUrl);
     Q_INVOKABLE void disconnectFromHost(const QString& deviceId);
     Q_INVOKABLE void disconnectAll();

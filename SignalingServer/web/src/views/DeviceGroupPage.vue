@@ -72,7 +72,7 @@ async function loadGroups() {
   loading.value = true
   try {
     const data = await getGroups()
-    groups.value = data.groups || []
+    groups.value = data.items || data.groups || []
   } catch (e) {
     ElMessage.error(t('common.loadFailed') + ': ' + e.message)
   } finally {

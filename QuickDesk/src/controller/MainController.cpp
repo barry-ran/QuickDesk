@@ -38,7 +38,11 @@ MainController::MainController(QObject* parent)
 {
     // Create AuthManager and CloudDeviceManager
     m_authManager = std::make_unique<AuthManager>(m_serverManager.get(), this);
-    m_cloudDeviceManager = std::make_unique<CloudDeviceManager>(m_serverManager.get(), m_authManager.get(), this);
+    // §2.11 logout needs access to HostManager for the live device_id;
+    // wire it before any user flow can trigger logout().
+    m_authManager->setHostManager(m_hostManager.get());
+    m_cloudDeviceManager = std::make_unique<CloudDeviceManager>(
+        m_serverManager.get(), m_authManager.get(), m_hostManager.get(), this);
 
     // Create SkillHostManager and wire it to HostManager (host-side skill bridge)
     m_skillHostManager = std::make_unique<SkillHostManager>(this);
@@ -98,23 +102,13 @@ MainController::MainController(QObject* parent)
         }
         emit hostServerStatusChanged();
 
-        // Re-bind device after signaling reconnect (e.g. after a network
-        // switch). The signaling server clears the device's online flag
-        // on every host WS disconnect; when we come back, we must make
-        // sure logged_in is still true so the device shows online in
-        // the user's device list. autoBindDevice is idempotent.
-        const bool wasConnected = m_lastSignalingConnected;
-        const bool nowConnected = (state == "connected");
-        m_lastSignalingConnected = nowConnected;
-        if (nowConnected && !wasConnected && m_authManager &&
-            m_authManager->isLoggedIn()) {
-            QString deviceId = m_hostManager->deviceId();
-            if (!deviceId.isEmpty() && m_cloudDeviceManager) {
-                LOG_INFO("Signaling reconnected, re-binding device: {}",
-                         deviceId.toStdString());
-                m_cloudDeviceManager->autoBindDevice(deviceId);
-            }
-        }
+        // §2.4 new state machine: `logged_in_intent` is a DB column that
+        // only flips on explicit bind/unbind/session-clear. A host-WS
+        // reconnect after a network switch does NOT require a re-bind —
+        // Redis presence (hb TTL=90s + ws key) self-heals and derived
+        // `online` recovers automatically. We keep m_lastSignalingConnected
+        // tracked only for the server-status UI indicator above.
+        m_lastSignalingConnected = (state == "connected");
     });
     
     // Listen to Client signaling state to update client server status
@@ -165,12 +159,25 @@ MainController::MainController(QObject* parent)
         core::LocalConfigCenter::instance().setSavedAccessCode(currentCode);
         LOG_INFO("Saved access code for 'never refresh' mode: {}", currentCode.toStdString());
 
-        // Sync access code to cloud if logged in
-        if (m_authManager && m_authManager->isLoggedIn()) {
-            QString deviceId = m_hostManager->deviceId();
-            if (!deviceId.isEmpty()) {
-                m_cloudDeviceManager->syncAccessCode(deviceId, currentCode);
-            }
+        // §2.23: access_code upload is independent of user login state —
+        // it uses Bearer device_secret. The PUT only succeeds once the
+        // host has delivered device_secret via native-messaging.
+        QString deviceId = m_hostManager->deviceId();
+        if (!deviceId.isEmpty() && !m_hostManager->deviceSecret().isEmpty()) {
+            m_cloudDeviceManager->syncAccessCode(deviceId, currentCode);
+        }
+    });
+
+    // §2.23: when device_secret arrives (typically together with hostReady,
+    // but it can be re-emitted on host re-provision), push the current
+    // access_code to the server so the cloud copy matches the host.
+    connect(m_hostManager.get(), &HostManager::deviceSecretReady,
+            this, [this](const QString&) {
+        QString deviceId = m_hostManager->deviceId();
+        QString code = m_hostManager->accessCode();
+        if (!deviceId.isEmpty() && !code.isEmpty()) {
+            LOG_INFO("device_secret ready, syncing initial access_code");
+            m_cloudDeviceManager->syncAccessCode(deviceId, code);
         }
     });
     
@@ -180,32 +187,28 @@ MainController::MainController(QObject* parent)
     connect(m_presetManager.get(), &PresetManager::forceUpgradeRequired,
             this, &MainController::forceUpgradeRequired);
 
-    // Auth: on login success, start sync + fetch lists.
-    // Device binding (autoBindDevice) is done in syncConnected handler, so that:
-    //   1. We only bind after server confirms the token is valid (sync requires auth)
-    //   2. Server restart will re-trigger binding via sync reconnection
+    // Auth: on login success, start the realtime events WebSocket.
+    // §2.8 snapshot: fetchMyDevices/fetchFavorites are NOT needed here —
+    // the WS `snapshot` frame replaces the local cache wholesale. We
+    // still fetch connection logs (they don't stream over realtime).
+    // Device binding (autoBindDevice) happens after auth_ok (syncConnected).
     connect(m_authManager.get(), &AuthManager::loginSuccess, this, [this]() {
-        // Start sync WebSocket (triggers autoBindDevice via syncConnected)
         m_cloudDeviceManager->startSync();
-        // Fetch device list + favorites + connection logs
-        m_cloudDeviceManager->fetchMyDevices();
-        m_cloudDeviceManager->fetchFavorites();
         m_cloudDeviceManager->fetchConnectionLogs();
-        // Sync current access code if host is ready
-        QString deviceId = m_hostManager->deviceId();
-        QString code = m_hostManager->accessCode();
-        if (!deviceId.isEmpty() && !code.isEmpty()) {
-            m_cloudDeviceManager->syncAccessCode(deviceId, code);
-        }
+        // syncAccessCode runs on deviceSecretReady (or hostReady), so it
+        // does not need to be triggered here.
     });
 
-    // Auth: on logout, stop sync (server handles logged_in=false in its logout API)
+    // Auth: on logout, stop sync. Logout's two-step flow (§2.11) already
+    // cleared logged_in_intent and the user session server-side.
     connect(m_authManager.get(), &AuthManager::loggedOut, this, [this]() {
         m_cloudDeviceManager->stopSync();
     });
 
-    // Sync WebSocket connected (initial login or server-restart reconnect):
-    // bind device to mark logged_in=true. Idempotent.
+    // syncConnected fires only after the WS has seen auth_ok (§2.8
+    // bootstrap). Safe to bind the device here — server has validated
+    // the token. autoBindDevice is idempotent; it also works on server-
+    // restart reconnects where Redis presence was wiped.
     connect(m_cloudDeviceManager.get(), &CloudDeviceManager::syncConnected, this, [this]() {
         if (!m_authManager->isLoggedIn()) return;
         QString deviceId = m_hostManager->deviceId();
@@ -236,6 +239,15 @@ MainController::MainController(QObject* parent)
     connect(m_wsApiServer.get(), &WebSocketApiServer::authenticatedClientCountChanged,
             this, &MainController::mcpConnectedClientsChanged);
     setupWebSocketApiEvents();
+
+    // §5 scenario #35: when the user switches signaling server URL, the
+    // cached lastDeviceId belongs to a different server and must not be
+    // used for logout (would return 404 at best, or worse — clear the
+    // wrong device's logged_in on a colliding id).
+    connect(m_serverManager.get(), &ServerManager::serverUrlChanged, this, []() {
+        core::LocalConfigCenter::instance().setLastDeviceId("");
+        LOG_INFO("Signaling server URL changed — cleared lastDeviceId");
+    });
 
     // Setup access code auto-refresh timer
     connect(&m_accessCodeRefreshTimer, &QTimer::timeout,
@@ -351,12 +363,46 @@ QString MainController::connectToRemoteHost(const QString& deviceId,
 {
     QString url = serverUrl.isEmpty() ? getDefaultServerUrl() : serverUrl;
     LOG_INFO("Connecting to remote host: {} on {}", deviceId.toStdString(), url.toStdString());
-    QString result = m_clientManager->connectToHost(deviceId, accessCode, url);
 
-    if (!result.isEmpty()) {
-        m_connectionTracks[deviceId] = { QDateTime::currentMSecsSinceEpoch() };
-    }
-    return result;
+    // §2.6: the Chromium client process needs a one-shot signal_token
+    // for the WS first-frame auth. Qt verifies the access_code against
+    // the signaling server via POST /v1/devices/:id/access-code:verify
+    // *before* spawning the native-messaging connectToHost request.
+    // This replaces the legacy /api/v1/auth/verify round-trip that the
+    // Chromium client used to perform itself (now deleted).
+    m_connectionTracks[deviceId] = { QDateTime::currentMSecsSinceEpoch() };
+    m_cloudDeviceManager->verifyAccessCode(
+        deviceId, accessCode,
+        [this, deviceId, accessCode, url](const QString& signalToken) {
+            LOG_INFO("verifyAccessCode OK for device={} — spawning client",
+                     deviceId.toStdString());
+            QString result = m_clientManager->connectToHost(
+                deviceId, accessCode, signalToken, url);
+            if (result.isEmpty()) {
+                // ClientManager already emitted errorOccurred.
+                m_connectionTracks.remove(deviceId);
+            }
+        },
+        [this, deviceId](int httpStatus, const QString& code,
+                         const QString& detail) {
+            LOG_WARN("verifyAccessCode FAILED device={} status={} code={} "
+                     "detail={}",
+                     deviceId.toStdString(), httpStatus,
+                     code.toStdString(), detail.toStdString());
+            m_connectionTracks.remove(deviceId);
+            // Forward as a ClientManager error. verifyAccessCode failures
+            // share the same UX path as "client spawn failed" — the QML
+            // already listens on ClientManager::errorOccurred.
+            Q_EMIT m_clientManager->errorOccurred(
+                deviceId,
+                code.isEmpty() ? QStringLiteral("VERIFY_FAILED") : code,
+                detail);
+        });
+
+    // Return the device_id as the tentative connection_id (same as before
+    // — it was just an echo of ClientManager's generated id, and
+    // ClientManager reuses deviceId when it re-keys the connection).
+    return deviceId;
 }
 
 void MainController::disconnectFromRemoteHost(const QString& deviceId)
@@ -778,7 +824,14 @@ void MainController::onHostReady(const QString& deviceId, const QString& accessC
     LOG_INFO("Host ready - Device ID: {} Access Code: {}", deviceId.toStdString(), accessCode.toStdString());
     m_deviceId = deviceId;
     m_accessCode = accessCode;
-    
+
+    // §2.11 / scenario §5 #19: persist the last known device_id so that
+    // a future "logout before host ready" can still call
+    // DELETE /v1/me/devices/:id/session with a valid id.
+    if (!deviceId.isEmpty()) {
+        core::LocalConfigCenter::instance().setLastDeviceId(deviceId);
+    }
+
     // Load access code refresh interval from config
     m_accessCodeRefreshIntervalMinutes = core::LocalConfigCenter::instance().accessCodeRefreshInterval();
     LOG_INFO("Access code refresh interval: {} minutes", m_accessCodeRefreshIntervalMinutes);
@@ -805,13 +858,20 @@ void MainController::onHostReady(const QString& deviceId, const QString& accessC
         emit deviceIdChanged();
         emit accessCodeChanged();
 
-        // If user already logged in and sync is connected, bind now
-        // (syncConnected handler returned early if deviceId wasn't ready)
+        // Bind device if user is already logged in (syncConnected
+        // handler returned early if deviceId wasn't ready yet).
         if (m_authManager->isLoggedIn() && !deviceId.isEmpty()) {
             m_cloudDeviceManager->autoBindDevice(deviceId);
-            if (!accessCode.isEmpty()) {
-                m_cloudDeviceManager->syncAccessCode(deviceId, accessCode);
-            }
+        }
+        // §2.23: access_code upload uses Bearer device_secret and is
+        // independent of user login state. HostManager::deviceSecretReady
+        // handler in our constructor already triggers the initial
+        // syncAccessCode when the secret arrives. If the secret was
+        // delivered earlier (unlikely — it ships with hostReady), do
+        // the upload here so a late onHostReady still kicks the sync.
+        if (!deviceId.isEmpty() && !accessCode.isEmpty() &&
+            !m_hostManager->deviceSecret().isEmpty()) {
+            m_cloudDeviceManager->syncAccessCode(deviceId, accessCode);
         }
     });
 }

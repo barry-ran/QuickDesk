@@ -2,109 +2,214 @@ package middleware
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
-	"fmt"
 	"net/http"
 	"strings"
-	"time"
 
+	"quickdesk/signaling/internal/httpx"
 	"quickdesk/signaling/internal/service"
 
 	"github.com/gin-gonic/gin"
-	"github.com/pquerna/otp/totp"
-	"github.com/redis/go-redis/v9"
 )
 
-const adminTokenTTL = 24 * time.Hour
+// Gin context keys set by the auth middlewares. Handlers read these via
+// MustUserID / MustAdminID / MustDeviceID rather than touching the raw key
+// strings.
+const (
+	ctxKeyUserID   = "auth.user_id"
+	ctxKeyAdminID  = "auth.admin_id"
+	ctxKeyAccessTk = "auth.access_token"
+	ctxKeyFamilyID = "auth.family_id"
+	ctxKeyDeviceID = "auth.device_id"
+)
 
-type AdminAuth struct {
-	service *service.AdminUserService
-	rdb     *redis.Client
+// =====================================================================
+// User access_token (Bearer)
+// =====================================================================
+
+type UserAuth struct {
+	tokens *service.TokenService
 }
 
-func NewAdminAuth(adminUserService *service.AdminUserService, rdb *redis.Client) *AdminAuth {
-	return &AdminAuth{service: adminUserService, rdb: rdb}
+func NewUserAuth(tokens *service.TokenService) *UserAuth {
+	return &UserAuth{tokens: tokens}
 }
 
-func (a *AdminAuth) redisKey(token string) string {
-	return fmt.Sprintf("admin_token:%s", token)
-}
-
-func (a *AdminAuth) Login(c *gin.Context) {
-	var req struct {
-		User     string `json:"user" binding:"required"`
-		Password string `json:"password" binding:"required"`
-		TOTPCode string `json:"totp_code"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
-		return
-	}
-
-	user, err := a.service.ValidateCredentials(context.Background(), req.User, req.Password)
-	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
-		return
-	}
-
-	if user.TOTPEnabled {
-		if req.TOTPCode == "" {
-			c.JSON(http.StatusOK, gin.H{"error": "2fa_required"})
-			return
-		}
-		if !totp.Validate(req.TOTPCode, user.TOTPSecret) {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid TOTP code"})
-			return
-		}
-	}
-
-	token := generateToken()
-	if err := a.rdb.Set(context.Background(), a.redisKey(token), user.Username, adminTokenTTL).Err(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "session 存储失败"})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"token": token,
-		"user":  user.ToResponse(),
-	})
-}
-
-// AuthRequired is a Gin middleware that verifies the admin token.
-func (a *AdminAuth) AuthRequired() gin.HandlerFunc {
+// Required returns a middleware that aborts with RFC7807 401 if no valid
+// user access_token is present. On success it sets ctxKeyUserID and
+// ctxKeyAccessTk.
+func (a *UserAuth) Required() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		token := ""
-		auth := c.GetHeader("Authorization")
-		if strings.HasPrefix(auth, "Bearer ") {
-			token = strings.TrimPrefix(auth, "Bearer ")
-		}
+		token := bearerOrQuery(c)
 		if token == "" {
-			token = c.Query("token")
-		}
-
-		if token == "" {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+			httpx.Unauthorized(c, httpx.CodeUnauthorized, "Missing access token")
 			return
 		}
-
-		username, err := a.rdb.Get(context.Background(), a.redisKey(token)).Result()
+		family, uid, err := a.tokens.LookupAccessToken(c.Request.Context(), service.ScopeUser, token)
 		if err != nil {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "token expired"})
+			httpx.Unauthorized(c, httpx.CodeTokenExpired, "Access token invalid or expired")
 			return
 		}
-
-		c.Set("admin_username", username)
-		if user, err := a.service.GetAdminUserByUsername(context.Background(), username); err == nil {
-			c.Set("admin_id", user.ID)
-		}
-
+		c.Set(ctxKeyUserID, uid)
+		c.Set(ctxKeyAccessTk, token)
+		c.Set(ctxKeyFamilyID, family)
+		// Bump LastSeen on the session family so /v1/me/sessions stays
+		// fresh. Fire-and-forget; no point in failing the request on a
+		// Redis hiccup. Use background context because the request context
+		// is cancelled after the handler returns.
+		go a.tokens.TouchSession(context.Background(), service.ScopeUser, family)
 		c.Next()
 	}
 }
 
-func generateToken() string {
-	b := make([]byte, 32)
-	rand.Read(b)
-	return hex.EncodeToString(b)
+// MustUserID returns the user ID set by UserAuth.Required(); panics only if
+// the middleware was forgotten — handlers should never see 0.
+func MustUserID(c *gin.Context) uint {
+	if v, ok := c.Get(ctxKeyUserID); ok {
+		if uid, ok := v.(uint); ok {
+			return uid
+		}
+	}
+	return 0
 }
+
+// CurrentAccessToken returns the bearer token used for this request, or
+// empty if none. Used by DELETE /v1/me/sessions/current.
+func CurrentAccessToken(c *gin.Context) string {
+	if v, ok := c.Get(ctxKeyAccessTk); ok {
+		if s, ok := v.(string); ok {
+			return s
+		}
+	}
+	return ""
+}
+
+// CurrentFamilyID returns the session family_id associated with the
+// current access token (set by UserAuth.Required()/AdminAuth.Required()).
+// Used by ListSessions to flag the "current" entry and by
+// DELETE /v1/me/sessions/current to revoke the full family.
+func CurrentFamilyID(c *gin.Context) string {
+	if v, ok := c.Get(ctxKeyFamilyID); ok {
+		if s, ok := v.(string); ok {
+			return s
+		}
+	}
+	return ""
+}
+
+// =====================================================================
+// Admin access_token
+// =====================================================================
+
+type AdminAuth struct {
+	tokens *service.TokenService
+}
+
+func NewAdminAuth(tokens *service.TokenService) *AdminAuth {
+	return &AdminAuth{tokens: tokens}
+}
+
+// Required is the admin counterpart of UserAuth.Required().
+func (a *AdminAuth) Required() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		token := bearerOrQuery(c)
+		if token == "" {
+			httpx.Unauthorized(c, httpx.CodeUnauthorized, "Missing admin access token")
+			return
+		}
+		family, aid, err := a.tokens.LookupAccessToken(c.Request.Context(), service.ScopeAdmin, token)
+		if err != nil {
+			httpx.Unauthorized(c, httpx.CodeTokenExpired, "Admin token invalid or expired")
+			return
+		}
+		c.Set(ctxKeyAdminID, aid)
+		c.Set(ctxKeyAccessTk, token)
+		c.Set(ctxKeyFamilyID, family)
+		go a.tokens.TouchSession(context.Background(), service.ScopeAdmin, family)
+		c.Next()
+	}
+}
+
+func MustAdminID(c *gin.Context) uint {
+	if v, ok := c.Get(ctxKeyAdminID); ok {
+		if id, ok := v.(uint); ok {
+			return id
+		}
+	}
+	return 0
+}
+
+// =====================================================================
+// device_secret Bearer
+// =====================================================================
+
+type DeviceAuth struct {
+	devices *service.DeviceService
+}
+
+func NewDeviceAuth(devices *service.DeviceService) *DeviceAuth {
+	return &DeviceAuth{devices: devices}
+}
+
+// Required validates `Authorization: Bearer <device_secret>` against the
+// device referenced in the URL parameter `device_id`. Sets ctxKeyDeviceID
+// on success.
+func (a *DeviceAuth) Required() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		deviceID := c.Param("device_id")
+		if deviceID == "" {
+			httpx.BadRequest(c, httpx.CodeInvalidRequest, "device_id is required in path")
+			return
+		}
+		secret := bearerOrQuery(c)
+		if secret == "" {
+			httpx.Unauthorized(c, httpx.CodeUnauthorized, "Missing device secret")
+			return
+		}
+		ok, err := a.devices.VerifyDeviceSecret(c.Request.Context(), deviceID, secret)
+		if err != nil {
+			// Device row not found �?treat as bad credentials (don't leak
+			// existence) �?but signal NOT_FOUND so a host that's been
+			// rotated can detect it and re-provision (§2.21 / scenario 26).
+			httpx.NotFound(c, httpx.CodeDeviceNotFound, "Device not registered")
+			return
+		}
+		if !ok {
+			httpx.Unauthorized(c, httpx.CodeDeviceSecretBad, "Device secret mismatch")
+			return
+		}
+		c.Set(ctxKeyDeviceID, deviceID)
+		c.Next()
+	}
+}
+
+func MustDeviceID(c *gin.Context) string {
+	if v, ok := c.Get(ctxKeyDeviceID); ok {
+		if s, ok := v.(string); ok {
+			return s
+		}
+	}
+	return ""
+}
+
+// =====================================================================
+// shared helpers
+// =====================================================================
+
+// bearerOrQuery extracts a token from the Authorization header
+// (`Bearer <token>`) or, as a last resort, the `?token=` query string.
+// Query support is intentional for things like sync WS clients that can't
+// set headers easily; production paths should always use the header.
+func bearerOrQuery(c *gin.Context) string {
+	auth := c.GetHeader("Authorization")
+	if strings.HasPrefix(auth, "Bearer ") {
+		t := strings.TrimSpace(strings.TrimPrefix(auth, "Bearer "))
+		if t != "" {
+			return t
+		}
+	}
+	return strings.TrimSpace(c.Query("token"))
+}
+
+// _ keeps net/http imported for future helpers (status constants used
+// elsewhere in this package).
+var _ = http.StatusOK

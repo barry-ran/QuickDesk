@@ -26,6 +26,13 @@ export default {
     lastUpdate: '上次更新',
     unknown: '未知'
   },
+  pagination: {
+    total: '共 {total} 条',
+    page: '第 {page} 页',
+    perPage: '{n} 条/页',
+    prev: '上一页',
+    next: '下一页'
+  },
   nav: {
     adminPanel: '管理后台',
     dashboard: '监控面板',
@@ -103,7 +110,14 @@ export default {
     basicInfo: '基本信息',
     boundUser: '绑定用户',
     connectionHistory: '连接记录',
-    loadFailed: '加载设备信息失败'
+    loadFailed: '加载设备信息失败',
+    // §2.17 admin mutation actions
+    forceUnbind: '强制解绑',
+    forceUnbindConfirm: '确定要强制解绑此设备吗？设备将被断开，owner 关联会被清除。',
+    rotateSecret: '吊销 device_secret',
+    rotateSecretConfirm: '吊销后当前 device_secret 立即失效，host 将在下次心跳时收到 401 并自动重新 provision。继续吗？',
+    rotateSecretSuccess: 'device_secret 已吊销，host 下次调用会自动重新 provision',
+    deleteConfirm: '彻底删除此设备？此操作不可撤销。'
   },
   deviceList: {
     title: '设备列表',
@@ -186,7 +200,17 @@ export default {
     emailPlaceholder: '请输入邮箱号',
     passwordPlaceholder: '请输入密码',
     levelPlaceholder: '请选择权限等级',
-    channelPlaceholder: '请选择通道类型'
+    channelPlaceholder: '请选择通道类型',
+    // §2.17 kick all sessions for this user
+    revokeSessions: '踢下线',
+    revokeSessionsConfirm: '将立即断开该用户所有 session，客户端会被强制退出登录。继续吗？',
+    // §2.2 admin users/:id/details — active sessions table
+    activeSessions: '活跃 Session',
+    sessionId: 'Session ID',
+    userAgent: '客户端',
+    lastSeen: '最近活动',
+    loggedInAt: '登录时间',
+    noActiveSessions: '当前没有活跃 session'
   },
   adminUser: {
     title: '管理员账户',

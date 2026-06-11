@@ -61,10 +61,19 @@ void ClientManager::setMessaging(NativeMessaging* messaging)
 
 QString ClientManager::connectToHost(const QString& deviceId,
                                      const QString& accessCode,
+                                     const QString& signalToken,
                                      const QString& serverUrl)
 {
     if (!m_messaging || !m_messaging->isReady()) {
-        emit errorOccurred("", "NOT_READY", "Client process is not ready");
+        emit errorOccurred(deviceId, "NOT_READY", "Client process is not ready");
+        return QString();
+    }
+    if (signalToken.isEmpty()) {
+        // §2.6: the Chromium client requires signal_token to run
+        // first-frame WS auth. Qt must have called
+        // CloudDeviceManager::verifyAccessCode() before this point.
+        emit errorOccurred(deviceId, "MISSING_SIGNAL_TOKEN",
+                           "signalToken is required (call verifyAccessCode first)");
         return QString();
     }
 
@@ -95,6 +104,9 @@ QString ClientManager::connectToHost(const QString& deviceId,
     message["connectionId"] = connectionId;
     message["deviceId"] = deviceId;
     message["accessCode"] = accessCode;
+    // §2.6: deliver the one-shot signal_token to the Chromium client
+    // (used as the first-frame WS auth credential, NOT for SPAKE2).
+    message["signalToken"] = signalToken;
     message["serverUrl"] = serverUrl;
     
     // Pass runtime API key so client process can authenticate with signaling server
@@ -203,6 +215,11 @@ void ClientManager::sendHello(const QString& deviceId,
 
     QJsonObject message;
     message["type"] = "hello";
+    // §2.25 native-messaging protocol versioning (parity with
+    // HostManager::sendHello — the Chromium client echoes the same
+    // integer in helloResponse; a mismatch means Qt + nmh drifted and
+    // must be upgraded together).
+    message["protocol_version"] = 2;
     if (!deviceId.isEmpty()) {
         message["deviceId"] = deviceId;
     }

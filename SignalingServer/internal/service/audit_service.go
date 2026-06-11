@@ -31,40 +31,43 @@ func (s *AuditService) Log(ctx context.Context, adminID uint, adminUsername, act
 	s.db.WithContext(ctx).Create(entry)
 }
 
-func (s *AuditService) List(ctx context.Context, offset, limit int, sort, order, action, adminUsername, dateFrom, dateTo string) ([]models.AuditLog, int64, error) {
+// AuditListParams is the cursor-keyset filter used by GET /v1/admin/audit-logs.
+type AuditListParams struct {
+	AfterID                 uint
+	Limit                   int
+	Action, AdminUsername   string
+	DateFrom, DateTo        string
+}
+
+func (s *AuditService) List(ctx context.Context, p AuditListParams) ([]models.AuditLog, int64, error) {
 	query := s.db.WithContext(ctx).Model(&models.AuditLog{})
 
-	if action != "" {
-		query = query.Where("action = ?", action)
+	if p.Action != "" {
+		query = query.Where("action = ?", p.Action)
 	}
-	if adminUsername != "" {
-		query = query.Where("admin_username LIKE ?", "%"+adminUsername+"%")
+	if p.AdminUsername != "" {
+		query = query.Where("admin_username LIKE ?", "%"+p.AdminUsername+"%")
 	}
-	if dateFrom != "" {
-		if t, err := time.Parse(time.RFC3339, dateFrom); err == nil {
+	if p.DateFrom != "" {
+		if t, err := time.Parse(time.RFC3339, p.DateFrom); err == nil {
 			query = query.Where("created_at >= ?", t)
 		}
 	}
-	if dateTo != "" {
-		if t, err := time.Parse(time.RFC3339, dateTo); err == nil {
+	if p.DateTo != "" {
+		if t, err := time.Parse(time.RFC3339, p.DateTo); err == nil {
 			query = query.Where("created_at <= ?", t)
 		}
 	}
 
 	var total int64
-	if err := query.Count(&total).Error; err != nil {
+	if err := query.Session(&gorm.Session{}).Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
 
-	allowedSorts := map[string]bool{"created_at": true, "action": true, "admin_username": true}
-	if !allowedSorts[sort] {
-		sort = "created_at"
+	if p.AfterID > 0 {
+		query = query.Where("id < ?", p.AfterID)
 	}
-	if order != "asc" {
-		order = "desc"
-	}
-
 	var logs []models.AuditLog
-	err := query.Order(sort + " " + order).Offset(offset).Limit(limit).Find(&logs).Error
+	err := query.Order("id DESC").Limit(p.Limit).Find(&logs).Error
 	return logs, total, err
 }

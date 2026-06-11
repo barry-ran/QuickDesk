@@ -9,6 +9,13 @@
 
 namespace quickdesk {
 
+namespace {
+// §2.25 native-messaging protocol version. Bumped to 2 for the
+// signaling-server v1 refactor (host now ships device_secret + uses
+// first-frame auth for signaling WS).
+constexpr int kNativeMessagingProtocolVersion = 2;
+}
+
 HostManager::HostManager(QObject* parent)
     : QObject(parent)
 {
@@ -36,6 +43,9 @@ void HostManager::setMessaging(NativeMessaging* messaging)
         m_clients.clear();
         m_deviceId.clear();
         m_accessCode.clear();
+        // device_secret is runtime-only (§2.22). Clear it so a restarted
+        // host can deliver a new one via helloResponse.
+        m_deviceSecret.clear();
         m_isConnected = false;
         m_signalingState = "disconnected";
         m_signalingRetryCount = 0;
@@ -131,6 +141,9 @@ void HostManager::sendHello()
 
     QJsonObject message;
     message["type"] = "hello";
+    // §2.25 native-messaging protocol versioning. The host must echo
+    // this in helloResponse; mismatch → nativeMessagingProtocolMismatch.
+    message["protocol_version"] = kNativeMessagingProtocolVersion;
     m_messaging->sendMessage(message);
 }
 
@@ -186,6 +199,11 @@ QString HostManager::deviceId() const
 QString HostManager::accessCode() const
 {
     return m_accessCode;
+}
+
+QString HostManager::deviceSecret() const
+{
+    return m_deviceSecret;
 }
 
 bool HostManager::isConnected() const
@@ -291,7 +309,50 @@ void HostManager::onMessagingError(const QString& error)
 void HostManager::handleHelloResponse(const QJsonObject& message)
 {
     QString version = message["version"].toString();
-    LOG_INFO("Host hello response, version: {}", version.toStdString());
+
+    // §2.25: check native-messaging protocol version. If the host didn't
+    // send one, assume legacy (v1) and log a warning — we can't safely
+    // rely on the new fields but we don't outright refuse either,
+    // because the host may be mid-upgrade.
+    int hostProtocolVersion = message.value("protocol_version").toInt(1);
+    if (hostProtocolVersion != kNativeMessagingProtocolVersion) {
+        LOG_WARN("Native-messaging protocol mismatch: host={} qt={}",
+                 hostProtocolVersion, kNativeMessagingProtocolVersion);
+        emit nativeMessagingProtocolMismatch(hostProtocolVersion,
+                                              kNativeMessagingProtocolVersion);
+    }
+
+    // helloResponse may ALSO carry {device_id, device_secret, access_code}
+    // when the host has already finished provisioning by the time Qt
+    // sends its hello (host cold start < Qt hello round-trip). Apply any
+    // present fields so downstream flows (CloudDeviceManager::syncAccessCode)
+    // don't have to wait for a separate hostReady.
+    QString deviceId     = message.value("device_id").toString();
+    if (deviceId.isEmpty()) deviceId = message.value("deviceId").toString();
+    QString accessCode   = message.value("access_code").toString();
+    if (accessCode.isEmpty()) accessCode = message.value("accessCode").toString();
+    QString deviceSecret = message.value("device_secret").toString();
+
+    bool deviceIdChangedFlag = false;
+    bool accessCodeChangedFlag = false;
+    if (!deviceId.isEmpty() && deviceId != m_deviceId) {
+        m_deviceId = deviceId;
+        deviceIdChangedFlag = true;
+    }
+    if (!accessCode.isEmpty() && accessCode != m_accessCode) {
+        m_accessCode = accessCode;
+        accessCodeChangedFlag = true;
+    }
+    if (!deviceSecret.isEmpty() && deviceSecret != m_deviceSecret) {
+        m_deviceSecret = deviceSecret;
+        LOG_INFO("Host device_secret received (len={})", m_deviceSecret.size());
+        emit deviceSecretReady(m_deviceSecret);
+    }
+    if (deviceIdChangedFlag) emit deviceIdChanged();
+    if (accessCodeChangedFlag) emit accessCodeChanged();
+
+    LOG_INFO("Host hello response, version: {}, protocol_version: {}",
+             version.toStdString(), hostProtocolVersion);
     emit helloResponseReceived(version);
 }
 
@@ -310,8 +371,21 @@ void HostManager::handleNatPolicyChanged(const QJsonObject& message)
 void HostManager::handleHostReady(const QJsonObject& message)
 {
     m_deviceId = message["deviceId"].toString();
+    if (m_deviceId.isEmpty()) m_deviceId = message["device_id"].toString();
     m_accessCode = message["accessCode"].toString();
+    if (m_accessCode.isEmpty()) m_accessCode = message["access_code"].toString();
     m_isConnected = true;
+
+    // §2.22 / §2.23: host ships device_secret on hostReady so Qt can
+    // call device-level APIs (syncAccessCode). Runtime-only, never
+    // persisted; cleared on setMessaging(null).
+    QString deviceSecret = message.value("device_secret").toString();
+    if (!deviceSecret.isEmpty() && deviceSecret != m_deviceSecret) {
+        m_deviceSecret = deviceSecret;
+        LOG_INFO("Host device_secret received via hostReady (len={})",
+                 m_deviceSecret.size());
+        emit deviceSecretReady(m_deviceSecret);
+    }
 
     qInfo() << "Host ready - Device ID:" << m_deviceId 
             << "Access Code:" << m_accessCode;
@@ -325,6 +399,7 @@ void HostManager::handleHostReady(const QJsonObject& message)
 void HostManager::handleAccessCodeChanged(const QJsonObject& message)
 {
     QString newAccessCode = message["accessCode"].toString();
+    if (newAccessCode.isEmpty()) newAccessCode = message["access_code"].toString();
     
     if (!newAccessCode.isEmpty()) {
         m_accessCode = newAccessCode;

@@ -125,6 +125,7 @@ Window {
         }
         
         connectionModel.addConnection(deviceId)
+        initializeConnectionState(deviceId)
         
         // Initialize performance stats
         var newStatsMap = Object.assign({}, performanceStatsMap)
@@ -141,6 +142,35 @@ Window {
         
         currentTabIndex = connectionModel.count - 1
         console.log("Added connection to remote window:", deviceId, "Total tabs:", connectionModel.count)
+    }
+
+    function initializeConnectionState(deviceId) {
+        if (!clientManager) return
+
+        var connectedDeviceIds = clientManager.connectedDeviceIds
+        var connectionExists = false
+        for (var i = 0; i < connectedDeviceIds.length; i++) {
+            if (connectedDeviceIds[i] === deviceId) {
+                connectionExists = true
+                break
+            }
+        }
+
+        if (!connectionExists) {
+            return
+        }
+
+        var rtcState = clientManager.getConnectionRtcState(deviceId)
+        var state = "connecting"
+        if (rtcState === RtcStatus.Connected) {
+            state = "connected"
+        } else if (rtcState === RtcStatus.Disconnected) {
+            state = "disconnected"
+        } else if (rtcState === RtcStatus.Failed) {
+            state = "failed"
+        }
+
+        connectionModel.updateState(deviceId, state)
     }
     
     // Close connection and remove tab (unified function for both scenarios)

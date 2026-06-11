@@ -103,7 +103,7 @@ import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useSettingsStore } from './stores/settings.js'
-import { logout } from './api/auth.js'
+import { logout, onSessionEnded } from './api/auth.js'
 import { setLocale, getLocale } from './i18n'
 import { House, Monitor, Setting, User, UserFilled, SwitchButton, Tools, Connection, Folder, Document, Link as LinkIcon } from '@element-plus/icons-vue'
 
@@ -135,14 +135,23 @@ function checkMobile() {
 onMounted(() => {
   window.addEventListener('resize', checkMobile)
   settingsStore.loadSettings()
+  // Wire the auth layer's "session ended" hook back to the router so a
+  // stale refresh token or revoked session kicks the admin to /login
+  // instead of leaving them staring at a broken admin page.
+  onSessionEnded(() => {
+    if (route.name !== 'Login') {
+      router.push('/login')
+    }
+  })
 })
 
 onUnmounted(() => {
   window.removeEventListener('resize', checkMobile)
 })
 
-function handleLogout() {
-  logout()
+async function handleLogout() {
+  // §2.11 admin logout: revoke server-side session + clear local tokens.
+  await logout()
   router.push('/login')
 }
 </script>

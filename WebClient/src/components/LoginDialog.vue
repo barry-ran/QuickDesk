@@ -86,7 +86,7 @@
             <label>{{ $t('user.phone') }}</label>
             <div class="input-row">
               <input v-model="phone" class="form-input" type="text" />
-              <button class="btn btn-secondary" :disabled="smsCountdown > 0 || !phone" @click="sendSms('reset-password')">
+              <button class="btn btn-secondary" :disabled="smsCountdown > 0 || !phone" @click="sendSms('reset_password')">
                 {{ smsCountdown > 0 ? `${smsCountdown}s` : $t('user.sendCode') }}
               </button>
             </div>
@@ -207,12 +207,10 @@ async function submit() {
         errorMsg.value = t('user.phoneCodeRequired'); return
       }
       const r = await userApi.register(username.value, password.value, phone.value, email.value, smsCode.value)
-      if (r.ok) {
-        successMsg.value = t('user.registerSuccess')
-        mode.value = 'login'
-      } else {
-        errorMsg.value = apiError(r)
-      }
+      // §2.2 T20: register response carries access+refresh tokens — the
+      // user is logged in already; don't bounce them back to the login form.
+      if (r.ok) { updateAuthState(); emit('success') }
+      else errorMsg.value = apiError(r)
     }
   } finally {
     loading.value = false

@@ -56,14 +56,16 @@
       </el-table>
 
       <div class="pagination-bar">
-        <el-pagination
-          v-model:current-page="pagination.page"
-          v-model:page-size="pagination.size"
-          :page-sizes="[20, 50, 100]"
+        <!-- §3.1 cursor-based pagination. See components/CursorPagination.vue. -->
+        <CursorPagination
+          :cursor-stack="pagination.cursorStack"
+          :next-cursor="pagination.nextCursor"
           :total="pagination.total"
-          layout="total, sizes, prev, pager, next, jumper"
-          @size-change="loadLogs"
-          @current-change="loadLogs"
+          :limit="pagination.limit"
+          :loading="loading"
+          @prev="goPrevPage"
+          @next="goNextPage"
+          @update:limit="onLimitChange"
         />
       </div>
     </el-card>
@@ -76,6 +78,7 @@ import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { Refresh, Search } from '@element-plus/icons-vue'
 import { getAuditLogs } from '../api/audit.js'
+import CursorPagination from '../components/CursorPagination.vue'
 
 const { t } = useI18n()
 const loading = ref(false)
@@ -83,7 +86,13 @@ const logs = ref([])
 const dateRange = ref(null)
 
 const filters = reactive({ action: '', admin: '', dateFrom: '', dateTo: '' })
-const pagination = reactive({ page: 1, size: 20, total: 0 })
+// §3.1 cursor pagination state.
+const pagination = reactive({
+  cursorStack: [''],
+  nextCursor: '',
+  total: 0,
+  limit: 20
+})
 
 function formatDate(d) {
   if (!d) return '-'
@@ -94,15 +103,16 @@ async function loadLogs() {
   loading.value = true
   try {
     const data = await getAuditLogs({
-      page: pagination.page,
-      size: pagination.size,
+      cursor: pagination.cursorStack.at(-1),
+      limit: pagination.limit,
       action: filters.action,
       admin: filters.admin,
       dateFrom: filters.dateFrom,
       dateTo: filters.dateTo
     })
     logs.value = data.items || []
-    pagination.total = data.total || 0
+    pagination.nextCursor = data.next_cursor || ''
+    if (typeof data.total === 'number') pagination.total = data.total
   } catch (e) {
     ElMessage.error(t('common.loadFailed') + ': ' + e.message)
   } finally {
@@ -110,9 +120,31 @@ async function loadLogs() {
   }
 }
 
-function handleFilter() {
-  pagination.page = 1
+function resetCursorAndReload() {
+  pagination.cursorStack = ['']
+  pagination.nextCursor = ''
   loadLogs()
+}
+
+function goPrevPage() {
+  if (pagination.cursorStack.length <= 1) return
+  pagination.cursorStack.pop()
+  loadLogs()
+}
+
+function goNextPage() {
+  if (!pagination.nextCursor) return
+  pagination.cursorStack.push(pagination.nextCursor)
+  loadLogs()
+}
+
+function onLimitChange(n) {
+  pagination.limit = n
+  resetCursorAndReload()
+}
+
+function handleFilter() {
+  resetCursorAndReload()
 }
 
 function handleDateChange(val) {

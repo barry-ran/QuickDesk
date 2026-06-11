@@ -78,6 +78,21 @@ ApplicationWindow {
         }
     }
 
+    // §2.25 — surface native-messaging protocol mismatch to the user so
+    // they know to upgrade. Fires once per helloResponse when the host's
+    // protocol_version disagrees with Qt's (currently 2).
+    Connections {
+        target: mainController ? mainController.hostManager : null
+        enabled: mainController != null && mainController.hostManager != null
+
+        function onNativeMessagingProtocolMismatch(hostVersion, qtVersion) {
+            console.warn("Native-messaging protocol mismatch: host=" + hostVersion
+                         + " qt=" + qtVersion)
+            toast.show(qsTr("Host version mismatch — please upgrade QuickDesk."),
+                       QDToast.Type.Warning)
+        }
+    }
+
     // Listen to connection state changes to save device credentials
     Connections {
         target: mainController.clientManager
@@ -98,8 +113,7 @@ ApplicationWindow {
                 }
                 return
             }
-            
-            // Save device credentials when connection is successfully established
+
             if (state === "connected" && root.pendingDeviceCredentials[deviceId]) {
                 var credentials = root.pendingDeviceCredentials[deviceId]
                 console.log("Saving device to history:", credentials.deviceId)
@@ -116,6 +130,21 @@ ApplicationWindow {
             // Clean up pending credentials on failure
             if (state === "failed" && root.pendingDeviceCredentials[deviceId]) {
                 delete root.pendingDeviceCredentials[deviceId]
+                remoteControlPage.resetConnectingState()
+            }
+        }
+
+        function onErrorOccurred(deviceId, code, message) {
+            if (deviceId && root.abortedConnections[deviceId]) {
+                var cleaned = Object.assign({}, root.abortedConnections)
+                delete cleaned[deviceId]
+                root.abortedConnections = cleaned
+            }
+
+            if (deviceId && root.pendingDeviceCredentials[deviceId]) {
+                delete root.pendingDeviceCredentials[deviceId]
+                root.closeRemoteWindowTab(deviceId, false)
+                remoteControlPage.resetConnectingState()
             }
         }
     }
@@ -158,26 +187,41 @@ ApplicationWindow {
             }
         }
         
-        // Step 2: Show remote window for this device if connected
-        return showRemoteWindow(deviceId)
+        // Step 2: Show remote window for this device if a connection already exists
+        if (connectionExists(deviceId)) {
+            return showRemoteWindow(deviceId)
+        }
+
+        return false
+    }
+
+    function connectionExists(deviceId) {
+        var connectedDeviceIds = mainController.clientManager.connectedDeviceIds
+        for (var i = 0; i < connectedDeviceIds.length; i++) {
+            if (connectedDeviceIds[i] === deviceId) {
+                return true
+            }
+        }
+        return false
+    }
+
+    function closeRemoteWindowTab(deviceId, needDisconnect) {
+        if (!remoteWindow) return
+
+        var idx = remoteWindow.connectionModel.indexOf(deviceId)
+        if (idx >= 0) {
+            remoteWindow.closeConnection(idx, needDisconnect)
+        }
     }
     
     // Function to create or show remote window
-    function showRemoteWindow(deviceId) {
+    function showRemoteWindow(deviceId, allowPendingConnection) {
         console.log("showRemoteWindow called:", deviceId)
-        
-        // Validate connection exists (silently fail if not, may be connecting or failed quickly)
-        var connectedDeviceIds = mainController.clientManager.connectedDeviceIds
-        var connectionExists = false
-        for (var i = 0; i < connectedDeviceIds.length; i++) {
-            if (connectedDeviceIds[i] === deviceId) {
-                connectionExists = true
-                break
-            }
-        }
-        
-        if (!connectionExists) {
-            console.log("Connection not found (may be connecting or failed):", deviceId)
+
+        if (allowPendingConnection === undefined) allowPendingConnection = false
+
+        if (!allowPendingConnection && !connectionExists(deviceId)) {
+            console.log("Connection not found (may be connecting or failed quickly):", deviceId)
             return false
         }
         
@@ -535,22 +579,19 @@ ApplicationWindow {
                         toast.show(qsTr("Connecting..."), QDToast.Type.Info)
                         var connectedDeviceId = root.mainController.connectToRemoteHost(deviceId, password)
                         if (connectedDeviceId) {
-                            // Store password temporarily for saving after successful connection
-                            root.pendingDeviceCredentials[connectedDeviceId] = {
-                                deviceId: deviceId,
-                                password: password
-                            }
-                            
-                            // Create remote window immediately (it will handle connection states)
-                            if (!root.showRemoteWindow(connectedDeviceId)) {
-                                // Window creation failed — mark as aborted, disconnect and clean up
-                                console.error("Remote window creation failed, disconnecting:", connectedDeviceId)
-                                delete root.pendingDeviceCredentials[connectedDeviceId]
+                            if (!root.showRemoteWindow(connectedDeviceId, true)) {
+                                console.error("Remote window creation failed, aborting:", connectedDeviceId)
                                 var newAborted = Object.assign({}, root.abortedConnections)
                                 newAborted[connectedDeviceId] = true
                                 root.abortedConnections = newAborted
-                                root.mainController.clientManager.disconnectFromHost(connectedDeviceId)
+                                root.mainController.disconnectFromRemoteHost(connectedDeviceId)
                                 remoteControlPage.resetConnectingState()
+                                return
+                            }
+
+                            root.pendingDeviceCredentials[connectedDeviceId] = {
+                                deviceId: deviceId,
+                                password: password
                             }
                         }
                     }
@@ -575,20 +616,23 @@ ApplicationWindow {
                     onConnectToDevice: function(deviceId, accessCode) {
                         // Switch to Remote Control tab
                         navigationView.currentIndex = 0
-                        // Initiate connection
+                        // Initiate connection and show the remote window immediately.
                         toast.show(qsTr("Connecting..."), QDToast.Type.Info)
                         var connectedDeviceId = root.mainController.connectToRemoteHost(deviceId, accessCode)
                         if (connectedDeviceId) {
-                            root.pendingDeviceCredentials[connectedDeviceId] = {
-                                deviceId: deviceId,
-                                password: accessCode
-                            }
-                            if (!root.showRemoteWindow(connectedDeviceId)) {
-                                delete root.pendingDeviceCredentials[connectedDeviceId]
+                            if (!root.showRemoteWindow(connectedDeviceId, true)) {
+                                console.error("Remote window creation failed, aborting:", connectedDeviceId)
                                 var newAborted = Object.assign({}, root.abortedConnections)
                                 newAborted[connectedDeviceId] = true
                                 root.abortedConnections = newAborted
-                                root.mainController.clientManager.disconnectFromHost(connectedDeviceId)
+                                root.mainController.disconnectFromRemoteHost(connectedDeviceId)
+                                remoteControlPage.resetConnectingState()
+                                return
+                            }
+
+                            root.pendingDeviceCredentials[connectedDeviceId] = {
+                                deviceId: deviceId,
+                                password: accessCode
                             }
                         }
                     }

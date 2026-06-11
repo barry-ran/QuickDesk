@@ -78,6 +78,7 @@ export const zh = {
     loginSuccess: '登录成功',
     registerSuccess: '注册成功，请登录',
     logoutSuccess: '已退出登录',
+    sessionExpired: '登录已过期，请重新登录',
     forgotPassword: '忘记密码？',
     passwordHint: '至少8位，包含字母和数字',
   },
@@ -96,7 +97,13 @@ export const zh = {
     addFavorite: '添加收藏',
     online: '在线',
     offline: '离线',
+    // §2.4 derived states: host is reachable (online) but the user has
+    // explicitly logged the host session out (logged_in_intent = false).
+    // We still grey-list it on the UI per T15.
+    notLoggedIn: '未登录',
     unbind: '解绑',
+    confirmUnbind: '确定要从账户中移除这台设备吗？',
+    unbindSuccess: '设备已从账户中移除',
     editFavorite: '编辑',
     connectionLogs: '连接记录',
     noLogs: '暂无连接记录',
@@ -146,6 +153,14 @@ export const zh = {
     SMS_CODE_EXPIRED: '验证码已过期',
     SMS_MAX_ATTEMPTS: '验证码尝试次数过多',
     SMS_SCENE_INVALID: '无效的场景参数',
+    // §2.6 access-code verify error codes
+    DEVICE_NOT_FOUND: '设备不存在',
+    HOST_OFFLINE: '对方设备当前不在线',
+    INVALID_CODE: '访问码错误',
+    TOO_MANY_ATTEMPTS: '尝试次数过多，请稍后再试',
+    TOO_MANY_ATTEMPTS_RETRY: '尝试次数过多，请 {seconds} 秒后再试',
+    REFRESH_INVALID: '登录已过期，请重新登录',
+    TOKEN_INVALID: '登录凭证无效，请重新登录',
   },
   toast: {
     networkError: '网络错误，请检查连接',

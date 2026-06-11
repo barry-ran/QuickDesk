@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && node scripts/copy-legacy.js",
     "preview": "vite preview"
   },
   "dependencies": {

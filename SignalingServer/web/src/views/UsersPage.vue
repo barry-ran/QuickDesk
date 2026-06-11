@@ -32,7 +32,7 @@
           <el-option :label="t('common.enabled')" value="true" />
           <el-option :label="t('common.disabled')" value="false" />
         </el-select>
-        <el-select v-model="filters.channelType" :placeholder="t('userMgmt.filterChannel')" clearable style="width: 140px" @change="handleFilter">
+        <el-select v-model="filters.channel_type" :placeholder="t('userMgmt.filterChannel')" clearable style="width: 140px" @change="handleFilter">
           <el-option :label="t('userMgmt.channelGlobal')" value="全球" />
           <el-option :label="t('userMgmt.channelChina')" value="中国大陆" />
         </el-select>
@@ -46,7 +46,7 @@
       <el-button size="small" @click="handleBatch('enable')">{{ t('batch.enable') }}</el-button>
       <el-button size="small" @click="handleBatch('disable')">{{ t('batch.disable') }}</el-button>
       <el-button size="small" type="danger" @click="handleBatch('delete')">{{ t('batch.delete') }}</el-button>
-      <el-button size="small" @click="handleBatch('set-level')">{{ t('batch.setLevel') }}</el-button>
+      <el-button size="small" @click="handleBatch('set_level')">{{ t('batch.setLevel') }}</el-button>
     </div>
 
     <!-- Table -->
@@ -71,11 +71,11 @@
             <el-tag :type="getLevelType(row.level)" size="small">{{ row.level }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="deviceCount" :label="t('userMgmt.deviceCount')" width="100" sortable="custom" />
-        <el-table-column prop="channelType" :label="t('userMgmt.channelType')" width="110">
+        <el-table-column prop="device_count" :label="t('userMgmt.deviceCount')" width="100" sortable="custom" />
+        <el-table-column prop="channel_type" :label="t('userMgmt.channelType')" width="110">
           <template #default="{ row }">
-            <el-tag :type="row.channelType === '全球' ? 'success' : 'warning'" size="small">
-              {{ row.channelType === '全球' ? t('userMgmt.channelGlobal') : t('userMgmt.channelChina') }}
+            <el-tag :type="row.channel_type === '全球' ? 'success' : 'warning'" size="small">
+              {{ row.channel_type === '全球' ? t('userMgmt.channelGlobal') : t('userMgmt.channelChina') }}
             </el-tag>
           </template>
         </el-table-column>
@@ -109,14 +109,20 @@
       </el-table>
 
       <div class="pagination-bar">
-        <el-pagination
-          v-model:current-page="pagination.page"
-          v-model:page-size="pagination.size"
-          :page-sizes="[20, 50, 100]"
+        <!-- §3.1 cursor-based pagination. The Element-Plus el-pagination
+             jumper/pager model doesn't fit opaque cursors, so we use the
+             custom CursorPagination component that emits prev / next /
+             limit change events against the server's {items, next_cursor,
+             total} envelope. -->
+        <CursorPagination
+          :cursor-stack="pagination.cursorStack"
+          :next-cursor="pagination.nextCursor"
           :total="pagination.total"
-          layout="total, sizes, prev, pager, next, jumper"
-          @size-change="loadUsers"
-          @current-change="loadUsers"
+          :limit="pagination.limit"
+          :loading="loading"
+          @prev="goPrevPage"
+          @next="goNextPage"
+          @update:limit="onLimitChange"
         />
       </div>
     </el-card>
@@ -158,11 +164,11 @@
             <el-option label="V5" value="V5" />
           </el-select>
         </el-form-item>
-        <el-form-item :label="t('userMgmt.deviceCount')" prop="deviceCount">
-          <el-input-number v-model="form.deviceCount" :min="0" style="width: 100%" />
+        <el-form-item :label="t('userMgmt.deviceCount')" prop="device_count">
+          <el-input-number v-model="form.device_count" :min="0" style="width: 100%" />
         </el-form-item>
-        <el-form-item :label="t('userMgmt.channelType')" prop="channelType">
-          <el-select v-model="form.channelType" :placeholder="t('userMgmt.channelPlaceholder')" style="width: 100%">
+        <el-form-item :label="t('userMgmt.channelType')" prop="channel_type">
+          <el-select v-model="form.channel_type" :placeholder="t('userMgmt.channelPlaceholder')" style="width: 100%">
             <el-option :label="t('userMgmt.channelGlobal')" value="全球" />
             <el-option :label="t('userMgmt.channelChina')" value="中国大陆" />
           </el-select>
@@ -208,6 +214,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Edit, Delete, Search, Download } from '@element-plus/icons-vue'
 import { getUsers, createUser, updateUser, deleteUser, batchUsers } from '../api/users.js'
 import { exportCSV } from '../utils/export.js'
+import CursorPagination from '../components/CursorPagination.vue'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -223,13 +230,18 @@ const filters = reactive({
   search: '',
   level: '',
   status: '',
-  channelType: ''
+  channel_type: ''
 })
 
+// §3.1 cursor pagination state.
+//   cursorStack[0] is '' (first page). The last entry is the cursor that
+//   produced the *currently displayed* page. nextCursor comes from the
+//   previous server response. See components/CursorPagination.vue.
 const pagination = reactive({
-  page: 1,
-  size: 20,
-  total: 0
+  cursorStack: [''],
+  nextCursor: '',
+  total: 0,
+  limit: 20
 })
 
 const sort = reactive({
@@ -244,8 +256,8 @@ const form = reactive({
   email: '',
   password: '',
   level: 'V1',
-  deviceCount: 0,
-  channelType: '全球',
+  device_count: 0,
+  channel_type: '全球',
   status: true
 })
 
@@ -268,17 +280,18 @@ async function loadUsers() {
   loading.value = true
   try {
     const data = await getUsers({
-      page: pagination.page,
-      size: pagination.size,
+      cursor: pagination.cursorStack.at(-1),
+      limit: pagination.limit,
       sort: sort.field,
       order: sort.order,
       search: filters.search,
       level: filters.level,
       status: filters.status,
-      channelType: filters.channelType
+      channel_type: filters.channel_type
     })
     users.value = data.items || data.users || []
-    pagination.total = data.total || 0
+    pagination.nextCursor = data.next_cursor || ''
+    if (typeof data.total === 'number') pagination.total = data.total
   } catch (e) {
     ElMessage.error(t('userMgmt.loadFailed') + ': ' + e.message)
   } finally {
@@ -286,20 +299,43 @@ async function loadUsers() {
   }
 }
 
-function handleSearch() {
-  pagination.page = 1
+function resetCursorAndReload() {
+  pagination.cursorStack = ['']
+  pagination.nextCursor = ''
   loadUsers()
 }
 
-function handleFilter() {
-  pagination.page = 1
+function goPrevPage() {
+  if (pagination.cursorStack.length <= 1) return
+  pagination.cursorStack.pop()
   loadUsers()
+}
+
+function goNextPage() {
+  if (!pagination.nextCursor) return
+  pagination.cursorStack.push(pagination.nextCursor)
+  loadUsers()
+}
+
+function onLimitChange(n) {
+  pagination.limit = n
+  resetCursorAndReload()
+}
+
+function handleSearch() {
+  resetCursorAndReload()
+}
+
+function handleFilter() {
+  resetCursorAndReload()
 }
 
 function handleSortChange({ prop, order }) {
   sort.field = prop || 'created_at'
   sort.order = order === 'ascending' ? 'asc' : 'desc'
-  loadUsers()
+  // Sort changes invalidate the cursor stack since the cursor encodes
+  // a position under the previous order.
+  resetCursorAndReload()
 }
 
 function handleRowClick(row) {
@@ -315,8 +351,8 @@ function handleAdd() {
     email: '',
     password: '',
     level: 'V1',
-    deviceCount: 0,
-    channelType: '全球',
+    device_count: 0,
+    channel_type: '全球',
     status: true
   })
   dialogVisible.value = true
@@ -331,8 +367,8 @@ function handleEdit(row) {
     email: row.email,
     password: '',
     level: row.level,
-    deviceCount: row.deviceCount,
-    channelType: row.channelType,
+    device_count: row.device_count,
+    channel_type: row.channel_type,
     status: row.status
   })
   dialogVisible.value = true
@@ -390,8 +426,8 @@ function handleExport() {
     { key: 'phone', label: 'Phone' },
     { key: 'email', label: 'Email' },
     { key: 'level', label: 'Level' },
-    { key: 'deviceCount', label: 'Device Count' },
-    { key: 'channelType', label: 'Channel' },
+    { key: 'device_count', label: 'Device Count' },
+    { key: 'channel_type', label: 'Channel' },
     { key: 'status', label: 'Status' },
     { key: 'created_at', label: 'Created At' }
   ]
@@ -408,7 +444,8 @@ function handleSelectionChange(rows) {
 async function handleBatch(action) {
   if (selectedIds.value.length === 0) return
   try {
-    if (action === 'set-level') {
+    // §2.2 batch op names match server enum: enable|disable|delete|set_level.
+    if (action === 'set_level') {
       selectedLevel.value = ''
       levelDialogVisible.value = true
       return
@@ -425,7 +462,7 @@ async function handleBatch(action) {
 async function confirmBatchLevel() {
   if (!selectedLevel.value) return
   try {
-    await batchUsers('set-level', selectedIds.value, selectedLevel.value)
+    await batchUsers('set_level', selectedIds.value, selectedLevel.value)
     ElMessage.success(t('batch.success'))
     levelDialogVisible.value = false
     loadUsers()

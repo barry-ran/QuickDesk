@@ -1,61 +1,46 @@
-import { authFetch } from './auth.js'
+// /v1/admin/groups/* — device groups (§2.2).
+import { authJson } from './auth.js'
 
-const BASE_URL = '/api/v1/admin'
+const BASE = '/v1/admin/groups'
 
-export async function getGroups() {
-  const res = await authFetch(`${BASE_URL}/groups`)
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  return res.json()
-}
+export function getGroups()       { return authJson(BASE) }
 
-export async function createGroup(data) {
-  const res = await authFetch(`${BASE_URL}/groups`, {
+export function createGroup(data) {
+  return authJson(BASE, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data)
+    body: JSON.stringify(data),
   })
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  return res.json()
 }
 
-export async function updateGroup(id, data) {
-  const res = await authFetch(`${BASE_URL}/groups/${id}`, {
-    method: 'PUT',
+export function updateGroup(id, data) {
+  return authJson(`${BASE}/${id}`, {
+    method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data)
+    body: JSON.stringify(data),
   })
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  return res.json()
 }
 
-export async function deleteGroup(id) {
-  const res = await authFetch(`${BASE_URL}/groups/${id}`, { method: 'DELETE' })
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  return res.json()
+export function deleteGroup(id) {
+  return authJson(`${BASE}/${id}`, { method: 'DELETE' })
 }
 
-export async function addDevicesToGroup(groupId, deviceIds) {
-  const res = await authFetch(`${BASE_URL}/groups/${groupId}/devices`, {
+export function addDevicesToGroup(groupId, deviceIds) {
+  return authJson(`${BASE}/${groupId}/devices`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ device_ids: deviceIds })
+    body: JSON.stringify({ device_ids: deviceIds }),
   })
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  return res.json()
 }
 
-export async function removeDevicesFromGroup(groupId, deviceIds) {
-  const res = await authFetch(`${BASE_URL}/groups/${groupId}/devices`, {
+export function removeDevicesFromGroup(groupId, deviceIds) {
+  return authJson(`${BASE}/${groupId}/devices`, {
     method: 'DELETE',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ device_ids: deviceIds })
+    body: JSON.stringify({ device_ids: deviceIds }),
   })
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  return res.json()
 }
 
-export async function getGroupDevices(groupId) {
-  const res = await authFetch(`${BASE_URL}/groups/${groupId}/devices`)
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  return res.json()
+export function getGroupDevices(groupId) {
+  return authJson(`${BASE}/${groupId}/devices`)
 }

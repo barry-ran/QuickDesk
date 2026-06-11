@@ -38,7 +38,7 @@ func CORSMiddleware(settings DynamicSettingsProvider) gin.HandlerFunc {
 		}
 
 		c.Header("Access-Control-Allow-Origin", c.GetHeader("Origin"))
-		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 		c.Header("Access-Control-Allow-Headers", "X-API-Key, Authorization, Content-Type")
 		c.Header("Access-Control-Max-Age", "86400")
 

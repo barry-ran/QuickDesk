@@ -100,27 +100,32 @@ func (s *AdminUserService) GetAllAdminUsers(ctx context.Context) ([]models.Admin
 	return s.repo.GetAll(ctx)
 }
 
-// UpdateAdminUser updates an admin user
-func (s *AdminUserService) UpdateAdminUser(ctx context.Context, id uint, req *models.UpdateAdminUserRequest) (*models.AdminUser, error) {
+// UpdateAdminUser updates an admin user. The boolean second return tells
+// the caller whether the password actually changed — admin handlers use
+// it to revoke the target's active session families per §2.16
+// "Admin session 改密码后 revoke 本账号全部 session（包括自己）".
+func (s *AdminUserService) UpdateAdminUser(ctx context.Context, id uint, req *models.UpdateAdminUserRequest) (*models.AdminUser, bool, error) {
 	user, err := s.repo.GetByID(ctx, id)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	if req.Username != "" {
 		existing, err := s.repo.GetByUsername(ctx, req.Username)
 		if err == nil && existing.ID != id {
-			return nil, errors.New("username already exists")
+			return nil, false, errors.New("username already exists")
 		}
 		user.Username = req.Username
 	}
 
+	passwordChanged := false
 	if req.Password != "" {
 		hashedPassword, err := HashPassword(req.Password)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		user.Password = hashedPassword
+		passwordChanged = true
 	}
 
 	if req.Email != "" {
@@ -136,10 +141,10 @@ func (s *AdminUserService) UpdateAdminUser(ctx context.Context, id uint, req *mo
 	}
 
 	if err := s.repo.Update(ctx, user); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
-	return user, nil
+	return user, passwordChanged, nil
 }
 
 // DeleteAdminUser deletes an admin user
