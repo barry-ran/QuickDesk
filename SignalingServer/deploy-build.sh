@@ -13,6 +13,7 @@ cd "$SCRIPT_DIR"
 
 PORT=""
 DOMAIN=""
+DATA_DIR="${DATA_DIR:-/data/quickdesk}"
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -55,9 +56,11 @@ echo " QuickDesk Signaling Server (Build Deploy)"
 echo "=========================================="
 echo "Port:     $PORT"
 echo "Domain:   ${DOMAIN:-<none>}"
+echo "Data:     $DATA_DIR"
 echo ""
 
 export SERVER_PORT="$PORT"
+export DATA_DIR
 
 # ---- 1. Build ----
 echo "[1/3] Building Docker image from source..."
@@ -65,6 +68,7 @@ docker compose -f docker-compose.yml -f docker-compose.build.yml build
 
 # ---- 2. Start ----
 echo "[2/3] Starting services..."
+mkdir -p "$DATA_DIR"
 docker compose -f docker-compose.yml -f docker-compose.build.yml up -d
 
 # ---- 3. Health check ----

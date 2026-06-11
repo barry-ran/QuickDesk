@@ -6,9 +6,6 @@ services:
     ports:
       - "${SERVER_PORT:-8000}:8000"
     volumes:
-      - signaling-data:/data
+      - ${DATA_DIR:-/data/quickdesk}:/data
     env_file:
       - .env
-
-volumes:
-  signaling-data:

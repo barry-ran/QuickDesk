@@ -17,6 +17,7 @@ IMAGE_BASE="ghcr.io/barry-ran/quickdesk-signaling"
 VERSION="latest"
 PORT=""
 DOMAIN=""
+DATA_DIR="${DATA_DIR:-/data/quickdesk}"
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -64,15 +65,18 @@ echo "=========================================="
 echo "Image:    ${IMAGE_BASE}:${VERSION}"
 echo "Port:     $PORT"
 echo "Domain:   ${DOMAIN:-<none>}"
+echo "Data:     $DATA_DIR"
 echo ""
 
 export SERVER_PORT="$PORT"
 export IMAGE_TAG="$VERSION"
+export DATA_DIR
 
 echo "[1/3] Pulling image ${IMAGE_BASE}:${IMAGE_TAG}..."
 docker compose pull
 
 echo "[2/3] Starting services..."
+mkdir -p "$DATA_DIR"
 docker compose up -d --force-recreate
 
 # ---- 3. Health check ----

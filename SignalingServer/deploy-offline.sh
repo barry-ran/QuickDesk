@@ -18,6 +18,7 @@ cd "$SCRIPT_DIR"
 IMAGE_TAR=""
 PORT=""
 DOMAIN=""
+DATA_DIR="${DATA_DIR:-/data/quickdesk}"
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -81,9 +82,11 @@ echo "=========================================="
 echo "Image:    $IMAGE_TAR"
 echo "Port:     $PORT"
 echo "Domain:   ${DOMAIN:-<none>}"
+echo "Data:     $DATA_DIR"
 echo ""
 
 export SERVER_PORT="$PORT"
+export DATA_DIR
 
 # ---- 1. Load image ----
 echo "[1/3] Loading Docker image from $IMAGE_TAR ..."
@@ -111,6 +114,7 @@ export IMAGE_TAG
 
 # ---- 2. Start ----
 echo "[2/3] Starting services (IMAGE_TAG=$IMAGE_TAG)..."
+mkdir -p "$DATA_DIR"
 docker compose down 2>/dev/null || true
 docker compose up -d
 

@@ -55,6 +55,25 @@ These parameters can be preset in `.env` or configured later in the admin panel 
 > 
 > **SMS:** Aliyun SMS enables phone number verification for login/register. SMS is auto-enabled when all four fields are set; leave any empty to disable.
 
+### Persistent Data Directory
+
+All Docker deployment scripts store user data on the host at `/data/quickdesk` by default. Data is not stored inside the Docker image:
+
+| Data | Host directory | Container directory |
+|------|----------------|---------------------|
+| PostgreSQL | `/data/quickdesk/postgres` | `/data/postgres` |
+| Redis | `/data/quickdesk/redis` | `/data/redis` |
+
+Rebuilding the image, restarting the container, or running `docker compose up -d` does not clear this directory. Data only disappears if `/data/quickdesk` is manually deleted, or if you switch to a different `DATA_DIR` and mount a new empty directory.
+
+To customize the data directory, set `DATA_DIR` before running the deploy script:
+
+```bash
+DATA_DIR=/data/quickdesk ./deploy-build.sh
+DATA_DIR=/data/quickdesk ./deploy-pull.sh
+DATA_DIR=/data/quickdesk ./deploy-offline.sh quickdesk-signaling-image.tar.gz
+```
+
 ### Option 1: Pull Pre-built Image (Recommended)
 
 No local compilation needed — pull the pre-built image from GitHub Container Registry:
@@ -130,7 +149,7 @@ These settings take effect **immediately** without restarting the server.
 
 ### Docker Compose Management
 
-After deploying with `deploy-pull.sh` or `deploy-offline.sh`, use standard docker compose commands:
+After deploying with `deploy-pull.sh`, `deploy-build.sh` or `deploy-offline.sh`, use standard docker compose commands:
 
 ```bash
 # Check status
