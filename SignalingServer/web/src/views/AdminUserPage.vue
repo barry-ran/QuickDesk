@@ -48,12 +48,18 @@
             <el-button type="primary" size="small" text @click="showEditDialog(row)">
               {{ t('common.edit') }}
             </el-button>
-            <el-button v-if="!row.totp_enabled" type="success" size="small" text @click="handleSetup2FA(row)">
-              {{ t('adminUser.totpSetup') }}
-            </el-button>
-            <el-button v-else type="warning" size="small" text @click="handleDisable2FA(row)">
-              {{ t('adminUser.totpDisable') }}
-            </el-button>
+            <!-- §2.2: /v1/admin/admins/me/2fa:{setup,verify,delete} only
+                 ever operates on the currently-logged-in admin. Show the
+                 toggle for the caller's own row only — otherwise the
+                 button would silently affect the wrong account. -->
+            <template v-if="row.id === currentAdmin?.id">
+              <el-button v-if="!row.totp_enabled" type="success" size="small" text @click="handleSetupMy2FA">
+                {{ t('adminUser.totpSetup') }}
+              </el-button>
+              <el-button v-else type="warning" size="small" text @click="handleDisable2FA">
+                {{ t('adminUser.totpDisable') }}
+              </el-button>
+            </template>
             <el-button type="danger" size="small" text @click="handleDelete(row)" :disabled="row.role === 'super_admin'">
               {{ t('common.delete') }}
             </el-button>
@@ -133,6 +139,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Loading } from '@element-plus/icons-vue'
 import QRCode from 'qrcode'
 import { getAdminUsers, createAdminUser, updateAdminUser, deleteAdminUser, setup2FA, verify2FA, disable2FA } from '../api/admin.js'
+import { getAdminInfo, setAdminInfo } from '../api/auth.js'
 
 const { t } = useI18n()
 
@@ -142,6 +149,20 @@ const dialogVisible = ref(false)
 const isEdit = ref(false)
 const formRef = ref(null)
 const adminUsers = ref([])
+
+const currentAdmin = ref(getAdminInfo())
+
+function refreshCurrentAdminInfo() {
+  // adminUsers list is the source of truth for totp_enabled after any
+  // self-service 2FA mutation. Keep the cached admin info in sync so the
+  // banner disappears without a page reload.
+  if (!currentAdmin.value) return
+  const mine = adminUsers.value.find(u => u.id === currentAdmin.value.id)
+  if (mine) {
+    currentAdmin.value = { ...currentAdmin.value, ...mine }
+    setAdminInfo(currentAdmin.value)
+  }
+}
 
 const form = ref({
   id: null,
@@ -179,12 +200,25 @@ async function loadAdminUsers() {
   loading.value = true
   try {
     const data = await getAdminUsers()
-    adminUsers.value = data.users || []
+    adminUsers.value = data.items || data.users || []
+    // Keep the cached current-admin record fresh so the banner reflects
+    // the real totp_enabled state on the server.
+    refreshCurrentAdminInfo()
   } catch (e) {
     ElMessage.error(t('adminUser.loadFailed') + ': ' + e.message)
   } finally {
     loading.value = false
   }
+}
+
+/**
+ * §2.16 banner action: launch the self-service 2FA setup flow for the
+ * currently logged-in super_admin. Reuses the existing setup dialog.
+ * (`/v1/admin/admins/me/2fa/setup` — `admins/me/2fa/*` routes only ever
+ * act on the caller, so we don't need a row argument.)
+ */
+function handleSetupMy2FA() {
+  handleSetup2FA()
 }
 
 function showCreateDialog() {
@@ -276,7 +310,10 @@ const totpSecret = ref('')
 const totpCode = ref('')
 const totpLoading = ref(false)
 
-async function handleSetup2FA(row) {
+async function handleSetup2FA() {
+  // §2.2: /v1/admin/admins/me/2fa/setup only operates on the current
+  // admin — no row argument is accepted. The banner button and the
+  // per-row button both call this same function.
   totpCode.value = ''
   totpQrDataUrl.value = ''
   totpSecret.value = ''
@@ -312,7 +349,8 @@ async function confirmSetup2FA() {
   }
 }
 
-async function handleDisable2FA(row) {
+async function handleDisable2FA() {
+  // Same one-account-only story as handleSetup2FA — /me/2fa DELETE.
   try {
     const { value } = await ElMessageBox.prompt(t('adminUser.totpDisableConfirm'), t('adminUser.totpDisable'), {
       inputPattern: /^\d{6}$/,
@@ -351,6 +389,17 @@ onMounted(loadAdminUsers)
 
 .table-card {
   width: 100%;
+}
+
+.forced-2fa-banner {
+  margin-bottom: 16px;
+}
+
+.forced-2fa-body {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .empty-state {

@@ -20,6 +20,7 @@ public:
     void sendGetRequest(const QUrl& url, const QList<QPair<QString, QString>>& headers, int timeout, HttpRequestCallback callback);
     void sendPostRequest(const QUrl& url, const QList<QPair<QString, QString>>& headers, const QString& data, int timeout, HttpRequestCallback callback);
     void sendPutRequest(const QUrl& url, const QList<QPair<QString, QString>>& headers, const QString& data, int timeout, HttpRequestCallback callback);
+    void sendPatchRequest(const QUrl& url, const QList<QPair<QString, QString>>& headers, const QString& data, int timeout, HttpRequestCallback callback);
     void sendDeleteRequest(const QUrl& url, const QList<QPair<QString, QString>>& headers, int timeout, HttpRequestCallback callback);
 
 private slots:

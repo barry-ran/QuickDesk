@@ -118,7 +118,11 @@ After deployment, log in to the admin panel to complete the following:
 2. **Configure ICE servers**: Admin Panel → Settings → ICE / TURN / STUN, add your TURN/STUN servers
 3. **Configure security**:
    - **API Key**: Admin Panel → Settings → API Key. When set, only clients carrying this key can connect to the signaling server, preventing unauthorized client access. Native clients (QuickDesk desktop) can configure the API Key in **Settings → Network → API Key** at runtime — no recompilation needed
-   - **Allowed Origins**: Admin Panel → Settings → Allowed Origins. When the WebClient is deployed on a separate domain (e.g. `https://web.quickdesk.cc`), browsers block cross-origin requests by default. Add the WebClient's domain here so the signaling server allows CORS requests from those origins. Separate multiple domains with commas
+   - **Allowed Origins**: Admin Panel → Settings → Allowed Origins. **Required when deploying the WebClient on a separate domain** (e.g. `https://web.quickdesk.cc`). Two reasons:
+     1. CORS — browsers block cross-origin requests by default
+     2. The `POST /v1/devices/:id/access-code:verify` endpoint authenticates browser callers via `Origin` whitelist (browsers can't attach `X-API-Key` to fetch). **If you forget this, the WebClient "Connect" button silently 403s.**
+     
+     Separate multiple domains with commas. Example: `https://web.quickdesk.cc,https://app.quickdesk.cc`
 4. **Configure WebClient URL** (optional): Admin Panel → Preset → WebClient URL. Enter the WebClient deployment address (e.g. `https://web.quickdesk.cc`). The native client will display this link in its UI so users can quickly access the WebClient
 5. **Configure SMS** (optional): Admin Panel → Settings → Aliyun SMS, fill in AccessKey, signature and template to enable phone number verification
 
@@ -184,15 +188,31 @@ docker run -d --name quickdesk-postgres \
   postgres:15
 
 # Start Redis
+# IMPORTANT: keyspace notifications must be enabled so that
+# host heartbeat-TTL expiries surface as `device.online.changed`
+# realtime events. Pass `--notify-keyspace-events Ex` (uppercase E,
+# lowercase x) to redis-server, or set `notify-keyspace-events Ex`
+# in redis.conf for a config-file deployment.
 docker run -d --name quickdesk-redis \
   --restart=always \
   -p 6379:6379 \
   -v /data/quickdesk/redis:/data \
-  redis:7 redis-server --appendonly yes
+  redis:7 redis-server --appendonly yes --notify-keyspace-events Ex
 
 # Verify running status
 docker ps
 ```
+
+> **Why this Redis flag matters** — the v1 design tracks device online/offline
+> state from two signals (heartbeat + signaling-WS connection) stored as
+> Redis keys with TTLs. When a host crashes, only the TTL expiry tells the
+> server it has gone offline. Without `notify-keyspace-events Ex`, the server
+> never sees the expiry and `online` stays stuck at `true` until the next
+> client connect attempt. The default Redis image (`redis:7`) ships with
+> notifications **disabled**.
+>
+> See `QuickDesk/docs/dev/信令服务器API重构方案.md` §2.4 / §2.17 for the
+> full state-machine rationale.
 
 ## 3. Install Go
 
@@ -348,10 +368,12 @@ server {
 
     client_max_body_size 100M;
 
-    # WebSocket endpoints (long-lived connections)
-    # The signaling server sends WebSocket Ping frames every 60s.
-    # Set proxy_read_timeout > ping interval; 300s (5 min) gives ample margin.
-    location /signal/ {
+    # v1 realtime WebSocket endpoints (long-lived).
+    #   /v1/realtime/events  — user device-state stream (Qt + WebClient)
+    #   /v1/realtime/signal  — WebRTC SDP/ICE relay (host + client)
+    # Server sends Ping every 60s; set proxy_read_timeout > Ping interval.
+    # 300s gives ample margin for transient network slowdowns.
+    location /v1/realtime/ {
         proxy_pass http://signaling;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
@@ -366,7 +388,7 @@ server {
         proxy_buffering off;
     }
 
-    # HTTP API and static files
+    # HTTP API (/v1/*) and static admin SPA (/admin/, /).
     location / {
         proxy_pass http://signaling;
         proxy_http_version 1.1;
@@ -375,6 +397,11 @@ server {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_read_timeout 30s;
+
+        # Pre-flight CORS — the WebClient lives on a different
+        # subdomain in most deployments. Add the WebClient origin to
+        # the admin-panel `allowed_origins` setting; the signaling
+        # server emits the appropriate Access-Control-* headers.
     }
 }
 EOF
@@ -414,7 +441,7 @@ server {
     include /etc/letsencrypt/options-ssl-nginx.conf;
     ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
 
-    location /signal/ {
+    location /v1/realtime/ {
         proxy_pass http://127.0.0.1:8000;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
@@ -463,6 +490,63 @@ curl http://your-domain.com/health
 curl https://your-domain.com/health  # HTTPS
 ```
 
+### Health endpoint reference
+
+`GET /health` is the canonical liveness + readiness probe. It is **public**
+(no auth) by design so Kubernetes / load-balancer health checks can hit it
+without provisioning credentials. A healthy server returns:
+
+```json
+{
+  "status":  "ok",
+  "version": "v2.10.0",
+  "components": {
+    "postgres": "ok",
+    "redis":    "ok"
+  }
+}
+```
+
+Behavior:
+
+- HTTP `200` when every component reports `ok` — use this as your readiness
+  probe.
+- HTTP `503` with `status: "degraded"` if any component is non-ok (DB
+  unreachable, Redis missing, …). The `components` map tells you which one.
+- The `version` field comes from the `Version` ldflag at build time
+  (`-X main.Version=$(git describe --tags --always)`). When unset it defaults
+  to `"dev"`.
+
+Recommended Kubernetes probes:
+
+```yaml
+livenessProbe:
+  httpGet: { path: /health, port: 8000 }
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  failureThreshold: 6     # tolerate ~60s of degraded state before kill
+
+readinessProbe:
+  httpGet: { path: /health, port: 8000 }
+  periodSeconds: 5
+  failureThreshold: 2     # take out of LB rotation quickly
+```
+
+When you put nginx in front, `/health` is reachable at the public domain and
+also serves as a quick smoke test from the outside:
+
+```bash
+# Expect 200 + JSON
+curl -i https://your-domain.com/health
+```
+
+If your monitoring stack only consumes status codes, use:
+
+```bash
+curl -fsS -o /dev/null -w '%{http_code}\n' https://your-domain.com/health
+# → 200 healthy / 503 degraded / connection error = service down
+```
+
 ## 11. View Logs
 
 ```bash
@@ -500,11 +584,13 @@ docker exec quickdesk-postgres pg_dump -U quickdesk quickdesk > /backup/quickdes
 # Restore database
 cat backup.sql | docker exec -i quickdesk-postgres psql -U quickdesk -d quickdesk
 
-# View preset configuration
-curl http://localhost:8000/api/v1/admin/preset
+# View preset configuration (you need an admin access_token)
+curl http://localhost:8000/v1/admin/preset \
+  -H "Authorization: Bearer $ADMIN_ACCESS_TOKEN"
 
 # Update preset configuration (can also be done via admin dashboard at /admin/)
-curl -X PUT http://localhost:8000/api/v1/admin/preset \
+curl -X PUT http://localhost:8000/v1/admin/preset \
+  -H "Authorization: Bearer $ADMIN_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d @test_preset.json
 ```
@@ -606,8 +692,10 @@ After deployment, the following URLs are available:
 
 - **HTTP**: `http://your-domain.com`
 - **HTTPS**: `https://your-domain.com`
-- **WebSocket**: `wss://your-domain.com/signal/:device_id?access_code=xxx`
-- **API**: `https://your-domain.com/api/v1/devices/register`
+- **Health probe**: `https://your-domain.com/health`
+- **WebSocket (realtime events)**: `wss://your-domain.com/v1/realtime/events` (first-frame auth — see user-api-docs §7.1)
+- **WebSocket (signaling relay)**: `wss://your-domain.com/v1/realtime/signal` (first-frame auth — see user-api-docs §7.2)
+- **API root**: `https://your-domain.com/v1/` (full route table in `SignalingServer/docs/user-api-docs.md`)
 - **Admin Dashboard**: `https://your-domain.com/admin/` (devices, users, admin accounts, system settings)
 - **WebClient**: Deployed independently, communicates with the signaling server via API
 

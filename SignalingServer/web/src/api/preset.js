@@ -1,19 +1,14 @@
-import { authFetch } from './auth.js'
+// /v1/admin/preset (§2.2). Returns a JSON object — not a list.
+import { authJson } from './auth.js'
 
-const BASE_URL = '/api/v1/admin/preset'
+const BASE = '/v1/admin/preset'
 
-export async function getPreset() {
-  const res = await authFetch(BASE_URL)
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  return res.json()
-}
+export function getPreset() { return authJson(BASE) }
 
-export async function updatePreset(data) {
-  const res = await authFetch(BASE_URL, {
+export function updatePreset(data) {
+  return authJson(BASE, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data)
+    body: JSON.stringify(data),
   })
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  return res.json()
 }

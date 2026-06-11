@@ -83,10 +83,18 @@ class RemoteDesktopApp {
         const params = new URLSearchParams(window.location.search);
         const serverUrl = params.get('server') || 'ws://localhost:8000';
         const deviceId = params.get('device');
-        const accessCode = params.get('code');
+        // §2.18: URL carries a one-shot signal_token (key "st"), NOT the
+        // plaintext access_code. The access_code is handed off via
+        // sessionStorage (see src/utils/remoteLauncher.js) — same-origin,
+        // never on the wire / browser history. SPAKE2 still needs the
+        // access_code as the shared secret so the host can verify the
+        // peer end-to-end (§2.6).
+        const signalToken = params.get('st');
+        const handoff = this._readHandoff(signalToken);
+        const accessCode = handoff && handoff.access_code;
         const preferredVideoCodec = params.get('codec') || '';
 
-        if (!deviceId || !accessCode) {
+        if (!deviceId || !signalToken || !accessCode) {
             this._log(t('log.missingParams'), 'error');
             this._setConnectionState('failed', t('status.missingParams'));
             return;
@@ -119,7 +127,25 @@ class RemoteDesktopApp {
         const iceServers = await fetcher.getIceServers();
         this._log(t('log.iceServers', { count: iceServers.length }));
 
-        await this._connect(serverUrl, deviceId, accessCode, iceServers, preferredVideoCodec);
+        await this._connect(serverUrl, deviceId, accessCode, signalToken, iceServers, preferredVideoCodec);
+    }
+
+    /**
+     * Read the one-shot handoff envelope written by the launcher. Clears
+     * it immediately so browser refresh won't accidentally reuse a
+     * consumed signal_token (they're single-use server-side anyway, but
+     * keep storage clean).
+     */
+    _readHandoff(signalToken) {
+        if (!signalToken) return null;
+        const key = `quickdesk_remote_handoff__${signalToken}`;
+        try {
+            const raw = sessionStorage.getItem(key);
+            if (raw) sessionStorage.removeItem(key);
+            return raw ? JSON.parse(raw) : null;
+        } catch {
+            return null;
+        }
     }
 
     _initRemoteLangSelector() {
@@ -135,7 +161,7 @@ class RemoteDesktopApp {
         });
     }
 
-    async _connect(serverUrl, deviceId, accessCode, iceServers, preferredVideoCodec) {
+    async _connect(serverUrl, deviceId, accessCode, signalToken, iceServers, preferredVideoCodec) {
         this._log(t('log.connectingTo', { deviceId }));
         this._deviceId = deviceId;
         this._connectStartTime = Date.now();
@@ -253,7 +279,7 @@ class RemoteDesktopApp {
                 this._log(t('log.downloadFailed', { error: e.detail.errorMessage }));
             });
 
-            await this.session.connect(deviceId, accessCode);
+            await this.session.connect(deviceId, accessCode, signalToken);
 
         } catch (error) {
             this._log(t('log.connectFailed', { error: error.message }), 'error');
@@ -262,7 +288,7 @@ class RemoteDesktopApp {
     }
 
     _onSessionStateChange(detail) {
-        const { oldState, newState } = detail;
+        const { oldState, newState, reason } = detail;
         this._log(t('log.stateChange', { from: oldState, to: newState }));
 
         switch (newState) {
@@ -282,10 +308,23 @@ class RemoteDesktopApp {
                     } catch (e) { /* cross-origin */ }
                 }
                 break;
-            case SessionState.FAILED:
-                this._setConnectionState('failed', t('status.failed'));
-                this._recordConnectionResult('failed', 'Connection failed');
+            case SessionState.FAILED: {
+                // §2.15 surfaces precise reason codes from signaling:
+                //   HOST_OFFLINE       — peer never came online
+                //   PEER_DISCONNECTED  — peer dropped mid-session
+                //   TOKEN_INVALID/AUTH_INVALID — signal_token rejected
+                // Fall back to the generic "connection failed" message
+                // for WebRTC/ICE-level failures that have no reason
+                // code (oniceconnectionstatechange → failed etc.).
+                const reasonKey = reason ? `status.reason.${reason}` : '';
+                const reasonText = reasonKey ? t(reasonKey) : '';
+                const failMsg = (reasonText && reasonText !== reasonKey)
+                    ? reasonText
+                    : t('status.failed');
+                this._setConnectionState('failed', failMsg);
+                this._recordConnectionResult('failed', reason || 'Connection failed');
                 break;
+            }
             case SessionState.CLOSED:
                 this._setConnectionState('failed', t('status.closed'));
                 this._recordConnectionResult('success');

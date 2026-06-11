@@ -1,9 +1,9 @@
 package middleware
 
 import (
-	"net/http"
 	"strings"
 
+	"quickdesk/signaling/internal/httpx"
 	"quickdesk/signaling/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -71,10 +71,7 @@ func (a *APIKeyAuth) Required() gin.HandlerFunc {
 			c.Next()
 			return
 		}
-		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
-			"error":   "ACCESS_DENIED",
-			"message": "Invalid or missing API key / origin not allowed",
-		})
+		httpx.Forbidden(c, httpx.CodeForbidden, "Invalid or missing API key / origin not allowed")
 	}
 }
 

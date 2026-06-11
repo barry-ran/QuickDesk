@@ -19,7 +19,7 @@
           <el-icon><Monitor /></el-icon>
         </div>
         <div class="overview-content">
-          <div class="overview-value">{{ overview.totalDevices }}</div>
+          <div class="overview-value">{{ metricValue(overview.totalDevices) }}</div>
           <div class="overview-label">{{ t('dashboard.totalDevices') }}</div>
           <div class="overview-desc">{{ t('dashboard.totalDevicesDesc') }}</div>
         </div>
@@ -29,7 +29,7 @@
           <el-icon><Connection /></el-icon>
         </div>
         <div class="overview-content">
-          <div class="overview-value">{{ overview.totalConnections }}</div>
+          <div class="overview-value">{{ metricValue(overview.totalConnections) }}</div>
           <div class="overview-label">{{ t('dashboard.totalConnections') }}</div>
           <div class="overview-desc">{{ t('dashboard.totalConnectionsDesc') }}</div>
         </div>
@@ -39,7 +39,7 @@
           <el-icon><Connection /></el-icon>
         </div>
         <div class="overview-content">
-          <div class="overview-value">{{ overview.webSocketConnections }}</div>
+          <div class="overview-value">{{ metricValue(overview.webSocketConnections) }}</div>
           <div class="overview-label">{{ t('dashboard.wsConnections') }}</div>
           <div class="overview-desc">{{ t('dashboard.wsConnectionsDesc') }}</div>
         </div>
@@ -49,7 +49,7 @@
           <el-icon><DataLine /></el-icon>
         </div>
         <div class="overview-content">
-          <div class="overview-value">{{ overview.apiRequests }}</div>
+          <div class="overview-value">{{ metricValue(overview.apiRequests) }}</div>
           <div class="overview-label">{{ t('dashboard.apiRequests') }}</div>
           <div class="overview-desc">{{ t('dashboard.apiRequestsDesc') }}</div>
         </div>
@@ -127,10 +127,10 @@
       </div>
 
       <el-table :data="activityList" stripe style="width: 100%" size="small" :row-class-name="rowClassName">
-        <el-table-column prop="time" :label="t('dashboard.time')" width="180" />
-        <el-table-column prop="deviceId" :label="t('dashboard.deviceId')" width="120" />
-        <el-table-column prop="action" :label="t('dashboard.activity')" width="150" />
-        <el-table-column prop="details" :label="t('dashboard.details')" show-overflow-tooltip />
+        <el-table-column prop="created_at" :label="t('dashboard.time')" width="180" />
+        <el-table-column prop="device_id" :label="t('dashboard.deviceId')" width="120" />
+        <el-table-column prop="device_name" :label="t('dashboard.activity')" width="150" />
+        <el-table-column prop="error_msg" :label="t('dashboard.details')" show-overflow-tooltip />
         <el-table-column prop="status" :label="t('common.status')" width="100">
           <template #default="{ row }">
             <el-tag :type="row.status === 'success' ? 'success' : 'warning'" size="small">
@@ -145,15 +145,21 @@
       </div>
 
       <div class="pagination-bar">
-        <el-pagination
-          v-model:current-page="activityPagination.page"
-          v-model:page-size="activityPagination.size"
-          :page-sizes="[20, 50, 100]"
+        <!-- §3.1 cursor-based pagination. See components/CursorPagination.vue.
+             Note: GET /v1/admin/activity (admin_stats_handler.go:97) only
+             consumes ?cursor=&limit= today — the activityFilters.deviceId/
+             status/dateRange are forwarded but the server ignores them.
+             They're kept in the UI so we don't lose the filter affordance
+             when the server adds support later. -->
+        <CursorPagination
+          :cursor-stack="activityPagination.cursorStack"
+          :next-cursor="activityPagination.nextCursor"
           :total="activityPagination.total"
-          layout="total, sizes, prev, pager, next, jumper"
-          size="small"
-          @size-change="loadActivity"
-          @current-change="loadActivity"
+          :limit="activityPagination.limit"
+          :loading="loading"
+          @prev="goPrevActivity"
+          @next="goNextActivity"
+          @update:limit="onActivityLimitChange"
         />
       </div>
     </el-card>
@@ -167,16 +173,17 @@ import { ElMessage } from 'element-plus'
 import { Monitor, Connection, Timer, Refresh, DataLine, Download } from '@element-plus/icons-vue'
 import { getStats, getSystemStatus, getConnectionStatus, getActivity, getTrends } from '../api/stats.js'
 import { exportCSV } from '../utils/export.js'
+import CursorPagination from '../components/CursorPagination.vue'
 import * as echarts from 'echarts'
 
 const { t } = useI18n()
 const loading = ref(false)
 
 const overview = ref({
-  totalDevices: 0,
-  totalConnections: 0,
-  webSocketConnections: 0,
-  apiRequests: 0
+  totalDevices: null,
+  totalConnections: null,
+  webSocketConnections: null,
+  apiRequests: null
 })
 
 const todaySummary = ref({
@@ -212,57 +219,79 @@ const activityFilters = reactive({
 })
 
 const activityPagination = reactive({
-  page: 1,
-  size: 20,
-  total: 0
+  cursorStack: [''],
+  nextCursor: '',
+  total: 0,
+  limit: 20
 })
-
-function getDateRange(range) {
-  const now = new Date()
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  switch (range) {
-    case 'today':
-      return { dateFrom: today.toISOString(), dateTo: '' }
-    case '7days': {
-      const d = new Date(today)
-      d.setDate(d.getDate() - 7)
-      return { dateFrom: d.toISOString(), dateTo: '' }
-    }
-    case '30days': {
-      const d = new Date(today)
-      d.setDate(d.getDate() - 30)
-      return { dateFrom: d.toISOString(), dateTo: '' }
-    }
-    default:
-      return { dateFrom: '', dateTo: '' }
-  }
-}
 
 function rowClassName({ row }) {
   return row.status === 'success' ? 'success-row' : 'failed-row'
 }
 
+function metricValue(value) {
+  return typeof value === 'number' ? value : '—'
+}
+
+function applyDashboardStats(statsData, connectionData) {
+  overview.value.totalDevices = statsData.devices_total || 0
+  overview.value.totalConnections = connectionData.current_connections ?? 0
+  overview.value.webSocketConnections = connectionData.websocket_connections || 0
+  overview.value.apiRequests = connectionData.api_requests_today || 0
+
+  connectionStatus.value = {
+    currentConnections: overview.value.totalConnections || 0,
+    todayConnections: connectionData.today_connections || 0,
+    webSocketConnections: overview.value.webSocketConnections || 0,
+    apiRequests: overview.value.apiRequests || 0
+  }
+
+  todaySummary.value.todayNewDevices = statsData.devices_new_today || 0
+  todaySummary.value.todayConnections = connectionData.today_connections || 0
+  todaySummary.value.todayActiveUsers = statsData.today_active_users || 0
+}
+
 async function loadActivity() {
-  const { dateFrom, dateTo } = getDateRange(activityFilters.dateRange)
   try {
     const data = await getActivity({
-      page: activityPagination.page,
-      size: activityPagination.size,
-      deviceId: activityFilters.deviceId,
-      status: activityFilters.status,
-      dateFrom,
-      dateTo
+      cursor: activityPagination.cursorStack.at(-1),
+      limit: activityPagination.limit
     })
     activityList.value = data.items || data.activity || []
-    activityPagination.total = data.total || 0
+    activityPagination.nextCursor = data.next_cursor || ''
+    if (typeof data.total === 'number') activityPagination.total = data.total
   } catch (e) {
     ElMessage.error(t('dashboard.activityFailed') + ': ' + e.message)
   }
 }
 
-function handleActivityFilter() {
-  activityPagination.page = 1
+function resetActivityCursor() {
+  activityPagination.cursorStack = ['']
+  activityPagination.nextCursor = ''
   loadActivity()
+}
+
+function goPrevActivity() {
+  if (activityPagination.cursorStack.length <= 1) return
+  activityPagination.cursorStack.pop()
+  loadActivity()
+}
+
+function goNextActivity() {
+  if (!activityPagination.nextCursor) return
+  activityPagination.cursorStack.push(activityPagination.nextCursor)
+  loadActivity()
+}
+
+function onActivityLimitChange(n) {
+  activityPagination.limit = n
+  resetActivityCursor()
+}
+
+function handleActivityFilter() {
+  // Server-side filtering for activity is not implemented yet; reload to
+  // keep the UI deterministic when the user toggles filters.
+  resetActivityCursor()
 }
 
 async function loadStats() {
@@ -274,16 +303,7 @@ async function loadStats() {
       getConnectionStatus()
     ])
     stats.value = statsData
-    connectionStatus.value = connectionData
-
-    overview.value.totalDevices = statsData.totalDevices || 0
-    overview.value.totalConnections = connectionData.currentConnections || 0
-    overview.value.webSocketConnections = connectionData.webSocketConnections || 0
-    overview.value.apiRequests = connectionData.apiRequests || 0
-
-    todaySummary.value.todayNewDevices = statsData.todayNewDevices || 0
-    todaySummary.value.todayConnections = statsData.todayConnections || 0
-    todaySummary.value.todayActiveUsers = statsData.todayActiveUsers || 0
+    applyDashboardStats(statsData, connectionData)
 
     ElMessage.success(t('dashboard.statsUpdated'))
   } catch (e) {
@@ -295,10 +315,10 @@ async function loadStats() {
 
 function handleExportActivity() {
   const columns = [
-    { key: 'time', label: 'Time' },
-    { key: 'deviceId', label: 'Device ID' },
-    { key: 'action', label: 'Activity' },
-    { key: 'details', label: 'Details' },
+    { key: 'created_at', label: 'Time' },
+    { key: 'device_id', label: 'Device ID' },
+    { key: 'device_name', label: 'Device Name' },
+    { key: 'error_msg', label: 'Details' },
     { key: 'status', label: 'Status' }
   ]
   exportCSV(columns, activityList.value, 'activity.csv')
@@ -313,9 +333,13 @@ async function loadTrends() {
     if (!chartInstance) {
       chartInstance = echarts.init(chartRef.value)
     }
-    const labels = Array.isArray(data.labels) ? data.labels : []
-    const connections = Array.isArray(data.connections) ? data.connections : []
-    const newDevices = Array.isArray(data.newDevices) ? data.newDevices : []
+    const rawConns = Array.isArray(data.connections) ? data.connections : []
+    const rawDevices = Array.isArray(data.devices) ? data.devices : []
+    // API returns [{day, count}, ...]; extract labels from the longer series.
+    const longerSeries = rawConns.length >= rawDevices.length ? rawConns : rawDevices
+    const labels = longerSeries.map(r => r.day ? r.day.substring(0, 10) : '')
+    const connections = rawConns.map(r => r.count || 0)
+    const newDevices = rawDevices.map(r => r.count || 0)
     chartInstance.setOption({
       tooltip: { trigger: 'axis' },
       legend: { data: [t('dashboard.totalConnections'), t('dashboard.todayNewDevices')] },
@@ -344,16 +368,7 @@ async function refreshSystemStatus() {
       getConnectionStatus()
     ])
     stats.value = statsData
-    connectionStatus.value = connectionData
-
-    overview.value.totalDevices = statsData.totalDevices || 0
-    overview.value.totalConnections = connectionData.currentConnections || 0
-    overview.value.webSocketConnections = connectionData.webSocketConnections || 0
-    overview.value.apiRequests = connectionData.apiRequests || 0
-
-    todaySummary.value.todayNewDevices = statsData.todayNewDevices || 0
-    todaySummary.value.todayConnections = statsData.todayConnections || 0
-    todaySummary.value.todayActiveUsers = statsData.todayActiveUsers || 0
+    applyDashboardStats(statsData, connectionData)
   } catch (e) {
     console.error('Failed to refresh system status:', e.message)
   }

@@ -146,7 +146,8 @@ async function changePassword() {
 
 async function sendPhoneSms() {
   if (smsCountdown.value > 0) return
-  const r = await userApi.sendSmsCode(newPhone.value, 'change-phone')
+  // §2.2: scene=bind_phone for phone change verification.
+  const r = await userApi.sendSmsCode(newPhone.value, 'bind_phone')
   if (r.ok) {
     smsCountdown.value = 60
     smsTimer = setInterval(() => {

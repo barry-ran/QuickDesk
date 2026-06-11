@@ -1,86 +1,90 @@
-import { authFetch } from './auth.js'
+// /v1/admin/users/* — business user CRUD (§2.2).
+//
+// Notes vs. the legacy /api/v1/admin/user-list path used pre-refactor:
+//   • Path moved from /admin/user-list → /admin/users (§2.2)
+//   • PATCH replaces PUT for partial updates
+//   • New: POST /admin/users/:id/sessions:revoke kicks every active
+//     session for a user (§2.17)
+//   • Batch endpoint moved to /admin/users:batch (colon-action style)
 
-const BASE_URL = '/api/v1/admin/user-list'
+import { authJson } from './auth.js'
 
-export async function getUsers(params = {}) {
-  const query = new URLSearchParams()
-  if (params.page) query.set('page', params.page)
-  if (params.size) query.set('size', params.size)
-  if (params.sort) query.set('sort', params.sort)
-  if (params.order) query.set('order', params.order)
-  if (params.search) query.set('search', params.search)
-  if (params.level) query.set('level', params.level)
-  if (params.status !== undefined && params.status !== '') query.set('status', params.status)
-  if (params.channelType) query.set('channelType', params.channelType)
+const BASE = '/v1/admin/users'
 
-  const qs = query.toString()
-  const res = await authFetch(`${BASE_URL}${qs ? '?' + qs : ''}`)
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  return res.json()
+export function getUsers(params = {}) {
+  return authJson(`${BASE}${buildQuery(params)}`)
 }
 
-export async function getUser(id) {
-  const res = await authFetch(`${BASE_URL}/${id}`)
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  return res.json()
-}
+export function getUser(id)         { return authJson(`${BASE}/${id}`) }
+export function getUserDetail(id)   { return authJson(`${BASE}/${id}/details`) }
 
-export async function getUserDetail(id) {
-  const res = await authFetch(`${BASE_URL}/${id}/details`)
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  return res.json()
-}
-
-export async function createUser(data) {
-  const res = await authFetch(BASE_URL, {
+export function createUser(data) {
+  return authJson(BASE, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data)
+    body: JSON.stringify(data),
   })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error(err.error || `HTTP ${res.status}`)
-  }
-  return res.json()
 }
 
-export async function updateUser(id, data) {
-  const res = await authFetch(`${BASE_URL}/${id}`, {
-    method: 'PUT',
+export function updateUser(id, data) {
+  return authJson(`${BASE}/${id}`, {
+    method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data)
+    body: JSON.stringify(data),
   })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error(err.error || `HTTP ${res.status}`)
-  }
-  return res.json()
 }
 
-export async function deleteUser(id) {
-  const res = await authFetch(`${BASE_URL}/${id}`, {
-    method: 'DELETE'
-  })
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  return res.json()
+export function deleteUser(id) {
+  return authJson(`${BASE}/${id}`, { method: 'DELETE' })
 }
 
-export async function batchUsers(action, ids, level) {
-  const res = await authFetch('/api/v1/admin/user-list/batch', {
+// §2.2: POST /v1/admin/users:batch body = { ids:[...], op, level? }.
+// Server contract (admin_users_handler.go):
+//   op ∈ {enable, disable, delete, set_level}
+//   level required when op=set_level
+export function batchUsers(op, ids, level) {
+  const body = { ids, op }
+  if (level !== undefined && level !== null && level !== '') body.level = level
+  return authJson(`${BASE}:batch`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ action, ids, level })
+    body: JSON.stringify(body),
   })
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  return res.json()
 }
 
-export async function updateUserDeviceCount(id, deviceCount) {
-  const res = await authFetch(`${BASE_URL}/${id}/device-count`, {
-    method: 'PUT',
+// §2.17: kick a user off every active session and emit session.revoked.
+export function revokeUserSessions(id) {
+  return authJson(`${BASE}/${id}/sessions:revoke`, { method: 'POST' })
+}
+
+// PATCH /v1/admin/users/:id/device-count body = { device_count: N }.
+// Server's adminPatchUserReq uses snake_case `device_count`
+// (admin_users_handler.go — unified snake_case per architect review).
+export function updateUserDeviceCount(id, deviceCount) {
+  return authJson(`${BASE}/${id}/device-count`, {
+    method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ deviceCount })
+    body: JSON.stringify({ device_count: deviceCount }),
   })
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  return res.json()
+}
+
+// ------------------------------------------------------------------------
+
+function buildQuery(params) {
+  const q = new URLSearchParams()
+  if (params.cursor) q.set('cursor', params.cursor)
+  if (params.limit)  q.set('limit',  params.limit)
+  if (params.size && !params.limit) q.set('limit', params.size)
+  if (params.sort)  q.set('sort',  params.sort)
+  if (params.order) q.set('order', params.order)
+  if (params.search) q.set('search', params.search)
+  if (params.level) q.set('level', params.level)
+  if (params.status !== undefined && params.status !== '') q.set('status', params.status)
+  // Server reads `channel_type` (snake_case, unified per architect review).
+  // Callers may pass either snake_case (preferred) or the legacy camelCase
+  // key; forward whichever is non-empty.
+  const channelType = params.channel_type ?? params.channelType
+  if (channelType) q.set('channel_type', channelType)
+  const qs = q.toString()
+  return qs ? `?${qs}` : ''
 }

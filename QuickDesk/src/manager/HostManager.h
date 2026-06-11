@@ -81,6 +81,13 @@ public:
     int clientCount() const;
     QStringList clientIds() const;
     QList<SessionInfo> connectedClients() const;
+
+    // §2.22 / §2.23: device_secret is delivered runtime by Chromium host
+    // through native-messaging hello/connectResponse. Qt holds it in
+    // memory only (NEVER persisted) and uses it as `Authorization:
+    // Bearer <secret>` for device-level API calls (currently just the
+    // access-code PUT — see CloudDeviceManager::syncAccessCode).
+    QString deviceSecret() const;
     
     // Get client info for display
     Q_INVOKABLE QString getClientUsername(const QString& clientId) const;
@@ -99,6 +106,16 @@ signals:
     void connectionStatusChanged();
     void clientCountChanged();
     void signalingStateChanged();
+
+    // Fired once per host process lifetime when device_secret arrives.
+    // CloudDeviceManager listens to immediately push a fresh access_code
+    // (§2.23 "Qt 进程重启：device_secret 丢失 → 等 host 再次发来；期间
+    // access_code 在服务端保持旧值不影响 client 连接").
+    void deviceSecretReady(const QString& secret);
+
+    // §2.25 native-messaging protocol mismatch — surface to UI so the
+    // user knows the host needs a matching update.
+    void nativeMessagingProtocolMismatch(int hostVersion, int qtVersion);
     
     void helloResponseReceived(const QString& version);
     void hostReady(const QString& deviceId, const QString& accessCode);
@@ -125,6 +142,7 @@ private:
     QPointer<NativeMessaging> m_messaging;
     QString m_deviceId;
     QString m_accessCode;
+    QString m_deviceSecret;  // §2.22 runtime-only, never persisted
     bool m_isConnected = false;
     QMap<QString, SessionInfo> m_clients;
     

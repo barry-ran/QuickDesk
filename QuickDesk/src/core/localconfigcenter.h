@@ -50,9 +50,13 @@ public:
     LCC_FUNCTION_DEC_BOOL(autoPrivacyScreenOnConnect, AutoPrivacyScreenOnConnect, false) // Auto-enable privacy screen when a client connects
 
     // User authentication
-    LCC_FUNCTION_DEC_STRING(userToken, UserToken, "")    // Persisted user session token
+    LCC_FUNCTION_DEC_STRING(userToken, UserToken, "")    // Persisted user access token (short-lived; used to bootstrap restoreSession only)
+    LCC_FUNCTION_DEC_STRING(refreshToken, RefreshToken, "")    // Persisted refresh token (30d) — refresh via POST /v1/auth/tokens:refresh
+    LCC_FUNCTION_DEC_STRING(accessTokenExpiresAt, AccessTokenExpiresAt, "")  // ISO8601 UTC expiry of current access token
+    LCC_FUNCTION_DEC_STRING(refreshTokenExpiresAt, RefreshTokenExpiresAt, "") // ISO8601 UTC expiry of current refresh token
     LCC_FUNCTION_DEC_STRING(userId, UserId, "")          // Persisted user ID
     LCC_FUNCTION_DEC_STRING(username, Username, "")      // Persisted username
+    LCC_FUNCTION_DEC_STRING(lastDeviceId, LastDeviceId, "") // Last known device_id of local host (§2.11 two-step logout bootstrap fallback)
 
 private:
     AppConfigDataBase* m_configDatabase = nullptr;

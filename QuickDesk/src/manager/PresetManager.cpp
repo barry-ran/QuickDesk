@@ -69,7 +69,7 @@ void PresetManager::fetchPreset()
     httpUrl.replace("ws://", "http://");
     httpUrl.replace("wss://", "https://");
     if (!httpUrl.endsWith("/")) httpUrl += "/";
-    httpUrl += "api/v1/preset";
+    httpUrl += "v1/preset";
 
     QUrl url(httpUrl);
     QList<QPair<QString, QString>> headers;
@@ -127,11 +127,12 @@ void PresetManager::parsePresetData(const QByteArray& data)
     QJsonObject root = doc.object();
     QString lang = currentLanguage();
 
-    // Parse announcement
-    QJsonObject noticeObj = root["notice"].toObject();
-    QString newAnnouncement = noticeObj[lang].toString();
+    // Parse announcement (§2.2 — server key renamed from `notice` to
+    // `announcement`; payload per-lang shape unchanged).
+    QJsonObject announceObj = root["announcement"].toObject();
+    QString newAnnouncement = announceObj[lang].toString();
     if (newAnnouncement.isEmpty() && lang != "en_US") {
-        newAnnouncement = noticeObj["en_US"].toString();
+        newAnnouncement = announceObj["en_US"].toString();
     }
     if (m_announcement != newAnnouncement) {
         m_announcement = newAnnouncement;

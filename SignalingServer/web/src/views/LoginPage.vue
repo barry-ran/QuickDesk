@@ -75,7 +75,7 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { User, Lock, Delete, Key } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import { login } from '../api/auth.js'
+import { login, loginWithTotp } from '../api/auth.js'
 import { getSettings } from '../api/settings.js'
 
 const router = useRouter()
@@ -85,6 +85,10 @@ const loading = ref(true)
 const siteName = ref('')
 
 const show2FA = ref(false)
+// §2.16 step-up: server hands us a short-lived pre_token on the first
+// response so the TOTP call can authenticate the continuation without
+// re-asking for the password.
+const preToken = ref('')
 
 const form = reactive({
   user: '',
@@ -100,10 +104,11 @@ const rules = computed(() => ({
 async function loadSiteName() {
   loading.value = true
   try {
+    // §2.2: /v1/settings/public returns snake_case (site_name, site_enabled).
     const data = await getSettings()
-    if (data.siteName) {
-      siteName.value = data.siteName
-      document.title = data.siteName + ' Admin'
+    if (data.site_name) {
+      siteName.value = data.site_name
+      document.title = data.site_name + ' Admin'
     }
   } catch (e) {
     console.error('Failed to load site name:', e)
@@ -128,20 +133,27 @@ async function handleLogin() {
 
   loading.value = true
   try {
-    const result = await login(form.user, form.password, form.totp_code)
-    if (result && result.error === '2fa_required') {
-      show2FA.value = true
-      ElMessage.info(t('login.totpRequired'))
-      return
+    // Two flows:
+    //   1) First attempt: POST /v1/admin/auth/sessions with username+password
+    //      (+ totp_code if we're retrying in the same form). Server either
+    //      grants tokens or throws { code:'TOTP_REQUIRED', preToken }.
+    //   2) If we hold a pre_token from (1) and the user has now typed a
+    //      code, go straight to /v1/admin/auth/sessions:totp — no
+    //      password re-entry needed.
+    if (show2FA.value && preToken.value && form.totp_code) {
+      await loginWithTotp(preToken.value, form.totp_code)
+    } else {
+      await login(form.user, form.password, form.totp_code)
     }
     ElMessage.success(t('login.loginSuccess'))
     router.push('/home')
   } catch (e) {
-    if (e.message === '2fa_required') {
+    if (e.code === 'TOTP_REQUIRED') {
       show2FA.value = true
+      if (e.preToken) preToken.value = e.preToken
       ElMessage.info(t('login.totpRequired'))
     } else {
-      ElMessage.error(t('login.loginFailed'))
+      ElMessage.error(e.message || t('login.loginFailed'))
     }
   } finally {
     loading.value = false

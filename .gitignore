@@ -80,3 +80,4 @@ quickdesk-mcp/target
 quickdesk-agent/target
 quickdesk-skill-host/target
 QuickDesk/3rdparty/rapidocr
+SignalingServer/.env

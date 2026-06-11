@@ -39,8 +39,8 @@
     <div v-if="selectedIds.length > 0" class="batch-bar">
       <span>{{ t('batch.selected', { count: selectedIds.length }) }}</span>
       <el-button size="small" type="danger" @click="handleBatch('delete')">{{ t('batch.delete') }}</el-button>
-      <el-button size="small" @click="handleBatch('group')">{{ t('batch.assignGroup') }}</el-button>
-      <el-button size="small" @click="handleBatch('ungroup')">{{ t('batch.removeGroup') }}</el-button>
+      <el-button size="small" @click="handleBatch('assign_group')">{{ t('batch.assignGroup') }}</el-button>
+      <el-button size="small" @click="handleBatch('remove_group')">{{ t('batch.removeGroup') }}</el-button>
     </div>
 
     <!-- Table -->
@@ -72,9 +72,9 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column :label="t('devices.lastSeen')" width="170" sortable="custom" prop="last_seen">
+        <el-table-column :label="t('devices.lastSeen')" width="170" sortable="custom" prop="last_seen_at">
           <template #default="{ row }">
-            {{ formatDate(row.last_seen) }}
+            {{ formatDate(row.last_seen_at) }}
           </template>
         </el-table-column>
         <el-table-column :label="t('devices.createdAt')" width="170" sortable="custom" prop="created_at">
@@ -85,14 +85,16 @@
       </el-table>
 
       <div class="pagination-bar">
-        <el-pagination
-          v-model:current-page="pagination.page"
-          v-model:page-size="pagination.size"
-          :page-sizes="[20, 50, 100]"
+        <!-- §3.1 cursor-based pagination. See components/CursorPagination.vue. -->
+        <CursorPagination
+          :cursor-stack="pagination.cursorStack"
+          :next-cursor="pagination.nextCursor"
           :total="pagination.total"
-          layout="total, sizes, prev, pager, next, jumper"
-          @size-change="loadDevices"
-          @current-change="loadDevices"
+          :limit="pagination.limit"
+          :loading="loading"
+          @prev="goPrevPage"
+          @next="goNextPage"
+          @update:limit="onLimitChange"
         />
       </div>
     </el-card>
@@ -123,6 +125,7 @@ import { Refresh, Search, Download } from '@element-plus/icons-vue'
 import { getDevices, batchDevices } from '../api/admin_device.js'
 import { getGroups } from '../api/device_groups.js'
 import { exportCSV } from '../utils/export.js'
+import CursorPagination from '../components/CursorPagination.vue'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -138,10 +141,12 @@ const filters = reactive({
   online: ''
 })
 
+// §3.1 cursor pagination state. See UsersPage.vue for the full rationale.
 const pagination = reactive({
-  page: 1,
-  size: 20,
-  total: 0
+  cursorStack: [''],
+  nextCursor: '',
+  total: 0,
+  limit: 20
 })
 
 const sort = reactive({
@@ -158,8 +163,8 @@ async function loadDevices() {
   loading.value = true
   try {
     const data = await getDevices({
-      page: pagination.page,
-      size: pagination.size,
+      cursor: pagination.cursorStack.at(-1),
+      limit: pagination.limit,
       sort: sort.field,
       order: sort.order,
       search: filters.search,
@@ -167,7 +172,8 @@ async function loadDevices() {
       online: filters.online
     })
     devices.value = data.items || []
-    pagination.total = data.total || 0
+    pagination.nextCursor = data.next_cursor || ''
+    if (typeof data.total === 'number') pagination.total = data.total
   } catch (e) {
     ElMessage.error(t('common.loadFailed') + ': ' + e.message)
   } finally {
@@ -175,20 +181,41 @@ async function loadDevices() {
   }
 }
 
-function handleSearch() {
-  pagination.page = 1
+function resetCursorAndReload() {
+  pagination.cursorStack = ['']
+  pagination.nextCursor = ''
   loadDevices()
 }
 
-function handleFilter() {
-  pagination.page = 1
+function goPrevPage() {
+  if (pagination.cursorStack.length <= 1) return
+  pagination.cursorStack.pop()
   loadDevices()
+}
+
+function goNextPage() {
+  if (!pagination.nextCursor) return
+  pagination.cursorStack.push(pagination.nextCursor)
+  loadDevices()
+}
+
+function onLimitChange(n) {
+  pagination.limit = n
+  resetCursorAndReload()
+}
+
+function handleSearch() {
+  resetCursorAndReload()
+}
+
+function handleFilter() {
+  resetCursorAndReload()
 }
 
 function handleSortChange({ prop, order }) {
   sort.field = prop || 'created_at'
   sort.order = order === 'ascending' ? 'asc' : 'desc'
-  loadDevices()
+  resetCursorAndReload()
 }
 
 function handleRowClick(row) {
@@ -202,7 +229,7 @@ function handleExport() {
     { key: 'os', label: 'OS' },
     { key: 'app_version', label: 'Version' },
     { key: 'online', label: 'Online' },
-    { key: 'last_seen', label: 'Last Seen' },
+    { key: 'last_seen_at', label: 'Last Seen' },
     { key: 'created_at', label: 'Created At' }
   ]
   exportCSV(columns, devices.value, 'devices.csv')
@@ -218,7 +245,7 @@ const selectedGroupId = ref(null)
 async function loadGroups() {
   try {
     const data = await getGroups()
-    groups.value = data.groups || []
+    groups.value = data.items || data.groups || []
   } catch (e) {
     groups.value = []
   }
@@ -227,7 +254,8 @@ async function loadGroups() {
 async function handleBatch(action) {
   if (selectedIds.value.length === 0) return
   try {
-    if (action === 'group') {
+    // §2.2 batch op names match server enum: delete|assign_group|remove_group.
+    if (action === 'assign_group') {
       await loadGroups()
       if (groups.value.length === 0) {
         ElMessage.warning(t('deviceGroups.noGroups'))
@@ -249,7 +277,7 @@ async function handleBatch(action) {
 async function confirmBatchGroup() {
   if (!selectedGroupId.value) return
   try {
-    await batchDevices('group', selectedIds.value, selectedGroupId.value)
+    await batchDevices('assign_group', selectedIds.value, selectedGroupId.value)
     ElMessage.success(t('batch.success'))
     groupDialogVisible.value = false
     loadDevices()

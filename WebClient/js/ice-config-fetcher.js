@@ -2,10 +2,10 @@
  * ice-config-fetcher.js - ICE configuration fetcher
  *
  * Fetches time-limited TURN/STUN credentials from the signaling server
- * at /api/v1/ice-config.
+ * at /v1/ice-config (§2.2).
  */
 
-const ICE_CONFIG_PATH = '/api/v1/ice-config';
+const ICE_CONFIG_PATH = '/v1/ice-config';
 const FETCH_TIMEOUT_MS = 3000;
 
 export class IceConfigFetcher {
@@ -68,11 +68,12 @@ export class IceConfigFetcher {
 
     /** @private */
     _parseIceConfig(json) {
-        if (!json || !Array.isArray(json.iceServers)) {
-            return [];
-        }
+        // §2.2: server returns `ice_servers` (snake_case). Tolerate the
+        // legacy `iceServers` key too in case some old deployments linger.
+        const list = (json && (json.ice_servers || json.iceServers)) || [];
+        if (!Array.isArray(list)) return [];
 
-        return json.iceServers.map(server => {
+        return list.map(server => {
             const entry = { urls: server.urls };
             if (server.username) entry.username = server.username;
             if (server.credential) entry.credential = server.credential;

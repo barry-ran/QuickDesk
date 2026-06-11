@@ -124,7 +124,11 @@ LCC_FUNCTION_IMP_STRING(trustConfirmMode, TrustConfirmMode);
 LCC_FUNCTION_IMP_BOOL(autoPrivacyScreenOnConnect, AutoPrivacyScreenOnConnect);
 
 LCC_FUNCTION_IMP_STRING(userToken, UserToken);
+LCC_FUNCTION_IMP_STRING(refreshToken, RefreshToken);
+LCC_FUNCTION_IMP_STRING(accessTokenExpiresAt, AccessTokenExpiresAt);
+LCC_FUNCTION_IMP_STRING(refreshTokenExpiresAt, RefreshTokenExpiresAt);
 LCC_FUNCTION_IMP_STRING(userId, UserId);
 LCC_FUNCTION_IMP_STRING(username, Username);
+LCC_FUNCTION_IMP_STRING(lastDeviceId, LastDeviceId);
 
 }

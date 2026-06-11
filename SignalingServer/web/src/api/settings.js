@@ -1,20 +1,25 @@
-import { authFetch } from './auth.js'
+// /v1/settings/public (no auth) and /v1/admin/settings (admin auth).
+//
+// §2.2: write uses PUT (was POST in the pre-refactor admin web).
 
-const PUBLIC_URL = '/api/v1/settings'
-const ADMIN_URL = '/api/v1/admin/settings'
+import { authJson, authFetch } from './auth.js'
 
+// Public — read-only, anyone can hit it.
 export async function getSettings() {
-  const res = await fetch(PUBLIC_URL)
+  const res = await fetch('/v1/settings/public')
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   return res.json()
 }
 
-export async function updateSettings(data) {
-  const res = await authFetch(ADMIN_URL, {
-    method: 'POST',
+// Admin read.
+export function getAdminSettings() {
+  return authJson('/v1/admin/settings')
+}
+
+export function updateSettings(data) {
+  return authJson('/v1/admin/settings', {
+    method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data)
+    body: JSON.stringify(data),
   })
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  return res.json()
 }

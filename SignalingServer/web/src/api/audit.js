@@ -1,18 +1,18 @@
-import { authFetch } from './auth.js'
+// /v1/admin/audit-logs (§2.2).
+import { authJson } from './auth.js'
 
-const BASE_URL = '/api/v1/admin'
+const BASE = '/v1/admin/audit-logs'
 
-export async function getAuditLogs(params = {}) {
-  const query = new URLSearchParams()
-  if (params.page) query.set('page', params.page)
-  if (params.size) query.set('size', params.size)
-  if (params.action) query.set('action', params.action)
-  if (params.admin) query.set('admin', params.admin)
-  if (params.dateFrom) query.set('dateFrom', params.dateFrom)
-  if (params.dateTo) query.set('dateTo', params.dateTo)
-
-  const qs = query.toString()
-  const res = await authFetch(`${BASE_URL}/audit-logs${qs ? '?' + qs : ''}`)
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  return res.json()
+export function getAuditLogs(params = {}) {
+  const q = new URLSearchParams()
+  if (params.cursor) q.set('cursor', params.cursor)
+  if (params.limit)  q.set('limit',  params.limit)
+  if (params.size && !params.limit) q.set('limit', params.size)
+  if (params.action)   q.set('action', params.action)
+  if (params.admin)    q.set('admin',  params.admin)
+  // Server reads snake_case date_from / date_to.
+  if (params.dateFrom) q.set('date_from', params.dateFrom)
+  if (params.dateTo)   q.set('date_to',   params.dateTo)
+  const qs = q.toString()
+  return authJson(`${BASE}${qs ? `?${qs}` : ''}`)
 }

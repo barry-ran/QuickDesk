@@ -91,7 +91,7 @@ async function loadWebhooks() {
   loading.value = true
   try {
     const data = await getWebhooks()
-    webhooks.value = data.webhooks || []
+    webhooks.value = data.items || data.webhooks || []
   } catch (e) {
     ElMessage.error(t('common.loadFailed') + ': ' + e.message)
   } finally {

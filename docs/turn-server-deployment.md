@@ -13,7 +13,7 @@ coturn supports two authentication mechanisms. **Choose one — they are mutuall
 | **Long-Term Credentials** | `lt-cred-mech` + `user=` | Static users, simple setups |
 | **REST API / HMAC Temporary Credentials** | `use-auth-secret` + `static-auth-secret=` | Integration with QuickDesk signaling server; credentials are time-limited and generated on demand |
 
-For production use with the QuickDesk signaling server, **REST API mode is recommended** — the signaling server's `/api/v1/ice-config` endpoint automatically generates short-lived TURN credentials so no static passwords are exposed to clients.
+For production use with the QuickDesk signaling server, **REST API mode is recommended** — the signaling server's `/v1/ice-config` endpoint automatically generates short-lived TURN credentials so no static passwords are exposed to clients.
 
 ---
 
@@ -140,7 +140,7 @@ fingerprint
 # ~~~ MODE 2: REST API / HMAC Temporary Credentials (Recommended) ~~~
 # Use this to integrate with the QuickDesk signaling server.
 # The signaling server uses this shared secret to generate time-limited
-# TURN credentials on behalf of clients via /api/v1/ice-config.
+# TURN credentials on behalf of clients via /v1/ice-config.
 # Credentials expire after a short window (typically 1 hour), so even if
 # intercepted they cannot be reused indefinitely.
 #
@@ -251,7 +251,7 @@ TURN_URLS=turn:115.190.196.189:3478
 STUN_URLS=stun:115.190.196.189:3478
 ```
 
-The signaling server will then respond to `/api/v1/ice-config` requests with short-lived credentials:
+The signaling server will then respond to `/v1/ice-config` requests with short-lived credentials:
 
 ```json
 {

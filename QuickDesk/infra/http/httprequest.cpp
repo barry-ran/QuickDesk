@@ -73,6 +73,25 @@ void HttpRequest::sendPutRequest(const QUrl& url, const QList<QPair<QString, QSt
     m_tasks[taskKey] = callback;
 }
 
+void HttpRequest::sendPatchRequest(const QUrl& url, const QList<QPair<QString, QString>>& headers, const QString& data, int timeout, HttpRequestCallback callback)
+{
+    QNetworkRequest request;
+    request.setUrl(url);
+    request.setTransferTimeout(timeout);
+    for (auto it = headers.constBegin(); it != headers.constEnd(); ++it) {
+        request.setRawHeader(it->first.toUtf8(), it->second.toUtf8());
+    }
+
+    configRequest(request);
+
+    QByteArray byte = data.toUtf8();
+    request.setHeader(QNetworkRequest::ContentLengthHeader, byte.size());
+    QNetworkReply* reply = m_networkAccessManager->sendCustomRequest(request, "PATCH", byte);
+    auto taskKey = reinterpret_cast<quintptr>(reply);
+    LOG_DEBUG("[http] start patch:{}", taskKey);
+    m_tasks[taskKey] = callback;
+}
+
 void HttpRequest::sendDeleteRequest(const QUrl& url, const QList<QPair<QString, QString>>& headers, int timeout, HttpRequestCallback callback)
 {
     QNetworkRequest request;
@@ -115,10 +134,12 @@ void HttpRequest::slotHttpFinished(QNetworkReply* reply)
 
 void HttpRequest::configRequest(QNetworkRequest &request)
 {
-    // default ssl config
+#ifdef QT_DEBUG
+    // Disable SSL verification in debug builds for self-signed certs
     QSslConfiguration sslConfig;
     sslConfig.setPeerVerifyMode(QSslSocket::VerifyNone);
     request.setSslConfiguration(sslConfig);
+#endif
 
     // 这里不要设置，qt会自动设置"gzip, deflate"并后面自动解压，如果这里手动设置了"gzip, deflate"后面反而需要自己手动解压
     //https://stackoverflow.com/questions/2340548/does-qnetworkmanager-get-accept-compressed-replies-by-default

@@ -10,9 +10,12 @@ export const useSettingsStore = defineStore('settings', () => {
   async function loadSettings() {
     loading.value = true
     try {
+      // §2.2: /v1/settings/public returns snake_case (site_name etc.).
+      // The store keeps camelCase variable names because JS convention
+      // is camelCase, only the wire field names changed.
       const data = await getSettings()
-      siteName.value = data.siteName || 'QuickDesk'
-      siteEnabled.value = data.siteEnabled !== false
+      siteName.value = data.site_name || 'QuickDesk'
+      siteEnabled.value = data.site_enabled !== false
     } catch (e) {
       console.error('加载设置失败:', e)
     } finally {
@@ -21,11 +24,11 @@ export const useSettingsStore = defineStore('settings', () => {
   }
 
   function updateSettings(data) {
-    if (data.siteName !== undefined) {
-      siteName.value = data.siteName
+    if (data.site_name !== undefined) {
+      siteName.value = data.site_name
     }
-    if (data.siteEnabled !== undefined) {
-      siteEnabled.value = data.siteEnabled
+    if (data.site_enabled !== undefined) {
+      siteEnabled.value = data.site_enabled
     }
   }
 

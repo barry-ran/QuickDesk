@@ -142,26 +142,38 @@ async function restoreSession() {
   userApi.setBaseUrl(userApi.getServerUrl())
   fetchFeatures()
 
-  // Handle ?token= auto-login from Qt client
+  // Session-ended callback (§2.15 T10): second 401 after refresh or
+  // refresh token rejected → pop back to the login flow.
+  userApi.onSessionEnded(() => {
+    userSync.stop()
+    updateAuthState()
+    try { router.push('/remote') } catch { /* noop on first load */ }
+    showLogin.value = true
+    showToast(t('user.sessionExpired', 'Session expired, please sign in again.'), 'info')
+  })
+
+  // Handle ?access_token=&refresh_token= auto-login from Qt (new contract).
+  // The legacy ?token= param is ignored — old tokens wouldn't be accepted
+  // by the v1 server anyway.
   const params = new URLSearchParams(window.location.search)
-  const token = params.get('token')
-  if (token) {
-    localStorage.setItem('quickdesk_user_token', token)
+  const accessTok  = params.get('access_token')
+  const refreshTok = params.get('refresh_token')
+  if (accessTok) {
+    localStorage.setItem('quickdesk_user_access_token', accessTok)
+    if (refreshTok) localStorage.setItem('quickdesk_user_refresh_token', refreshTok)
     updateAuthState()
   }
 
   if (!userApi.isLoggedIn()) return
   const r = await userApi.fetchMe()
   if (r.ok && r.data) {
-    // Update stored user info with fresh data
     localStorage.setItem('quickdesk_user_info', JSON.stringify({
       id: r.data.id, username: r.data.username, phone: r.data.phone, email: r.data.email,
     }))
     updateAuthState()
-    // Resume real-time sync after a token-validated session restore
     userSync.start()
   } else {
-    userApi.clearSession()
+    // fetchMe already called _sessionEnded() on terminal 401.
     updateAuthState()
   }
 }
