@@ -20,10 +20,14 @@ IMAGE_TAR=""
 PORT=""
 DOMAIN=""
 INSTANCE_NAME=""
-DATA_DIR=""
+DATA_DIR="${DATA_DIR:-}"
 
 sanitize_name() {
     echo "$1" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9_.-]+/-/g; s/^-+//; s/-+$//'
+}
+
+default_data_dir() {
+    echo "${HOME:-$SCRIPT_DIR}/.quickdesk/signaling/$INSTANCE_NAME"
 }
 
 while [[ $# -gt 0 ]]; do
@@ -36,7 +40,7 @@ while [[ $# -gt 0 ]]; do
             echo ""
             echo "  image.tar.gz  Path to the Docker image archive"
             echo "  --port        Host port (default: SERVER_PORT from .env, or 8000)"
-            echo "  --name        Instance name (default: port-PORT; data: /data/quickdesk/NAME)"
+            echo "  --name        Instance name (default: port-PORT; data: ~/.quickdesk/signaling/NAME)"
             echo "  --domain      Configure Nginx reverse proxy + optional SSL"
             exit 0;;
         -*)
@@ -93,7 +97,7 @@ if [ -z "$INSTANCE_NAME" ]; then
     exit 1
 fi
 
-DATA_DIR="${DATA_DIR:-/data/quickdesk/$INSTANCE_NAME}"
+DATA_DIR="${DATA_DIR:-$(default_data_dir)}"
 COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-quickdesk-$INSTANCE_NAME}"
 CONTAINER_NAME="${CONTAINER_NAME:-quickdesk-signaling-$INSTANCE_NAME}"
 

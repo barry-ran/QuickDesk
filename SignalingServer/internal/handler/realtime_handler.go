@@ -201,8 +201,8 @@ type authFrame struct {
 const (
 	firstFrameTimeout = 5 * time.Second
 	wsWriteTimeout    = 10 * time.Second
-	wsPingInterval    = 30 * time.Second
-	wsReadTimeout     = 90 * time.Second
+	wsPingInterval    = 5 * time.Second
+	wsReadTimeout     = 15 * time.Second
 )
 
 // HandleEvents serves GET /v1/realtime/events.
@@ -579,19 +579,19 @@ func (h *RealtimeHandler) HandleSignal(c *gin.Context) {
 
 	if sc.role == service.SignalRoleHost {
 		if err := h.presence.MarkWSConnected(c.Request.Context(), sc.deviceID); err == nil {
-			// Publish online-changed if this is the first WS for the
-			// device.
-			if d, err := h.devices.GetByDeviceID(c.Request.Context(), sc.deviceID); err == nil && d.UserID != nil {
-				h.bus.Publish(c.Request.Context(), service.Event{
-					Type:     service.EventDeviceOnlineChanged,
-					UserID:   *d.UserID,
-					DeviceID: sc.deviceID,
-					Data: map[string]interface{}{
-						"device_id": sc.deviceID,
-						"online":    true,
-						"logged_in": d.LoggedIn,
-					},
-				})
+			if h.presence.IsOnline(c.Request.Context(), sc.deviceID) && h.presence.RememberOnlineCandidate(c.Request.Context(), sc.deviceID) {
+				if d, err := h.devices.GetByDeviceID(c.Request.Context(), sc.deviceID); err == nil && d.UserID != nil {
+					h.bus.Publish(c.Request.Context(), service.Event{
+						Type:     service.EventDeviceOnlineChanged,
+						UserID:   *d.UserID,
+						DeviceID: sc.deviceID,
+						Data: map[string]interface{}{
+							"device_id": sc.deviceID,
+							"online":    true,
+							"logged_in": d.LoggedIn,
+						},
+					})
+				}
 			}
 		}
 	}
@@ -652,19 +652,20 @@ func (h *RealtimeHandler) unregisterSignalConn(sc *signalConn) {
 				}))
 				go cc.close()
 			}
-			// Publish online-changed (we may have been the last WS).
-			if d, err := h.devices.GetByDeviceID(context.Background(), sc.deviceID); err == nil && d.UserID != nil {
-				online := h.presence.IsOnline(context.Background(), sc.deviceID)
-				h.bus.Publish(context.Background(), service.Event{
-					Type:     service.EventDeviceOnlineChanged,
-					UserID:   *d.UserID,
-					DeviceID: sc.deviceID,
-					Data: map[string]interface{}{
-						"device_id": sc.deviceID,
-						"online":    online,
-						"logged_in": d.LoggedIn && online,
-					},
-				})
+			// Publish online-changed once if we were the last live signal.
+			if online := h.presence.IsOnline(context.Background(), sc.deviceID); !online && h.presence.ForgetOnlineCandidate(context.Background(), sc.deviceID) {
+				if d, err := h.devices.GetByDeviceID(context.Background(), sc.deviceID); err == nil && d.UserID != nil {
+					h.bus.Publish(context.Background(), service.Event{
+						Type:     service.EventDeviceOnlineChanged,
+						UserID:   *d.UserID,
+						DeviceID: sc.deviceID,
+						Data: map[string]interface{}{
+							"device_id": sc.deviceID,
+							"online":    false,
+							"logged_in": false,
+						},
+					})
+				}
 			}
 		}
 	case service.SignalRoleClient:

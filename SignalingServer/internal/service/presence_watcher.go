@@ -16,6 +16,9 @@ import (
 // PresenceWatcher subscribes to Redis keyspace notifications and emits
 // `device.online.changed` events when a device's heartbeat key expires —
 // the "hb TTL 到期 → device.online.changed (异步)" producer from §2.17.
+// It also runs a small fallback scanner over devices observed online, so
+// deployments that forgot `notify-keyspace-events Ex` still push offline
+// events instead of waiting for the user to refresh the device list.
 //
 // The goroutine requires the Redis server to have been started with
 //   notify-keyspace-events Ex
@@ -48,12 +51,14 @@ func (w *PresenceWatcher) Start(ctx context.Context) {
 		return
 	}
 	go w.runForever(ctx)
+	go w.runOfflineScanner(ctx)
 }
 
 const (
 	presenceHbPrefix    = "qd:presence:device:"
 	presenceHbSuffix    = ":hb"
 	keyspaceExpiryTopic = "__keyevent@0__:expired"
+	offlineScanInterval = 5 * time.Second
 )
 
 // runForever is the resilient pubsub loop: if the server drops the
@@ -125,6 +130,32 @@ func (w *PresenceWatcher) handleExpiry(ctx context.Context, key string) {
 	// may still hold the wsconn key, so "online" is still live by our
 	// derivation — no event necessary.
 	if w.presence.IsOnline(ctx, deviceID) {
+		return
+	}
+
+	w.publishOfflineIfRemembered(ctx, deviceID)
+}
+
+func (w *PresenceWatcher) runOfflineScanner(ctx context.Context) {
+	ticker := time.NewTicker(offlineScanInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			for _, deviceID := range w.presence.KnownOnlineCandidates(ctx) {
+				if deviceID == "" || w.presence.IsOnline(ctx, deviceID) {
+					continue
+				}
+				w.publishOfflineIfRemembered(ctx, deviceID)
+			}
+		}
+	}
+}
+
+func (w *PresenceWatcher) publishOfflineIfRemembered(ctx context.Context, deviceID string) {
+	if !w.presence.ForgetOnlineCandidate(ctx, deviceID) {
 		return
 	}
 

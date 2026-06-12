@@ -619,6 +619,14 @@ bool ProcessManager::startProcess(QProcess* process, const QString& exePath,
     if (!m_configDir.isEmpty()) {
         arguments << QString("--config-dir=%1").arg(m_configDir);
     }
+#ifdef Q_OS_MAC
+    if (process == m_hostProcess.get()) {
+        if (!m_macHostPermissionRequestSent) {
+            arguments << QStringLiteral("--request-mac-permissions");
+            m_macHostPermissionRequestSent = true;
+        }
+    }
+#endif
 
     process->setProgram(exePath);
     process->setArguments(arguments);

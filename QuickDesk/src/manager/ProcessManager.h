@@ -131,6 +131,7 @@ private:
     // Host restart state
     int m_hostRestartCount = 0;
     bool m_hostStoppingIntentionally = false;
+    bool m_macHostPermissionRequestSent = false;
     QTimer m_hostRestartTimer;
     ProcessStatus::Status m_hostProcessStatus = ProcessStatus::NotStarted;
 

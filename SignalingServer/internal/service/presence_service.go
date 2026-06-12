@@ -39,10 +39,11 @@ type PresenceState struct {
 }
 
 const (
-	presenceHeartbeatTTL = 90 * time.Second
-	presenceWSTTL        = 24 * time.Hour
-	presenceInstanceTTL  = 15 * time.Second
-	presenceInstanceTick = 5 * time.Second
+	presenceHeartbeatTTL   = 90 * time.Second
+	presenceWSTTL          = 24 * time.Hour
+	presenceInstanceTTL    = 15 * time.Second
+	presenceInstanceTick   = 5 * time.Second
+	presenceKnownOnlineSet = "qd:presence:devices:known_online"
 )
 
 func NewPresenceService(rdb *redis.Client, instanceID string) *PresenceService {
@@ -109,6 +110,31 @@ func (p *PresenceService) MarkWSConnected(ctx context.Context, deviceID string) 
 // It's safe to call even when the key doesn't exist.
 func (p *PresenceService) MarkWSDisconnected(ctx context.Context, deviceID string) error {
 	return p.rdb.Del(ctx, p.wsKey(deviceID, p.instanceID)).Err()
+}
+
+// RememberOnlineCandidate records that deviceID has been observed online or
+// close to online. It returns true only when this process won the transition
+// from "not remembered" to "remembered", which callers use to publish a
+// single online event instead of spamming on every heartbeat.
+func (p *PresenceService) RememberOnlineCandidate(ctx context.Context, deviceID string) bool {
+	return p.rdb.SAdd(ctx, presenceKnownOnlineSet, deviceID).Val() > 0
+}
+
+// ForgetOnlineCandidate removes deviceID from the remembered-online set. It
+// returns true when the device was present, letting offline producers suppress
+// duplicate offline events from keyspace notifications, WS close, and the
+// fallback scanner.
+func (p *PresenceService) ForgetOnlineCandidate(ctx context.Context, deviceID string) bool {
+	return p.rdb.SRem(ctx, presenceKnownOnlineSet, deviceID).Val() > 0
+}
+
+func (p *PresenceService) KnownOnlineCandidates(ctx context.Context) []string {
+	ids, err := p.rdb.SMembers(ctx, presenceKnownOnlineSet).Result()
+	if err != nil {
+		log.Printf("[Presence] smembers known online failed: %v", err)
+		return nil
+	}
+	return ids
 }
 
 // State returns a consistent snapshot of the presence signals.

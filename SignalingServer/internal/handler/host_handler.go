@@ -134,6 +134,20 @@ func (h *HostHandler) Heartbeat(c *gin.Context) {
 		ProblemInternal(c, "failed to refresh heartbeat presence")
 		return
 	}
+	if h.presence.IsOnline(c.Request.Context(), deviceID) && h.presence.RememberOnlineCandidate(c.Request.Context(), deviceID) {
+		if d, err := h.devices.GetByDeviceID(c.Request.Context(), deviceID); err == nil && d.UserID != nil {
+			h.bus.Publish(c.Request.Context(), service.Event{
+				Type:     service.EventDeviceOnlineChanged,
+				UserID:   *d.UserID,
+				DeviceID: deviceID,
+				Data: map[string]interface{}{
+					"device_id": deviceID,
+					"online":    true,
+					"logged_in": d.LoggedIn,
+				},
+			})
+		}
+	}
 
 	c.JSON(http.StatusOK, heartbeatResp{
 		ServerTime:        time.Now().UTC().Format("2006-01-02T15:04:05Z"),

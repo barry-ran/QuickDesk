@@ -57,16 +57,16 @@ These parameters can be preset in `.env` or configured later in the admin panel 
 
 ### Persistent Data Directory
 
-All Docker deployment scripts store user data on the host at `/data/quickdesk/<instance-name>` by default. Data is not stored inside the Docker image. If `--name` is omitted, the instance name is derived from the port, for example port `8000` becomes `port-8000`:
+All Docker deployment scripts store user data in a host directory by default. Data is not stored inside the Docker image. The default directory is `~/.quickdesk/signaling/<instance-name>`, which is usually writable on Linux, macOS and Windows Git Bash/WSL. If `--name` is omitted, the instance name is derived from the port, for example port `8000` becomes `port-8000`:
 
 | Data | Host directory | Container directory |
 |------|----------------|---------------------|
-| PostgreSQL | `/data/quickdesk/<instance-name>/postgres` | `/data/postgres` |
-| Redis | `/data/quickdesk/<instance-name>/redis` | `/data/redis` |
+| PostgreSQL | `~/.quickdesk/signaling/<instance-name>/postgres` | `/data/postgres` |
+| Redis | `~/.quickdesk/signaling/<instance-name>/redis` | `/data/redis` |
 
 Rebuilding the image, restarting the container, or running `docker compose up -d` does not clear this directory. Data only disappears if the instance data directory is manually deleted, or if you switch to a different `DATA_DIR` and mount a new empty directory.
 
-To customize the data directory, set `DATA_DIR` before running the deploy script. `DATA_DIR` should point to one instance's dedicated directory; do not share one directory across multiple instances:
+To customize the data directory, set `DATA_DIR` before running the deploy script. `DATA_DIR` should point to one instance's dedicated directory; do not share one directory across multiple instances. For Linux production, explicitly placing data under `/data/quickdesk/...` or a dedicated data disk is recommended for backups and operations:
 
 ```bash
 DATA_DIR=/data/quickdesk/test ./deploy-build.sh --name test --port 8000
@@ -79,10 +79,10 @@ DATA_DIR=/data/quickdesk/offline ./deploy-offline.sh quickdesk-signaling-image.t
 You can deploy multiple independent signaling servers on the same physical host. Use a different port for each instance. If `--name` is omitted, the script uses `port-PORT` as the instance name and automatically isolates the container name, Compose project name and data directory:
 
 ```bash
-# Instance 1: data directory /data/quickdesk/port-8000
+# Instance 1: default data directory ~/.quickdesk/signaling/port-8000
 ./deploy-build.sh --port 8000
 
-# Instance 2: data directory /data/quickdesk/port-9000
+# Instance 2: default data directory ~/.quickdesk/signaling/port-9000
 ./deploy-build.sh --port 9000
 ```
 
@@ -120,7 +120,7 @@ chmod +x deploy-pull.sh
 # Custom port
 ./deploy-pull.sh --port 9000
 
-# Multiple instances (independent data directory /data/quickdesk/test)
+# Multiple instances (default independent data directory ~/.quickdesk/signaling/test)
 ./deploy-pull.sh --name test --port 9000
 ```
 
@@ -135,7 +135,7 @@ chmod +x deploy-build.sh
 # Custom port
 ./deploy-build.sh --port 9000
 
-# Multiple instances (independent data directory /data/quickdesk/test)
+# Multiple instances (default independent data directory ~/.quickdesk/signaling/test)
 ./deploy-build.sh --name test --port 9000
 ```
 
@@ -152,7 +152,7 @@ For servers without internet access. Download the offline image from GitHub Acti
 chmod +x deploy-offline.sh
 ./deploy-offline.sh quickdesk-signaling-image.tar.gz
 
-# Multiple instances (independent data directory /data/quickdesk/test)
+# Multiple instances (default independent data directory ~/.quickdesk/signaling/test)
 ./deploy-offline.sh quickdesk-signaling-image.tar.gz --name test --port 9000
 ```
 
@@ -167,7 +167,7 @@ chmod +x deploy.sh
 # With domain and Nginx
 ./deploy.sh --port 8000 --domain your-domain.com
 
-# Multiple instances (independent data directory /data/quickdesk/test)
+# Multiple instances (default independent data directory ~/.quickdesk/signaling/test)
 ./deploy.sh --name test --port 9000
 ```
 
