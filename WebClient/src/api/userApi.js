@@ -13,7 +13,7 @@ const ACCESS_TOKEN_KEY  = 'quickdesk_user_access_token'
 const REFRESH_TOKEN_KEY = 'quickdesk_user_refresh_token'
 const USER_INFO_KEY     = 'quickdesk_user_info'
 const SERVER_URL_KEY    = 'quickdesk_signaling_url'
-export const DEFAULT_SERVER = 'ws://qdsignaling.quickcoder.cc:8000'
+export const DEFAULT_SERVER = 'ws://qdsignaling.quickcoder.cc:8060'
 
 // Legacy key cleaned up on load so old sessions are not retained.
 const LEGACY_TOKEN_KEY = 'quickdesk_user_token'

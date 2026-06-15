@@ -38,7 +38,7 @@ export const en = {
     network: 'Network Settings',
     signalingServer: 'Signaling Server',
     signalingServerDesc: 'Set the default signaling server address for WebRTC connection negotiation.',
-    signalingServerPlaceholder: 'ws://qdsignaling.quickcoder.cc:8000',
+    signalingServerPlaceholder: 'ws://qdsignaling.quickcoder.cc:8060',
     signalingServerSaved: 'Signaling server address saved',
     video: 'Video Settings',
     videoCodec: 'Preferred Video Codec',

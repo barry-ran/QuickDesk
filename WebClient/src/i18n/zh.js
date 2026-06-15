@@ -38,7 +38,7 @@ export const zh = {
     network: '网络设置',
     signalingServer: '信令服务器',
     signalingServerDesc: '设置默认的信令服务器地址，用于 WebRTC 连接协商。',
-    signalingServerPlaceholder: 'ws://qdsignaling.quickcoder.cc:8000',
+    signalingServerPlaceholder: 'ws://qdsignaling.quickcoder.cc:8060',
     signalingServerSaved: '信令服务器地址已保存',
     video: '视频设置',
     videoCodec: '首选视频编码器',
