@@ -411,11 +411,7 @@ Popup {
         case "sms-login":
             return smsPhoneField.text.length > 0 && smsCodeField.text.length > 0
         case "register":
-            var baseValid = regUsernameField.text.length > 0 && regPasswordField.text.length > 0
-            if (loginDialog.smsEnabled) {
-                return baseValid && phoneField.text.length > 0 && regSmsCodeField.text.length > 0
-            }
-            return baseValid
+            return regUsernameField.text.length > 0 && regPasswordField.text.length > 0
         }
         return false
     }
