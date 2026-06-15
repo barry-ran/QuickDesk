@@ -203,9 +203,6 @@ async function submit() {
 
     } else if (mode.value === 'register') {
       if (!username.value || !password.value) { errorMsg.value = t('user.inputRequired'); return }
-      if (authState.smsEnabled && (!phone.value || !smsCode.value)) {
-        errorMsg.value = t('user.phoneCodeRequired'); return
-      }
       const r = await userApi.register(username.value, password.value, phone.value, email.value, smsCode.value)
       // §2.2 T20: register response carries access+refresh tokens — the
       // user is logged in already; don't bounce them back to the login form.
