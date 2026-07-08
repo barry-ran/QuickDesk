@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 允许明文流量（ws:// / http://）。
+     QuickDesk 的信令服务器地址由用户自行填写，可能是自建的明文服务或局域网 IP，
+     故放开明文；若部署为 TLS（wss/https）则不受影响。 -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

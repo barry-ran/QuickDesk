@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="accessibility_service_description">QuickDesk 被控模式：允许远程控制端在本设备上执行点按、滑动与文本输入。仅在您主动开启被控并授权后生效。</string>
+</resources>

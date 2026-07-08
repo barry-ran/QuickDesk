@@ -68,6 +68,10 @@ QuickDesk/3rdparty/quickdesk-remoting
 node_modules/
 package-lock.json
 
+# Dart
+.dart_tool/
+pubspec.lock
+
 # Vue/Vite build output (embedded via go:embed, rebuilt from source)
 SignalingServer/web/dist/
 
