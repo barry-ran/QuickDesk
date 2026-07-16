@@ -115,6 +115,16 @@ else
     echo "[!] warning: quickdesk_client not found"
 fi
 
+if [ -f "$src_out_path/icudtl.dat" ]; then
+    cp "$src_out_path/icudtl.dat" "$resources_dir/"
+    echo "[*] copied icudtl.dat to QuickDesk.app Resources from src/out"
+elif [ -f "$thirdparty_path/icudtl.dat" ]; then
+    cp "$thirdparty_path/icudtl.dat" "$resources_dir/"
+    echo "[*] copied icudtl.dat to QuickDesk.app Resources from 3rdparty"
+else
+    echo "[!] warning: icudtl.dat not found"
+fi
+
 # Copy MCP bridge
 echo "[*] copying quickdesk-mcp..."
 mcp_output="$script_path/../output/$arch/$build_mode/quickdesk-mcp"
