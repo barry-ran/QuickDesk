@@ -694,9 +694,9 @@ class _RemotePageState extends State<RemotePage> {
             Positioned(
               left: screen.dx - 3,
               top: screen.dy - 1,
-              child: IgnorePointer(
+              child: const IgnorePointer(
                 child: CustomPaint(
-                    size: const Size(20, 20), painter: const CursorPainter()),
+                    size: Size(20, 20), painter: CursorPainter()),
               ),
             ),
           ],
