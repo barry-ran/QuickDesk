@@ -9,10 +9,10 @@
 ///     → shared_preferences
 library;
 
-import 'dart:math';
-
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import '../core/rand_id.dart';
 
 class HostCredentials {
   final String deviceUuid;
@@ -45,7 +45,7 @@ class HostCredentialStore {
     final prefs = await SharedPreferences.getInstance();
     var uuid = prefs.getString(_kUuid);
     if (uuid == null || uuid.isEmpty) {
-      uuid = _generateUuid();
+      uuid = generateUuidV4();
       await prefs.setString(_kUuid, uuid);
     }
 
@@ -77,18 +77,5 @@ class HostCredentialStore {
   }
 
   /// 生成一个随机 6 位数字访问码
-  static String generateAccessCode() {
-    final r = Random.secure();
-    return List.generate(6, (_) => r.nextInt(10)).join();
-  }
-
-  static String _generateUuid() {
-    final r = Random.secure();
-    final b = List<int>.generate(16, (_) => r.nextInt(256));
-    b[6] = (b[6] & 0x0f) | 0x40;
-    b[8] = (b[8] & 0x3f) | 0x80;
-    final h = b.map((x) => x.toRadixString(16).padLeft(2, '0')).join();
-    return '${h.substring(0, 8)}-${h.substring(8, 12)}-${h.substring(12, 16)}-'
-        '${h.substring(16, 20)}-${h.substring(20)}';
-  }
+  static String generateAccessCode() => randomDigits(6);
 }

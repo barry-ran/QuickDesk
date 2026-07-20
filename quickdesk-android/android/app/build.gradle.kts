@@ -49,6 +49,11 @@ dependencies {
     val shizukuVersion = "13.1.5"
     implementation("dev.rikka.shizuku:api:$shizukuVersion")
     implementation("dev.rikka.shizuku:provider:$shizukuVersion")
+
+    // 仅编译期依赖 org.webrtc（PeerConnectionFactory.initializeFieldTrials）。
+    // 运行时使用 flutter_webrtc 插件自带的 libwebrtc，compileOnly 避免打进
+    // 第二份或与插件版本产生冲突；该 API 多年稳定，跨版本二进制兼容。
+    compileOnly("io.github.webrtc-sdk:android:144.7559.09")
 }
 
 flutter {

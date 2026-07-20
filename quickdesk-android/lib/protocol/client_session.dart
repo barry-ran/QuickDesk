@@ -6,17 +6,17 @@ library;
 
 import 'dart:async';
 import 'dart:convert';
-import 'dart:math';
-import 'dart:typed_data';
 
-import 'package:crypto/crypto.dart' as crypto;
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 
 import '../api/signaling_api.dart';
+import '../core/rand_id.dart';
 import 'auth/spake2.dart' as spake2;
 import 'auth/spake2_authenticator.dart';
+import 'datachannel_config.dart';
 import 'datachannel_handler.dart';
 import 'signaling/jingle.dart';
+import 'signaling/sdp_signature.dart';
 import 'signaling/websocket_transport.dart';
 
 enum SessionState {
@@ -79,7 +79,8 @@ class ClientSession {
 
   /// 建立连接。
   /// [signalToken] 由 SignalingApi.verifyAccessCode 预先换取（一次性）。
-  Future<void> connect(String deviceId, String accessCode, String signalToken) async {
+  Future<void> connect(
+      String deviceId, String accessCode, String signalToken) async {
     this.deviceId = deviceId;
 
     try {
@@ -90,16 +91,18 @@ class ClientSession {
           spake2.getSharedSecretHash(deviceId, deviceId + accessCode);
 
       // 2. JID：与 WebClient / Chromium Host 的 FTL resource 格式对齐
-      final clientUuid = _randomHex(12);
+      final clientUuid = randomHex(12);
       _clientId = 'android_$clientUuid';
       final localJid = '$deviceId@quickdesk.local/chromoting_ftl_$_clientId';
-      final remoteJid = '$deviceId@quickdesk.local/chromoting_ftl_quickdesk_host';
+      final remoteJid =
+          '$deviceId@quickdesk.local/chromoting_ftl_quickdesk_host';
 
       _jingleBuilder.localJid = localJid;
       _jingleBuilder.remoteJid = remoteJid;
 
       // 3. SPAKE2 认证器（Alice）
-      _authenticator = Spake2ClientAuthenticator(localJid, remoteJid, sharedSecretHash);
+      _authenticator =
+          Spake2ClientAuthenticator(localJid, remoteJid, sharedSecretHash);
 
       // 4. 信令 WebSocket（首帧 auth）
       _transport = WebSocketTransport(
@@ -142,7 +145,9 @@ class ClientSession {
   }
 
   Future<void> disconnect() async {
-    if (_transport != null && _transport!.isConnected && _jingleBuilder.sessionId != null) {
+    if (_transport != null &&
+        _transport!.isConnected &&
+        _jingleBuilder.sessionId != null) {
       try {
         _transport!.send(_jingleBuilder.buildSessionTerminate('success'));
       } catch (_) {}
@@ -152,12 +157,6 @@ class ClientSession {
   }
 
   // ==================== 内部 ====================
-
-  String _randomHex(int len) {
-    final r = Random.secure();
-    const chars = '0123456789abcdef';
-    return List.generate(len, (_) => chars[r.nextInt(16)]).join();
-  }
 
   Future<void> _createPeerConnection() async {
     final config = <String, dynamic>{
@@ -181,13 +180,27 @@ class ClientSession {
         if (state != SessionState.connected) {
           _setState(SessionState.connected);
         }
-      } else if (iceState == RTCIceConnectionState.RTCIceConnectionStateFailed) {
+      } else if (iceState ==
+          RTCIceConnectionState.RTCIceConnectionStateFailed) {
         _setState(SessionState.failed);
       }
     };
 
+    _pc!.onConnectionState = (connectionState) {
+      _log('PeerConnection state: $connectionState');
+    };
+
+    _pc!.onIceGatheringState = (gatheringState) {
+      _log('ICE gathering state: $gatheringState');
+    };
+
+    _pc!.onSignalingState = (signalingState) {
+      _log('signaling state: $signalingState');
+    };
+
     _pc!.onTrack = (event) async {
-      _log('track received: ${event.track.kind}, streams=${event.streams.length}');
+      _log(
+          'track received: ${event.track.kind}, streams=${event.streams.length}');
       if (event.streams.isNotEmpty) {
         for (final stream in event.streams) {
           remoteStreams[stream.id] = stream;
@@ -203,7 +216,10 @@ class ClientSession {
     };
 
     _pc!.onDataChannel = (channel) {
-      _log('datachannel received: ${channel.label}');
+      _log(
+        'datachannel received: ${channel.label}, '
+        'sid=${channel.id}, state=${channel.state}',
+      );
       dcHandler.handleDataChannel(channel);
     };
   }
@@ -303,7 +319,10 @@ class ClientSession {
 
   void _handleJsonMessage(Map<String, dynamic> json) {
     if (json['type'] != 'error') return;
-    final code = (json['code'] ?? (json['data'] is Map ? json['data']['code'] : '') ?? '').toString();
+    final code = (json['code'] ??
+            (json['data'] is Map ? json['data']['code'] : '') ??
+            '')
+        .toString();
     _log('signaling error: $code');
     if (code == 'HOST_OFFLINE' ||
         code == 'PEER_DISCONNECTED' ||
@@ -319,10 +338,19 @@ class ClientSession {
     if (message.sid.isNotEmpty &&
         _jingleBuilder.sessionId != null &&
         message.sid != _jingleBuilder.sessionId) {
-      if (message.iqType == 'set' && message.iqId.isNotEmpty && message.from.isNotEmpty) {
+      if (message.iqType == 'set' &&
+          message.iqId.isNotEmpty &&
+          message.from.isNotEmpty) {
         _sendIqResult(message.iqId, message.from);
       }
       return;
+    }
+
+    // Chromium 的 Jingle 实现先确认当前 IQ，再发送认证或 transport 应答。
+    if (message.iqType == 'set' &&
+        message.iqId.isNotEmpty &&
+        message.from.isNotEmpty) {
+      _sendIqResult(message.iqId, message.from);
     }
 
     switch (message.action) {
@@ -336,7 +364,8 @@ class ClientSession {
         await _handleSessionInfo(message);
         break;
       case 'session-terminate':
-        _log('session terminated by host: ${message.terminateInfo?.reason}');
+        _log('session terminated by host: '
+            '${message.terminateInfo?.describe() ?? 'unknown'}');
         await _cleanup();
         _setState(SessionState.closed);
         break;
@@ -344,10 +373,6 @@ class ClientSession {
         break;
       default:
         _log('unhandled jingle action: ${message.action}');
-    }
-
-    if (message.iqType == 'set' && message.iqId.isNotEmpty && message.from.isNotEmpty) {
-      _sendIqResult(message.iqId, message.from);
     }
   }
 
@@ -395,7 +420,8 @@ class ClientSession {
           final signalingState = await _pc!.getSignalingState();
           if (signalingState ==
               RTCSignalingState.RTCSignalingStateHaveLocalOffer) {
-            await _pc!.setLocalDescription(RTCSessionDescription('', 'rollback'));
+            await _pc!
+                .setLocalDescription(RTCSessionDescription('', 'rollback'));
           }
           await _pc!.setRemoteDescription(
               RTCSessionDescription(message.sdp!.sdp, 'offer'));
@@ -404,17 +430,28 @@ class ClientSession {
           final answer = await _pc!.createAnswer();
           await _pc!.setLocalDescription(answer);
 
-          final signature = _signSdp(answer.sdp!, 'answer');
-          _transport!.send(
-              _jingleBuilder.buildTransportInfoSdp(answer.sdp!, 'answer', signature: signature));
+          final authKey = _authenticator?.authKey;
+          if (authKey == null) {
+            throw StateError(
+                'authentication key unavailable for SDP signature');
+          }
+          final signature = signSdp(authKey, answer.sdp!, 'answer');
+          _transport!.send(_jingleBuilder.buildTransportInfoSdp(
+              answer.sdp!, 'answer',
+              signature: signature));
           _log('sent SDP answer via transport-info');
 
           // Host 要求 client 创建 "event" DataChannel（键鼠输入）
           if (_eventChannel == null) {
             _eventChannel = await _pc!.createDataChannel(
-                'event', RTCDataChannelInit()..ordered = true);
+              'event',
+              createRemotingDataChannelInit(),
+            );
             dcHandler.handleDataChannel(_eventChannel!);
-            _log('created outgoing "event" DataChannel');
+            _log(
+              'created outgoing "event" DataChannel: '
+              'sid=${_eventChannel!.id}',
+            );
           }
         } else {
           await _pc!.setRemoteDescription(
@@ -428,7 +465,8 @@ class ClientSession {
     }
 
     for (final info in message.iceCandidates) {
-      final candidate = RTCIceCandidate(info.candidate, info.sdpMid, info.sdpMLineIndex);
+      final candidate =
+          RTCIceCandidate(info.candidate, info.sdpMid, info.sdpMLineIndex);
       if (_remoteDescriptionSet) {
         try {
           await _pc!.addCandidate(candidate);
@@ -474,22 +512,6 @@ class ClientSession {
       }
     }
     _pendingIceCandidates.clear();
-  }
-
-  /// SDP 签名: HMAC-SHA256(auth_key, type + " " + NormalizedForSignature(sdp))
-  /// 对照 webrtc_transport.cc / sdp_message.cc
-  String _signSdp(String sdp, String type) {
-    final authKey = _authenticator?.authKey;
-    if (authKey == null) return '';
-
-    final normalized = sdp
-        .split('\n')
-        .map((line) => line.trim())
-        .where((line) => line.isNotEmpty)
-        .join('\n');
-    final message = utf8.encode('$type $normalized\n');
-    final mac = crypto.Hmac(crypto.sha256, authKey).convert(message);
-    return base64Encode(Uint8List.fromList(mac.bytes));
   }
 
   Future<void> _cleanup() async {

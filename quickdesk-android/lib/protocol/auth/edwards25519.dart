@@ -14,8 +14,8 @@ library;
 final BigInt curveP = (BigInt.one << 255) - BigInt.from(19);
 
 /// 基点群的阶 L = 2^252 + 27742317777372353535851937790883648493
-final BigInt curveOrder =
-    (BigInt.one << 252) + BigInt.parse('27742317777372353535851937790883648493');
+final BigInt curveOrder = (BigInt.one << 252) +
+    BigInt.parse('27742317777372353535851937790883648493');
 
 /// 扭曲 Edwards 曲线参数 d = -121665/121666 mod p
 final BigInt curveD = _mod(-BigInt.from(121665) * _inv(BigInt.from(121666)));
@@ -77,10 +77,13 @@ class EdwardsPoint {
 
   EdwardsPoint negate() => EdwardsPoint(_mod(-x), y, z, _mod(-t));
 
-  /// 标量乘（double-and-add，LSB 优先），scalar 须 > 0
+  /// 标量乘（double-and-add，LSB 优先），scalar 须 >= 0
   EdwardsPoint multiply(BigInt scalar) {
-    if (scalar <= BigInt.zero) {
-      throw ArgumentError('scalar must be positive');
+    if (scalar < BigInt.zero) {
+      throw ArgumentError('scalar must be non-negative');
+    }
+    if (scalar == BigInt.zero) {
+      return identity;
     }
     EdwardsPoint result = identity;
     EdwardsPoint addend = this;
@@ -150,7 +153,8 @@ BigInt _recoverX(BigInt y, int sign) {
   // 候选 x = u*v^3 * (u*v^7)^((p-5)/8)
   final v3 = _mod(v * v * v);
   final v7 = _mod(v3 * v3 * v);
-  var xx = _mod(u * v3 * _mod(u * v7).modPow((curveP - BigInt.from(5)) >> 3, curveP));
+  var xx = _mod(
+      u * v3 * _mod(u * v7).modPow((curveP - BigInt.from(5)) >> 3, curveP));
   final check = _mod(v * xx * xx);
   if (check == u) {
     // xx 即为解

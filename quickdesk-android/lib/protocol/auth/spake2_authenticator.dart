@@ -56,7 +56,6 @@ class Spake2ClientAuthenticator {
   Uint8List? _localSpakeMessage;
   bool _spakeMessageSent = false;
   Uint8List? _outgoingVerificationHash;
-  Uint8List? remoteCert;
   AuthState _state = AuthState.messageReady;
   String? rejectionReason;
 
@@ -82,10 +81,6 @@ class Spake2ClientAuthenticator {
         return;
       }
       _methodSelected = true;
-    }
-
-    if (message.certificate != null) {
-      remoteCert = base64Decode(message.certificate!);
     }
 
     if (message.spakeMessage != null) {
@@ -159,6 +154,7 @@ class Spake2HostAuthenticator {
   final String localId;
   final String remoteId;
   final Uint8List sharedSecretHash;
+  final String certificate;
 
   late final Spake2Context _ctx;
   Uint8List? _localSpakeMessage;
@@ -170,13 +166,21 @@ class Spake2HostAuthenticator {
   bool _methodSelected = false;
   bool _theirSpakeProcessed = false;
 
-  Spake2HostAuthenticator(this.localId, this.remoteId, this.sharedSecretHash) {
+  Spake2HostAuthenticator(
+    this.localId,
+    this.remoteId,
+    this.sharedSecretHash, {
+    required this.certificate,
+  }) {
+    if (certificate.isEmpty) {
+      throw ArgumentError.value(certificate, 'certificate', 'must not be empty');
+    }
     _ctx = Spake2Context(spake2RoleBob, localId, remoteId);
     _localSpakeMessage = _ctx.generateMessage(sharedSecretHash);
   }
 
   void processMessage(AuthMessage message) {
-    // 客户端首条: supported-methods
+    // 客户端首条可发送 supported-methods，或直接携带已选中的 method。
     if (!_methodSelected && message.supportedMethods != null) {
       final methods = message.supportedMethods!.split(RegExp(r'[\s,]+'));
       if (!methods.contains(kSpake2Method)) {
@@ -187,6 +191,18 @@ class Spake2HostAuthenticator {
       _methodSelected = true;
       _state = AuthState.messageReady;
       return;
+    }
+    if (!_methodSelected && message.method != null) {
+      if (message.method != kSpake2Method) {
+        _state = AuthState.rejected;
+        rejectionReason = 'Unsupported method: ${message.method}';
+        return;
+      }
+      _methodSelected = true;
+      _state = AuthState.messageReady;
+      if (message.spakeMessage == null && message.verificationHash == null) {
+        return;
+      }
     }
 
     if (message.spakeMessage != null && !_theirSpakeProcessed) {
@@ -221,6 +237,7 @@ class Spake2HostAuthenticator {
     final message = AuthMessage(method: kSpake2Method);
 
     if (!_spakeMessageSent) {
+      message.certificate = certificate;
       message.spakeMessage = base64Encode(_localSpakeMessage!);
       _spakeMessageSent = true;
     }

@@ -9,15 +9,15 @@ import android.view.Display
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import org.webrtc.PeerConnectionFactory
 import rikka.shizuku.Shizuku
 
 /**
- * 注册两个平台通道：
+ * 注册四个平台通道：
  *   quickdesk/screen_capture —— 屏幕采集前台服务的启停
- *   quickdesk/input          —— 被控端输入注入（无障碍/Shizuku 双档）+ 权限引导
- *
- * 输入注入后端选择：Shizuku 就绪则优先（真实事件、流畅拖拽、全键盘），
- * 否则回退无障碍服务（手势合成）。
+ *   quickdesk/host_identity  —— Chromium SPAKE2 Host 证书（见 HostIdentity）
+ *   quickdesk/input          —— 被控端输入注入（见 InputRouter）+ 权限引导
+ *   quickdesk/webrtc_config  —— 注入 WebRTC field trials（被控端 playout-delay）
  */
 class MainActivity : FlutterActivity() {
 
@@ -61,8 +61,17 @@ class MainActivity : FlutterActivity() {
         screenCh.setMethodCallHandler { call, result ->
             when (call.method) {
                 "startService" -> {
-                    ScreenCaptureService.start(applicationContext)
-                    result.success(true)
+                    ScreenCaptureService.start(applicationContext) { errorMessage ->
+                        if (errorMessage == null) {
+                            result.success(true)
+                        } else {
+                            result.error(
+                                "SCREEN_CAPTURE_SERVICE_START_FAILED",
+                                errorMessage,
+                                null,
+                            )
+                        }
+                    }
                 }
                 "stopService" -> {
                     ScreenCaptureService.stop(applicationContext)
@@ -71,6 +80,52 @@ class MainActivity : FlutterActivity() {
                 "getScreenSize" -> {
                     val (w, h) = realScreenSize()
                     result.success(mapOf("width" to w, "height" to h))
+                }
+                else -> result.notImplemented()
+            }
+        }
+
+        val webrtcConfigCh = MethodChannel(messenger, CHANNEL_WEBRTC_CONFIG)
+        webrtcConfigCh.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "applyFieldTrials" -> {
+                    try {
+                        // 前置条件：flutter_webrtc 已完成 PeerConnectionFactory.initialize
+                        // （由 Dart 侧 WebRTC.initialize() 保证，它同时加载了 native 库，
+                        // 但会把 field trials 重置为空串）。这里重新注入，且必须发生在
+                        // 首个视频发送流创建（媒体协商）之前。
+                        PeerConnectionFactory.initializeFieldTrials(WEBRTC_FIELD_TRIALS)
+                        result.success(true)
+                    } catch (error: Throwable) {
+                        result.error(
+                            "FIELD_TRIALS_FAILED",
+                            error.message ?: error.javaClass.simpleName,
+                            null,
+                        )
+                    }
+                }
+                else -> result.notImplemented()
+            }
+        }
+
+        val identityCh = MethodChannel(messenger, CHANNEL_HOST_IDENTITY)
+        identityCh.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "getCertificate" -> {
+                    Thread({
+                        try {
+                            val certificate = HostIdentity.getOrCreateCertificate()
+                            runOnUiThread { result.success(certificate) }
+                        } catch (error: Throwable) {
+                            runOnUiThread {
+                                result.error(
+                                    "HOST_IDENTITY_UNAVAILABLE",
+                                    error.message ?: error.javaClass.simpleName,
+                                    null,
+                                )
+                            }
+                        }
+                    }, "quickdesk-host-identity").start()
                 }
                 else -> result.notImplemented()
             }
@@ -103,7 +158,7 @@ class MainActivity : FlutterActivity() {
                 }
                 // ---- 注入（自动选后端）----
                 "injectMouse" -> {
-                    routeMouse(
+                    InputRouter.routeMouse(
                         call.argument<Int>("x") ?: 0,
                         call.argument<Int>("y") ?: 0,
                         call.argument<Int>("button") ?: 0,
@@ -113,14 +168,14 @@ class MainActivity : FlutterActivity() {
                     )
                 }
                 "injectKey" -> {
-                    routeKey(
+                    InputRouter.routeKey(
                         call.argument<Int>("usbKeycode") ?: 0,
                         call.argument<Boolean>("pressed") ?: false,
                         result,
                     )
                 }
                 "injectText" -> {
-                    routeText(call.argument<String>("text") ?: "", result)
+                    InputRouter.routeText(call.argument<String>("text") ?: "", result)
                 }
                 "globalAction" -> {
                     val svc = InputAccessibilityService.instance
@@ -137,50 +192,6 @@ class MainActivity : FlutterActivity() {
                 }
                 else -> result.notImplemented()
             }
-        }
-    }
-
-    private fun routeMouse(
-        x: Int, y: Int, button: Int, buttonDown: Int, wheelDeltaY: Float,
-        result: MethodChannel.Result,
-    ) {
-        if (ShizukuInputInjector.isAvailable()) {
-            ShizukuInputInjector.injectMouse(x, y, button, buttonDown, wheelDeltaY)
-            result.success("shizuku")
-            return
-        }
-        val svc = InputAccessibilityService.instance
-        if (svc == null) {
-            result.error("NO_BACKEND", "No input backend available", null)
-        } else {
-            svc.injectMouse(x, y, button, buttonDown, wheelDeltaY)
-            result.success("a11y")
-        }
-    }
-
-    private fun routeKey(usbKeycode: Int, pressed: Boolean, result: MethodChannel.Result) {
-        if (ShizukuInputInjector.isAvailable() && ShizukuInputInjector.injectKey(usbKeycode, pressed)) {
-            result.success("shizuku")
-            return
-        }
-        val svc = InputAccessibilityService.instance
-        if (svc == null) {
-            result.error("NO_BACKEND", "No input backend available", null)
-        } else {
-            result.success(if (svc.injectKey(usbKeycode, pressed)) "a11y" else "ignored")
-        }
-    }
-
-    private fun routeText(text: String, result: MethodChannel.Result) {
-        if (ShizukuInputInjector.isAvailable() && ShizukuInputInjector.injectText(text)) {
-            result.success("shizuku")
-            return
-        }
-        val svc = InputAccessibilityService.instance
-        if (svc == null) {
-            result.error("NO_BACKEND", "No input backend available", null)
-        } else {
-            result.success(if (svc.injectText(text)) "a11y" else "failed")
         }
     }
 
@@ -236,6 +247,19 @@ class MainActivity : FlutterActivity() {
 
     companion object {
         private const val CHANNEL_SCREEN = "quickdesk/screen_capture"
+        private const val CHANNEL_HOST_IDENTITY = "quickdesk/host_identity"
         private const val CHANNEL_INPUT = "quickdesk/input"
+        private const val CHANNEL_WEBRTC_CONFIG = "quickdesk/webrtc_config"
+
+        /**
+         * 强制视频发送端把 playout-delay RTP 扩展写为 {0,0}，对齐 Chromium
+         * remoting host（webrtc_video_encoder_wrapper.cc 中
+         * SetPlayoutDelay(VideoPlayoutDelay::Minimal())）。桌面 quickdesk_client
+         * 的 WebrtcVideoRendererAdapter::OnFrame 断言帧渲染时间不得晚于当前
+         * 时刻（致命 NOTREACHED）；不带该扩展时对端 jitter buffer 会排出
+         * "未来"的渲染时间，首帧后客户端进程即崩溃断线。
+         */
+        private const val WEBRTC_FIELD_TRIALS =
+            "WebRTC-ForceSendPlayoutDelay/min_ms:0,max_ms:0/"
     }
 }

@@ -9,6 +9,7 @@ import 'dart:math';
 
 import 'package:xml/xml.dart';
 
+import '../../core/rand_id.dart';
 import '../auth/spake2_authenticator.dart' show AuthMessage;
 
 // ==================== 命名空间常量 ====================
@@ -40,6 +41,14 @@ class TerminateInfo {
   String? reason;
   String? errorCode;
   String? errorDetails;
+
+  /// 原因 + 对端附带的错误码/详情（Chromium 端失败时会带上），用于日志
+  String describe() => [
+        reason ?? 'unknown',
+        if (errorCode != null && errorCode!.isNotEmpty) 'code=$errorCode',
+        if (errorDetails != null && errorDetails!.isNotEmpty)
+          'details=$errorDetails',
+      ].join(' ');
 }
 
 /// 解析后的 Jingle 消息
@@ -69,19 +78,15 @@ class JingleMessage {
 
 // ==================== 构建器 ====================
 
-String _generateUuid() {
-  final r = Random.secure();
-  final b = List<int>.generate(16, (_) => r.nextInt(256));
-  b[6] = (b[6] & 0x0f) | 0x40;
-  b[8] = (b[8] & 0x3f) | 0x80;
-  final h = b.map((x) => x.toRadixString(16).padLeft(2, '0')).join();
-  return '${h.substring(0, 8)}-${h.substring(8, 12)}-${h.substring(12, 16)}-${h.substring(16, 20)}-${h.substring(20)}';
-}
-
 class JingleBuilder {
   String? sessionId;
   String localJid = '';
   String remoteJid = '';
+
+  final String _outgoingIdPrefix = generateUuidV4();
+  int _nextOutgoingId = 0;
+
+  String _nextIqId() => '${_outgoingIdPrefix}_${++_nextOutgoingId}';
 
   /// 生成新的会话 ID（Chromium 风格的大整数字符串）
   String generateSessionId() {
@@ -95,12 +100,15 @@ class JingleBuilder {
   }
 
   XmlElement _createIq({String type = 'set', String? id, String? to}) {
-    final iq = XmlElement(XmlName('cli:iq'));
-    iq.setAttribute('xmlns', nsJabberClient);
+    // 与 WebClient（浏览器 DOM）序列化一致：根元素用 cli 前缀并显式绑定
+    // xmlns:cli="jabber:client"。若写成默认 xmlns，cli 前缀未声明，
+    // Chromium host 的 XML 解析器会当作命名空间错误从而忽略整条 IQ。
+    final iq = XmlElement(XmlName('iq', 'cli'));
+    iq.setAttribute('xmlns:cli', nsJabberClient);
     iq.setAttribute('to', to ?? remoteJid);
     iq.setAttribute('from', localJid);
     iq.setAttribute('type', type);
-    iq.setAttribute('id', id ?? _generateUuid());
+    iq.setAttribute('id', id ?? _nextIqId());
     return iq;
   }
 
@@ -159,8 +167,9 @@ class JingleBuilder {
     return sessionDesc;
   }
 
-  /// session-initiate（Client 角色发起）
-  String buildSessionInitiate(String sdpOffer, AuthMessage authMessage) {
+  /// session-initiate（Client 角色发起）。[sdpOffer] 为空时生成 Chromium
+  /// 标准的认证-only 首包；保留非空参数以兼容旧版客户端流程。
+  String buildSessionInitiate(String? sdpOffer, AuthMessage authMessage) {
     sessionId ??= generateSessionId();
 
     final iq = _createIq();
@@ -178,14 +187,17 @@ class JingleBuilder {
     final transport = XmlElement(XmlName('transport'));
     transport.setAttribute('xmlns', nsWebrtcTransport);
     content.children.add(transport);
-    transport.children.add(_createSessionDescription(sdpOffer, 'offer'));
+    if (sdpOffer != null && sdpOffer.isNotEmpty) {
+      transport.children.add(_createSessionDescription(sdpOffer, 'offer'));
+    }
 
     return iq.toXmlString();
   }
 
-  /// session-accept（Host 角色应答，M3 被控端用）
-  /// 对照 jingle_messages.cc: accept 消息结构与 initiate 一致，action 不同
-  String buildSessionAccept(String sdpAnswer, AuthMessage authMessage) {
+  /// session-accept（Host 角色应答）。
+  /// Chromium 标准流程只携带认证信息和空 WebRTC transport；旧版客户端
+  /// 若在 session-initiate 中携带初始 offer，则可通过 [sdpAnswer] 返回基础 answer。
+  String buildSessionAccept(String? sdpAnswer, AuthMessage authMessage) {
     if (sessionId == null) {
       throw StateError('Session ID not set (must reuse initiator sid)');
     }
@@ -205,7 +217,9 @@ class JingleBuilder {
     final transport = XmlElement(XmlName('transport'));
     transport.setAttribute('xmlns', nsWebrtcTransport);
     content.children.add(transport);
-    transport.children.add(_createSessionDescription(sdpAnswer, 'answer'));
+    if (sdpAnswer != null && sdpAnswer.isNotEmpty) {
+      transport.children.add(_createSessionDescription(sdpAnswer, 'answer'));
+    }
 
     return iq.toXmlString();
   }
@@ -281,7 +295,8 @@ class JingleBuilder {
     return iq.toXmlString();
   }
 
-  /// IQ result 响应（XMPP 协议要求对 type=set 回 ack）
+  /// IQ result 响应（XMPP 协议要求对 type=set 回 ack）。
+  /// 响应复用请求 ID，因此不能占用本端连续发送序号。
   String buildIqResult(String iqId, String toJid) {
     final iq = _createIq(type: 'result', id: iqId, to: toJid);
     iq.children.add(XmlElement(XmlName('jingle'))..setAttribute('xmlns', nsJingle));

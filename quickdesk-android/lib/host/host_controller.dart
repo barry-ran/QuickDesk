@@ -8,6 +8,8 @@ library;
 
 import 'dart:async';
 
+import 'package:flutter/services.dart';
+
 import '../api/host_api.dart';
 import '../api/signaling_api.dart' show SignalingApiException;
 import '../l10n/app_strings.dart';
@@ -44,6 +46,8 @@ class HostStatus {
 }
 
 class HostController {
+  static const _identityChannel = MethodChannel('quickdesk/host_identity');
+
   final String signalingUrl;
   final String? apiKey;
 
@@ -121,7 +125,11 @@ class HostController {
         deviceSecret: _creds!.deviceSecret!,
       );
 
-      // 5. 共享密钥哈希（SPAKE2 Bob 用）：HMAC(device_id, device_id + access_code)
+      // 5. Host 身份证书 + SPAKE2 共享密钥哈希。
+      final hostCertificate = await _identityChannel.invokeMethod<String>('getCertificate');
+      if (hostCertificate == null || hostCertificate.isEmpty) {
+        throw StateError('Android host certificate is unavailable');
+      }
       final deviceId = _creds!.deviceId!;
       final sharedSecretHash =
           spake2.getSharedSecretHash(deviceId, deviceId + accessCode);
@@ -131,6 +139,7 @@ class HostController {
         signalingUrl: signalingUrl,
         deviceId: deviceId,
         sharedSecretHash: sharedSecretHash,
+        hostCertificate: hostCertificate,
         screenStreamProvider: () => capture.stream,
         screenWidth: capture.width,
         screenHeight: capture.height,

@@ -8,25 +8,48 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
+import android.os.Bundle
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
+import android.os.ResultReceiver
+import android.util.Log
 
 /**
  * 被控端屏幕采集前台服务。
  *
- * Android 10+（API 29）要求在调用 MediaProjection 前，应用已运行一个
- * foregroundServiceType=mediaProjection 的前台服务；Android 14（API 34）
- * 进一步强制该类型。flutter_webrtc 的 getDisplayMedia 内部会创建
- * MediaProjection，因此 Dart 侧必须**先** startService() 再 getDisplayMedia()。
+ * Android 10+（API 29）要求 MediaProjection 采集期间运行
+ * foregroundServiceType=mediaProjection 的前台服务。Android 14+ 还要求先由用户
+ * 授予本次屏幕捕获权限，再启动该类型服务，之后才能创建 MediaProjection。
  *
- * 本服务本身只负责持有前台通知以满足系统约束，实际采集由 flutter_webrtc 完成。
+ * 本服务只负责持有前台通知以满足系统约束，实际采集由 flutter_webrtc 完成。
  */
 class ScreenCaptureService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        startAsForeground()
-        return START_STICKY
+        val receiver = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            intent?.getParcelableExtra(EXTRA_RESULT_RECEIVER, ResultReceiver::class.java)
+        } else {
+            @Suppress("DEPRECATION")
+            intent?.getParcelableExtra(EXTRA_RESULT_RECEIVER)
+        }
+
+        try {
+            startAsForeground()
+            receiver?.send(RESULT_STARTED, Bundle())
+        } catch (error: Throwable) {
+            Log.e(TAG, "Unable to start media projection foreground service", error)
+            receiver?.send(
+                RESULT_FAILED,
+                Bundle().apply {
+                    putString(EXTRA_ERROR_MESSAGE, error.message ?: error.javaClass.simpleName)
+                },
+            )
+            stopSelf(startId)
+        }
+        return START_NOT_STICKY
     }
 
     private fun startAsForeground() {
@@ -82,15 +105,38 @@ class ScreenCaptureService : Service() {
     }
 
     companion object {
+        private const val TAG = "ScreenCaptureService"
         private const val CHANNEL_ID = "quickdesk_screen_capture"
         private const val NOTIFICATION_ID = 1001
+        private const val EXTRA_RESULT_RECEIVER = "result_receiver"
+        private const val EXTRA_ERROR_MESSAGE = "error_message"
+        private const val RESULT_STARTED = 1
+        private const val RESULT_FAILED = 2
 
-        fun start(context: Context) {
-            val intent = Intent(context, ScreenCaptureService::class.java)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(intent)
-            } else {
-                context.startService(intent)
+        fun start(context: Context, callback: (String?) -> Unit) {
+            val receiver = object : ResultReceiver(Handler(Looper.getMainLooper())) {
+                override fun onReceiveResult(resultCode: Int, resultData: Bundle?) {
+                    when (resultCode) {
+                        RESULT_STARTED -> callback(null)
+                        RESULT_FAILED -> callback(
+                            resultData?.getString(EXTRA_ERROR_MESSAGE)
+                                ?: "Unable to start screen capture service",
+                        )
+                    }
+                }
+            }
+            val intent = Intent(context, ScreenCaptureService::class.java).apply {
+                putExtra(EXTRA_RESULT_RECEIVER, receiver)
+            }
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(intent)
+                } else {
+                    context.startService(intent)
+                }
+            } catch (error: Throwable) {
+                Log.e(TAG, "Unable to launch media projection foreground service", error)
+                callback(error.message ?: error.javaClass.simpleName)
             }
         }
 
