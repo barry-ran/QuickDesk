@@ -29,7 +29,11 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 import '../api/signaling_api.dart' show IceServerEntry;
 import 'auth/spake2_authenticator.dart';
 import 'datachannel_config.dart';
+import 'datachannel_handler.dart';
 import 'host_input.dart';
+import 'peer/candidates.dart';
+import 'peer/peer_connection.dart';
+import 'peer/serial_queue.dart';
 import 'proto/protobuf_messages.dart';
 import 'signaling/jingle.dart';
 import 'signaling/sdp_signature.dart';
@@ -233,47 +237,47 @@ class _HostPeer {
   Spake2HostAuthenticator? _auth;
   RTCPeerConnection? _pc;
 
-  RTCDataChannel? _controlChannel;
-  RTCDataChannel? _eventChannel;
-  bool _controlReady = false;
-  bool _eventReady = false;
+  /// control（本端创建）/ event（对端创建）双通道
+  late final DataChannelHandler _channels = DataChannelHandler(
+    onControlOpen: _onControlOpen,
+    onEventOpen: _notifyIfChannelsReady,
+    onChannelClosed: _onChannelClosed,
+    onEventMessage: _dispatchInput,
+    onLog: (m) => session._log('peer[$clientId] $m'),
+  );
+
+  /// 远端 candidate：answer 未 setRemote 前缓冲（认证前信令就可能带来 ICE）
+  late final RemoteCandidateSink _remoteCandidates = RemoteCandidateSink(
+    () => _pc!,
+    (m) => session._log('peer[$clientId] $m'),
+  );
+
+  /// 本端 candidate：签名 offer 发出且 setLocal 完成前缓冲。
+  /// Chromium 会把认证后的 transport-info 直接交给 WebrtcTransport，
+  /// 必须保证签名 offer 先到，candidate 不能抢在 offer 前面。
+  late final LocalCandidateGate _localCandidates =
+      LocalCandidateGate(_sendLocalCandidate);
+
+  // 逐条串行处理信令
+  late final SerialTaskQueue<String> _queue = SerialTaskQueue(
+    _process,
+    onError: (e) => session._log('peer[$clientId] error: $e'),
+  );
+
   bool _initialControlMessagesSent = false;
   bool _closing = false;
 
   HostPeerState state = HostPeerState.negotiating;
-  bool _remoteDescriptionSet = false;
   bool _mediaNegotiationStarted = false;
   bool _authenticated = false;
-  bool _transportOfferSent = false;
-
-  final List<RTCIceCandidate> _pendingRemoteCandidates = [];
-  final List<RTCIceCandidate> _pendingLocalCandidates = [];
-
-  // 逐条串行处理信令
-  final List<String> _queue = [];
-  bool _processing = false;
 
   _HostPeer({required this.session, required this.clientId});
 
-  void enqueue(String xml) {
-    _queue.add(xml);
-    if (!_processing) _processNext();
-  }
+  void enqueue(String xml) => _queue.add(xml);
 
-  Future<void> _processNext() async {
-    if (_queue.isEmpty) {
-      _processing = false;
-      return;
-    }
-    _processing = true;
-    final xml = _queue.removeAt(0);
-    try {
-      final parsed = _parser.parse(xml);
-      if (parsed != null) await _handle(parsed);
-    } catch (e) {
-      session._log('peer[$clientId] error: $e');
-    }
-    await _processNext();
+  Future<void> _process(String xml) async {
+    final parsed = _parser.parse(xml);
+    if (parsed != null) await _handle(parsed);
   }
 
   Future<void> _handle(JingleMessage message) async {
@@ -395,7 +399,6 @@ class _HostPeer {
       await _pc!.setRemoteDescription(
         RTCSessionDescription(initialSdp.sdp, 'offer'),
       );
-      _remoteDescriptionSet = true;
       final answer = await _pc!.createAnswer();
       await _pc!.setLocalDescription(answer);
 
@@ -406,7 +409,7 @@ class _HostPeer {
       session
           ._log('peer[$clientId] sent legacy session-accept (answer + auth)');
 
-      await _flushRemoteCandidates();
+      await _remoteCandidates.markReady();
     } catch (e) {
       await _fail('base negotiation failed: $e');
     }
@@ -415,20 +418,19 @@ class _HostPeer {
   Future<void> _handleSessionInfo(JingleMessage message) async {
     if (message.authMessage == null || _auth == null) return;
 
-    _auth!.processMessage(message.authMessage!);
-    final st = _auth!.state;
+    final st = driveAuthExchange(
+      _auth!,
+      message.authMessage!,
+      (next) =>
+          session._sendToClient(clientId, _jingle.buildSessionInfo(next)),
+    );
 
     if (st == AuthState.rejected) {
       await _fail('auth rejected: ${_auth!.rejectionReason}');
       return;
     }
 
-    if (st == AuthState.messageReady) {
-      final next = _auth!.getNextMessage();
-      session._sendToClient(clientId, _jingle.buildSessionInfo(next));
-    }
-
-    if (_auth!.state == AuthState.accepted && !_authenticated) {
+    if (st == AuthState.accepted && !_authenticated) {
       session._log('peer[$clientId] authenticated');
       _authenticated = true;
       // 认证完成 → host 作为 offerer 发起媒体协商
@@ -442,9 +444,7 @@ class _HostPeer {
       // 认证完成前到达的 ICE 先缓存；异常提前到达的 SDP 则拒绝，避免空引用
       // 被外层队列吞掉后只表现为模糊的“通道错误”。
       for (final info in message.iceCandidates) {
-        _pendingRemoteCandidates.add(
-          RTCIceCandidate(info.candidate, info.sdpMid, info.sdpMLineIndex),
-        );
+        await _remoteCandidates.add(info);
       }
       if (message.sdp != null) {
         await _fail('transport SDP arrived before authentication');
@@ -463,9 +463,8 @@ class _HostPeer {
         await _pc!.setRemoteDescription(
           RTCSessionDescription(message.sdp!.sdp, 'answer'),
         );
-        _remoteDescriptionSet = true;
         session._log('peer[$clientId] remote answer set');
-        await _flushRemoteCandidates();
+        await _remoteCandidates.markReady();
       } catch (e) {
         await _fail('setRemoteDescription failed: $e');
         return;
@@ -476,41 +475,16 @@ class _HostPeer {
     }
 
     for (final info in message.iceCandidates) {
-      final candidate =
-          RTCIceCandidate(info.candidate, info.sdpMid, info.sdpMLineIndex);
-      if (_remoteDescriptionSet) {
-        try {
-          await _pc!.addCandidate(candidate);
-        } catch (e) {
-          session._log('peer[$clientId] addCandidate failed: $e');
-        }
-      } else {
-        _pendingRemoteCandidates.add(candidate);
-      }
+      await _remoteCandidates.add(info);
     }
   }
 
   Future<void> _createPeerConnection() async {
     if (_pc != null) return;
 
-    final config = <String, dynamic>{
-      'iceServers': session.iceServers.map((e) => e.toRtcConfig()).toList(),
-      'bundlePolicy': 'max-bundle',
-      'sdpSemantics': 'unified-plan',
-    };
-    _pc = await createPeerConnection(config);
+    _pc = await createRemotingPeerConnection(session.iceServers);
 
-    _pc!.onIceCandidate = (candidate) {
-      if (candidate.candidate == null || candidate.candidate!.isEmpty) return;
-      // Chromium 会把认证后的 transport-info 直接交给 WebrtcTransport。
-      // 必须保证签名 offer 先到，不能让 setLocalDescription 触发的 candidate
-      // 抢在 offer 前面发送。
-      if (!_authenticated || !_transportOfferSent) {
-        _pendingLocalCandidates.add(candidate);
-        return;
-      }
-      _sendLocalCandidate(candidate);
-    };
+    _pc!.onIceCandidate = _localCandidates.add;
 
     _pc!.onIceConnectionState = (s) {
       session._log('peer[$clientId] ICE: $s');
@@ -543,7 +517,7 @@ class _HostPeer {
         '(sid=${channel.id}, state=${channel.state})',
       );
       if (channel.label == 'event') {
-        _setupEventChannel(channel);
+        _channels.handleDataChannel(channel);
       }
     };
   }
@@ -576,21 +550,17 @@ class _HostPeer {
       }
 
       // host 创建 'control' 通道（下发 cursor/clipboard/capabilities/VideoLayout）
-      _controlChannel = await _pc!.createDataChannel(
+      final controlChannel = await _pc!.createDataChannel(
         'control',
         createRemotingDataChannelInit(),
       );
       session._log(
         'peer[$clientId] created control datachannel: '
-        'sid=${_controlChannel!.id}',
+        'sid=${controlChannel.id}',
       );
-      _controlChannel!.onDataChannelState = _handleControlChannelState;
-      _controlChannel!.onMessage = (msg) {
-        if (msg.isBinary) _handleControlMessage(msg.binary);
-      };
-      // 入站通道对象会携带初始 OPEN 状态；出站通道在极快网络下也可能在
-      // Dart 回调绑定前完成打开，因此绑定后必须立即检查当前状态。
-      _handleControlChannelState(_controlChannel!.state);
+      // handleDataChannel 绑定回调后会立即检查当前状态，覆盖出站通道在
+      // 极快网络下已完成打开的情况。
+      _channels.handleDataChannel(controlChannel);
 
       final offer = await _pc!.createOffer();
       final sdp = offer.sdp;
@@ -608,46 +578,46 @@ class _HostPeer {
         clientId,
         _jingle.buildTransportInfoSdp(sdp, 'offer', signature: signature),
       );
-      _transportOfferSent = true;
       session._log('peer[$clientId] sent signed offer (transport-info)');
 
       await _pc!.setLocalDescription(offer);
-      _flushLocalCandidates();
+      _localCandidates.open();
     } catch (e) {
       await _fail('media negotiation failed: $e');
     }
   }
 
-  void _handleControlChannelState(RTCDataChannelState? channelState) {
-    session._log(
-      'peer[$clientId] control datachannel: $channelState '
-      '(sid=${_controlChannel?.id})',
-    );
-    final wasReady = _controlReady;
-    _controlReady = channelState == RTCDataChannelState.RTCDataChannelOpen;
-    if (_controlReady && !wasReady) {
-      _onControlOpen();
-    } else if ((channelState == RTCDataChannelState.RTCDataChannelClosing ||
-            channelState == RTCDataChannelState.RTCDataChannelClosed) &&
-        !_closing) {
-      unawaited(_fail('control datachannel closed'));
-      return;
+  // ==================== 通道回调 ====================
+
+  void _onControlOpen() {
+    if (!_initialControlMessagesSent) {
+      _initialControlMessagesSent = true;
+      if (session.capabilities.isNotEmpty) {
+        _channels.sendCapabilities(session.capabilities);
+      }
+      sendVideoLayout(session.screenWidth, session.screenHeight);
     }
     _notifyIfChannelsReady();
   }
 
-  void _onControlOpen() {
-    if (_initialControlMessagesSent) return;
-    _initialControlMessagesSent = true;
+  void _onChannelClosed(String label) {
+    if (_closing) return;
+    unawaited(_fail('$label datachannel closed'));
+  }
 
-    if (session.capabilities.isNotEmpty) {
-      _sendControl(encodeControlMessage(capabilities: session.capabilities));
-    }
-    sendVideoLayout(session.screenWidth, session.screenHeight);
+  void _notifyIfChannelsReady() {
+    if (!_channels.controlReady || !_channels.eventReady || _closing) return;
+    if (state == HostPeerState.connected) return;
+
+    state = HostPeerState.connected;
+    session._log(
+      'peer[$clientId] connected: control/event datachannels are open',
+    );
+    session._onPeerConnected();
   }
 
   void sendVideoLayout(int width, int height) {
-    if (!_controlReady) return;
+    if (!_channels.controlReady) return;
     // mediaStreamId 必须与 SDP msid 一致，client 才能把 VideoLayout 与收到的
     // WebRTC 流对应起来，故取采集流的真实 id 而非占位串。
     final streamId = session.screenStreamProvider().id;
@@ -661,50 +631,7 @@ class _HostPeer {
       ..width = width
       ..height = height
       ..screenId = 0);
-    _sendControl(encodeControlMessage(videoLayout: layout));
-  }
-
-  // ==================== event 通道（客户端输入） ====================
-
-  void _setupEventChannel(RTCDataChannel channel) {
-    _eventChannel = channel;
-    channel.onDataChannelState = _handleEventChannelState;
-    channel.onMessage = (msg) {
-      if (!msg.isBinary) return;
-      try {
-        final event = decodeEventMessage(msg.binary);
-        _dispatchInput(event);
-      } catch (e) {
-        session._log('peer[$clientId] bad event message: $e');
-      }
-    };
-    _handleEventChannelState(channel.state);
-  }
-
-  void _handleEventChannelState(RTCDataChannelState? channelState) {
-    session._log(
-      'peer[$clientId] event datachannel: $channelState '
-      '(sid=${_eventChannel?.id})',
-    );
-    _eventReady = channelState == RTCDataChannelState.RTCDataChannelOpen;
-    if ((channelState == RTCDataChannelState.RTCDataChannelClosing ||
-            channelState == RTCDataChannelState.RTCDataChannelClosed) &&
-        !_closing) {
-      unawaited(_fail('event datachannel closed'));
-      return;
-    }
-    _notifyIfChannelsReady();
-  }
-
-  void _notifyIfChannelsReady() {
-    if (!_controlReady || !_eventReady || _closing) return;
-    if (state == HostPeerState.connected) return;
-
-    state = HostPeerState.connected;
-    session._log(
-      'peer[$clientId] connected: control/event datachannels are open',
-    );
-    session._onPeerConnected();
+    _channels.sendVideoLayout(layout);
   }
 
   void _dispatchInput(EventMessage event) {
@@ -731,20 +658,7 @@ class _HostPeer {
     }
   }
 
-  void _handleControlMessage(Uint8List data) {
-    // client → host 的 control 消息（能力应答、剪贴板、分辨率等）。
-    // M3 最小实现：仅解析，暂不处理。
-    try {
-      decodeControlMessage(data);
-    } catch (_) {}
-  }
-
   // ==================== 发送/工具 ====================
-
-  void _sendControl(Uint8List data) {
-    if (!_controlReady || _controlChannel == null) return;
-    _controlChannel!.send(RTCDataChannelMessage.fromBinary(data));
-  }
 
   void _sendLocalCandidate(RTCIceCandidate candidate) {
     session._sendToClient(
@@ -755,24 +669,6 @@ class _HostPeer {
         sdpMLineIndex: candidate.sdpMLineIndex ?? 0,
       )),
     );
-  }
-
-  void _flushLocalCandidates() {
-    for (final c in _pendingLocalCandidates) {
-      _sendLocalCandidate(c);
-    }
-    _pendingLocalCandidates.clear();
-  }
-
-  Future<void> _flushRemoteCandidates() async {
-    for (final c in _pendingRemoteCandidates) {
-      try {
-        await _pc!.addCandidate(c);
-      } catch (e) {
-        session._log('peer[$clientId] flush candidate failed: $e');
-      }
-    }
-    _pendingRemoteCandidates.clear();
   }
 
   bool _verifySignature(String sdp, String type, String? signature) {
@@ -802,20 +698,14 @@ class _HostPeer {
             clientId, _jingle.buildSessionTerminate(terminateReason));
       } catch (_) {}
     }
-    _controlReady = false;
-    _eventReady = false;
     _queue.clear();
-    _processing = false;
-    try {
-      await _controlChannel?.close();
-      await _eventChannel?.close();
-    } catch (_) {}
-    _controlChannel = null;
-    _eventChannel = null;
+    await _channels.dispose();
     if (_pc != null) {
       await _pc!.close();
       _pc = null;
     }
+    _remoteCandidates.reset();
+    _localCandidates.reset();
     state = HostPeerState.closed;
   }
 }

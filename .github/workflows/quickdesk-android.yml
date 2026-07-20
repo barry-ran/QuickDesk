@@ -1,0 +1,98 @@
+name: QuickDesk Android
+
+on:
+  push:
+    paths:
+      - 'quickdesk-android/**'
+      - '.github/workflows/quickdesk-android.yml'
+  pull_request:
+    paths:
+      - 'quickdesk-android/**'
+      - '.github/workflows/quickdesk-android.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: quickdesk-android
+    steps:
+      - uses: actions/checkout@v4
+
+      # AGP 的 jlink 变换与 JDK 21+ 不兼容（见 quickdesk-android/README.md），固定 JDK 17
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Flutter pub get
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Run protocol tests
+        run: flutter test
+
+      # 注意：release 构建当前按 app/build.gradle.kts 配置使用 debug 签名，
+      # 接入正式签名后在此注入 keystore（secrets）并移除该说明。
+      - name: Build APK (arm64 + arm32)
+        run: >-
+          flutter build apk --release --split-per-abi
+          --target-platform android-arm,android-arm64
+
+      - name: Get version
+        id: version
+        run: |
+          echo "version=$(cat ../version)" >> $GITHUB_OUTPUT
+          echo "ref-name=${GITHUB_REF##*/}" >> $GITHUB_OUTPUT
+
+      - name: Collect APKs
+        run: |
+          mkdir -p ../publish
+          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk \
+             ../publish/QuickDesk-android-arm64.apk
+          cp build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk \
+             ../publish/QuickDesk-android-arm32.apk
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: QuickDesk-android-${{ steps.version.outputs.ref-name }}
+          path: publish/QuickDesk-android-*.apk
+
+      - name: Upload arm64 APK to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: publish/QuickDesk-android-arm64.apk
+          asset_name: QuickDesk-android-arm64-${{ steps.version.outputs.ref-name }}.apk
+          tag: ${{ github.ref }}
+          overwrite: true
+
+      - name: Upload arm32 APK to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: publish/QuickDesk-android-arm32.apk
+          asset_name: QuickDesk-android-arm32-${{ steps.version.outputs.ref-name }}.apk
+          tag: ${{ github.ref }}
+          overwrite: true

@@ -15,6 +15,9 @@ import 'auth/spake2.dart' as spake2;
 import 'auth/spake2_authenticator.dart';
 import 'datachannel_config.dart';
 import 'datachannel_handler.dart';
+import 'peer/candidates.dart';
+import 'peer/peer_connection.dart';
+import 'peer/serial_queue.dart';
 import 'signaling/jingle.dart';
 import 'signaling/sdp_signature.dart';
 import 'signaling/websocket_transport.dart';
@@ -45,17 +48,23 @@ class ClientSession {
   final JingleParser _jingleParser = JingleParser();
   Spake2ClientAuthenticator? _authenticator;
   RTCPeerConnection? _pc;
-  final DataChannelHandler dcHandler = DataChannelHandler();
+  late final DataChannelHandler dcHandler = DataChannelHandler(onLog: _log);
 
-  final List<RTCIceCandidate> _pendingIceCandidates = [];
-  final List<RTCIceCandidate> _pendingOutgoingCandidates = [];
-  bool _remoteDescriptionSet = false;
-  bool _authenticated = false;
+  /// 远端 candidate：remote description 就绪前缓冲
+  late final RemoteCandidateSink _remoteCandidates =
+      RemoteCandidateSink(() => _pc!, _log);
+
+  /// 本端 candidate：认证完成前缓冲（签名 SDP 必须先于 candidate 到达对端）
+  late final LocalCandidateGate _localCandidates =
+      LocalCandidateGate(_sendCandidateNow);
+
   RTCDataChannel? _eventChannel;
 
   // 消息串行处理队列（防止 async 处理交叉）
-  final List<String> _messageQueue = [];
-  bool _processingMessage = false;
+  late final SerialTaskQueue<String> _signalQueue = SerialTaskQueue(
+    _processSignalingMessage,
+    onError: (e) => _log('error processing signaling message: $e'),
+  );
 
   /// 接收到的远端媒体流（按 stream id 索引，支持桌面端多显示器多流）
   final Map<String, MediaStream> remoteStreams = {};
@@ -159,19 +168,10 @@ class ClientSession {
   // ==================== 内部 ====================
 
   Future<void> _createPeerConnection() async {
-    final config = <String, dynamic>{
-      'iceServers': iceServers.map((e) => e.toRtcConfig()).toList(),
-      'bundlePolicy': 'max-bundle',
-      'sdpSemantics': 'unified-plan',
-    };
-
-    _pc = await createPeerConnection(config);
+    _pc = await createRemotingPeerConnection(iceServers);
     _log('PeerConnection created');
 
-    _pc!.onIceCandidate = (candidate) {
-      if (candidate.candidate == null || candidate.candidate!.isEmpty) return;
-      _sendIceCandidate(candidate);
-    };
+    _pc!.onIceCandidate = _localCandidates.add;
 
     _pc!.onIceConnectionState = (iceState) {
       _log('ICE state: $iceState');
@@ -248,13 +248,8 @@ class ClientSession {
     _transport!.send(_jingleBuilder.buildIqResult(iqId, toJid));
   }
 
-  void _sendIceCandidate(RTCIceCandidate candidate) {
+  void _sendCandidateNow(RTCIceCandidate candidate) {
     if (_transport == null || !_transport!.isConnected) return;
-
-    if (!_authenticated) {
-      _pendingOutgoingCandidates.add(candidate);
-      return;
-    }
     _transport!.send(_jingleBuilder.buildTransportInfo(IceCandidateInfo(
       candidate: candidate.candidate!,
       sdpMid: candidate.sdpMid ?? '',
@@ -262,39 +257,7 @@ class ClientSession {
     )));
   }
 
-  void _flushOutgoingCandidates() {
-    for (final c in _pendingOutgoingCandidates) {
-      _transport!.send(_jingleBuilder.buildTransportInfo(IceCandidateInfo(
-        candidate: c.candidate!,
-        sdpMid: c.sdpMid ?? '',
-        sdpMLineIndex: c.sdpMLineIndex ?? 0,
-      )));
-    }
-    _log('flushed ${_pendingOutgoingCandidates.length} buffered candidates');
-    _pendingOutgoingCandidates.clear();
-  }
-
-  void _onSignalingMessage(String message) {
-    _messageQueue.add(message);
-    if (!_processingMessage) {
-      _processNextMessage();
-    }
-  }
-
-  Future<void> _processNextMessage() async {
-    if (_messageQueue.isEmpty) {
-      _processingMessage = false;
-      return;
-    }
-    _processingMessage = true;
-    final message = _messageQueue.removeAt(0);
-    try {
-      await _processSignalingMessage(message);
-    } catch (e) {
-      _log('error processing signaling message: $e');
-    }
-    await _processNextMessage();
-  }
+  void _onSignalingMessage(String message) => _signalQueue.add(message);
 
   Future<void> _processSignalingMessage(String message) async {
     final trimmed = message.trim();
@@ -381,19 +344,15 @@ class ClientSession {
 
     if (message.authMessage != null) {
       _setState(SessionState.authenticating);
-      _authenticator!.processMessage(message.authMessage!);
-
-      final authState = _authenticator!.state;
-      if (authState == AuthState.rejected) {
+      final st = driveAuthExchange(_authenticator!, message.authMessage!,
+          (next) {
+        _transport!.send(_jingleBuilder.buildSessionInfo(next));
+        _log('sent auth message (session-info)');
+      });
+      if (st == AuthState.rejected) {
         _log('auth rejected: ${_authenticator!.rejectionReason}');
         _setState(SessionState.failed);
         return;
-      }
-
-      if (authState == AuthState.messageReady) {
-        final next = _authenticator!.getNextMessage();
-        _transport!.send(_jingleBuilder.buildSessionInfo(next));
-        _log('sent auth message (session-info)');
       }
     }
 
@@ -401,9 +360,8 @@ class ClientSession {
       try {
         await _pc!.setRemoteDescription(
             RTCSessionDescription(message.sdp!.sdp, message.sdp!.type));
-        _remoteDescriptionSet = true;
         _log('remote SDP set');
-        await _processPendingCandidates();
+        await _remoteCandidates.markReady();
       } catch (e) {
         _log('failed to set remote SDP: $e');
         _setState(SessionState.failed);
@@ -425,7 +383,6 @@ class ClientSession {
           }
           await _pc!.setRemoteDescription(
               RTCSessionDescription(message.sdp!.sdp, 'offer'));
-          _remoteDescriptionSet = true;
 
           final answer = await _pc!.createAnswer();
           await _pc!.setLocalDescription(answer);
@@ -456,67 +413,39 @@ class ClientSession {
         } else {
           await _pc!.setRemoteDescription(
               RTCSessionDescription(message.sdp!.sdp, sdpType));
-          _remoteDescriptionSet = true;
         }
-        await _processPendingCandidates();
+        await _remoteCandidates.markReady();
       } catch (e) {
         _log('failed to handle SDP from transport-info: $e');
       }
     }
 
     for (final info in message.iceCandidates) {
-      final candidate =
-          RTCIceCandidate(info.candidate, info.sdpMid, info.sdpMLineIndex);
-      if (_remoteDescriptionSet) {
-        try {
-          await _pc!.addCandidate(candidate);
-        } catch (e) {
-          _log('failed to add ICE candidate: $e');
-        }
-      } else {
-        _pendingIceCandidates.add(candidate);
-      }
+      await _remoteCandidates.add(info);
     }
   }
 
   Future<void> _handleSessionInfo(JingleMessage message) async {
     if (message.authMessage == null) return;
 
-    _authenticator!.processMessage(message.authMessage!);
+    final st = driveAuthExchange(_authenticator!, message.authMessage!,
+        (next) => _transport!.send(_jingleBuilder.buildSessionInfo(next)));
 
-    final authState = _authenticator!.state;
-    if (authState == AuthState.rejected) {
+    if (st == AuthState.rejected) {
       _log('auth rejected: ${_authenticator!.rejectionReason}');
       _setState(SessionState.failed);
       return;
     }
 
-    if (authState == AuthState.messageReady) {
-      final next = _authenticator!.getNextMessage();
-      _transport!.send(_jingleBuilder.buildSessionInfo(next));
-    }
-
-    if (authState == AuthState.accepted) {
+    if (st == AuthState.accepted) {
       _log('authentication successful');
-      _authenticated = true;
-      _flushOutgoingCandidates();
+      final flushed = _localCandidates.open();
+      _log('flushed $flushed buffered candidates');
     }
-  }
-
-  Future<void> _processPendingCandidates() async {
-    for (final candidate in _pendingIceCandidates) {
-      try {
-        await _pc!.addCandidate(candidate);
-      } catch (e) {
-        _log('failed to add buffered candidate: $e');
-      }
-    }
-    _pendingIceCandidates.clear();
   }
 
   Future<void> _cleanup() async {
-    _messageQueue.clear();
-    _processingMessage = false;
+    _signalQueue.clear();
     _eventChannel = null;
     if (_pc != null) {
       await _pc!.close();
@@ -524,10 +453,8 @@ class ClientSession {
     }
     _transport?.disconnect();
     _transport = null;
-    _pendingIceCandidates.clear();
-    _pendingOutgoingCandidates.clear();
-    _remoteDescriptionSet = false;
-    _authenticated = false;
+    _remoteCandidates.reset();
+    _localCandidates.reset();
   }
 
   void _setState(SessionState newState) {

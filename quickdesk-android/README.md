@@ -9,20 +9,24 @@ QuickDesk Android 客户端（Flutter）：主控（控制桌面端/其它设备
 
 ```
 lib/
-├── main.dart                    # 入口（Fluent 主题 + 语言切换）
+├── main.dart                    # 入口（WebRTC field trial 注入 + 主题/语言）
+├── core/                        # 公共工具：app_settings（服务器配置）/ rand_id / geometry
 ├── api/
+│   ├── signaling_http.dart      # REST 公共层（ws→http、鉴权头、请求模板、ICE 解析）
 │   ├── signaling_api.dart       # 主控 REST（access-code:verify / ice-config）
 │   └── host_api.dart            # 被控 REST（provision / heartbeat / signal-tokens / access-code）
 ├── protocol/                    # 纯 Dart 协议栈（与 WebClient/js 对齐，可独立单测）
 │   ├── auth/                    #   SPAKE2（edwards25519 + 认证状态机，Alice/Bob 双角色）
-│   ├── proto/                   #   Chromium Remoting protobuf 手写编解码
+│   ├── proto/                   #   wire（protobuf 原语）+ Chromium Remoting 消息编解码
 │   ├── signaling/               #   Jingle XML builder/parser + WS 传输（{client_id,payload} 封装）
+│   ├── peer/                    #   会话公共构件：串行队列 / candidate 缓冲 / PC 工厂
 │   ├── client_session.dart      #   主控端会话状态机（flutter_webrtc）
 │   ├── host_session.dart        #   被控端会话状态机（Jingle responder + SPAKE2 Bob，两次协商）
-│   ├── datachannel_handler.dart #   event/control DataChannel
+│   ├── datachannel_handler.dart #   event/control DataChannel（client/host 角色共用）
 │   ├── file_transfer.dart       #   文件传输（file_transfer.proto，独立 DataChannel）
 │   └── host_input.dart          #   被控端输入事件模型
-├── controller/                  # UI：连接页/远程页/被控页/首页 + 触控/键码/剪贴板/统计/历史
+├── controller/                  # UI：连接页/被控页/首页 + 触控/键码/剪贴板/统计/历史
+│   └── remote/                  #   远程桌面页（主页面/工具条/统计面板/传输弹层/光标）
 ├── host/                        # 被控端桥接：屏幕采集 / 输入注入 / 凭据 / 总控
 ├── l10n/                        # 轻量中英 i18n
 └── theme/                       # Fluent 风格主题

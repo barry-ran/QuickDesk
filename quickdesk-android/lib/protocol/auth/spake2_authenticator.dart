@@ -46,8 +46,35 @@ class AuthMessage {
 
 const String kSpake2Method = 'spake2_curve25519';
 
+/// SPAKE2 认证器公共接口（Alice / Bob 共用），供会话层统一驱动消息交换。
+abstract class Spake2Authenticator {
+  AuthState get state;
+  String? get rejectionReason;
+
+  /// SPAKE2 协商出的 auth key（64 字节），用于 SDP 签名
+  Uint8List? get authKey;
+
+  void processMessage(AuthMessage message);
+  AuthMessage getNextMessage();
+}
+
+/// 驱动一轮认证消息交换：处理对端消息，若产生应答则经 [sendReply] 发出。
+/// 返回处理后的最终状态（rejected / accepted / waitingMessage）。
+AuthState driveAuthExchange(
+  Spake2Authenticator auth,
+  AuthMessage message,
+  void Function(AuthMessage next) sendReply,
+) {
+  auth.processMessage(message);
+  if (auth.state == AuthState.rejected) return AuthState.rejected;
+  if (auth.state == AuthState.messageReady) {
+    sendReply(auth.getNextMessage());
+  }
+  return auth.state;
+}
+
 /// Client 角色（Alice）认证器，对照 JS Spake2Authenticator
-class Spake2ClientAuthenticator {
+class Spake2ClientAuthenticator implements Spake2Authenticator {
   final String localId;
   final String remoteId;
   final Uint8List sharedSecretHash;
@@ -57,6 +84,7 @@ class Spake2ClientAuthenticator {
   bool _spakeMessageSent = false;
   Uint8List? _outgoingVerificationHash;
   AuthState _state = AuthState.messageReady;
+  @override
   String? rejectionReason;
 
   bool _methodSelected = false;
@@ -73,6 +101,7 @@ class Spake2ClientAuthenticator {
   }
 
   /// 处理 Host 回复的认证消息
+  @override
   void processMessage(AuthMessage message) {
     if (!_methodSelected && message.method != null) {
       if (message.method != kSpake2Method) {
@@ -109,6 +138,7 @@ class Spake2ClientAuthenticator {
   }
 
   /// 取下一条要发送的认证消息
+  @override
   AuthMessage getNextMessage() {
     final message = AuthMessage();
 
@@ -133,9 +163,10 @@ class Spake2ClientAuthenticator {
     return message;
   }
 
-  /// SPAKE2 协商出的 auth key（64 字节），用于 SDP 签名
+  @override
   Uint8List? get authKey => _ctx.authKey;
 
+  @override
   AuthState get state {
     if (_state == AuthState.accepted && _outgoingVerificationHash != null) {
       return AuthState.messageReady;
@@ -150,7 +181,7 @@ class Spake2ClientAuthenticator {
 ///   1. 收 client 首条消息（supported-methods）→ 回复 method + 自己的 SPAKE2 消息
 ///   2. 收 client 的 SPAKE2 消息 → 计算 key，回复 verification-hash
 ///   3. 收 client 的 verification-hash → 校验，通过则 ACCEPTED
-class Spake2HostAuthenticator {
+class Spake2HostAuthenticator implements Spake2Authenticator {
   final String localId;
   final String remoteId;
   final Uint8List sharedSecretHash;
@@ -161,6 +192,7 @@ class Spake2HostAuthenticator {
   bool _spakeMessageSent = false;
   Uint8List? _outgoingVerificationHash;
   AuthState _state = AuthState.waitingMessage;
+  @override
   String? rejectionReason;
 
   bool _methodSelected = false;
@@ -179,6 +211,7 @@ class Spake2HostAuthenticator {
     _localSpakeMessage = _ctx.generateMessage(sharedSecretHash);
   }
 
+  @override
   void processMessage(AuthMessage message) {
     // 客户端首条可发送 supported-methods，或直接携带已选中的 method。
     if (!_methodSelected && message.supportedMethods != null) {
@@ -233,6 +266,7 @@ class Spake2HostAuthenticator {
         : AuthState.waitingMessage;
   }
 
+  @override
   AuthMessage getNextMessage() {
     final message = AuthMessage(method: kSpake2Method);
 
@@ -254,8 +288,10 @@ class Spake2HostAuthenticator {
     return message;
   }
 
+  @override
   Uint8List? get authKey => _ctx.authKey;
 
+  @override
   AuthState get state {
     if (_state == AuthState.accepted && _outgoingVerificationHash != null) {
       return AuthState.messageReady;
