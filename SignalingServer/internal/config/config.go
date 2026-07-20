@@ -56,6 +56,9 @@ type Config struct {
 type RuntimeConfig struct {
 	RunAutoMigrate bool
 	PprofAddr      string
+	LogDir         string
+	LogMaxSizeMB   int
+	LogMaxBackups  int
 }
 
 type ServerConfig struct {
@@ -125,6 +128,9 @@ func Load() *Config {
 
 	viper.SetDefault("RUN_AUTO_MIGRATE", false)
 	viper.SetDefault("PPROF_ADDR", "")
+	viper.SetDefault("LOG_DIR", "logs")
+	viper.SetDefault("LOG_MAX_SIZE_MB", 50)
+	viper.SetDefault("LOG_MAX_BACKUPS", 5)
 
 	if err := viper.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
@@ -186,17 +192,20 @@ func Load() *Config {
 	cfg.Runtime = RuntimeConfig{
 		RunAutoMigrate: viper.GetBool("RUN_AUTO_MIGRATE"),
 		PprofAddr:      viper.GetString("PPROF_ADDR"),
+		LogDir:         viper.GetString("LOG_DIR"),
+		LogMaxSizeMB:   viper.GetInt("LOG_MAX_SIZE_MB"),
+		LogMaxBackups:  viper.GetInt("LOG_MAX_BACKUPS"),
 	}
 
 	apiKeyStatus := "disabled"
 	if cfg.Security.APIKey != "" {
 		apiKeyStatus = "enabled"
 	}
-	log.Printf("Loaded config: Server=%s:%d, DB=%s:%d/%s, ICE TURN=%d STUN=%d TTL=%ds MaxRate=%dkbps, APIKey=%s, AllowedOrigins=%d, SMS=%v, AutoMigrate=%v, Pprof=%v",
+	log.Printf("Loaded config: Server=%s:%d, DB=%s:%d/%s, ICE TURN=%d STUN=%d TTL=%ds MaxRate=%dkbps, APIKey=%s, AllowedOrigins=%d, SMS=%v, AutoMigrate=%v, Pprof=%v, LogDir=%s",
 		cfg.Server.Host, cfg.Server.Port,
 		cfg.Database.Host, cfg.Database.Port, cfg.Database.DBName,
 		len(cfg.Ice.TurnURLs), len(cfg.Ice.StunURLs), cfg.Ice.CredentialTTL, cfg.Ice.MaxRateKbps,
-		apiKeyStatus, len(cfg.Security.AllowedOrigins), cfg.Sms.Enabled, cfg.Runtime.RunAutoMigrate, cfg.Runtime.PprofAddr != "")
+		apiKeyStatus, len(cfg.Security.AllowedOrigins), cfg.Sms.Enabled, cfg.Runtime.RunAutoMigrate, cfg.Runtime.PprofAddr != "", cfg.Runtime.LogDir)
 
 	return cfg
 }

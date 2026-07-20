@@ -82,6 +82,13 @@ public:
     Q_INVOKABLE QString getDeviceAccessCode(const QString& deviceId) const;
     Q_INVOKABLE QString getDeviceDisplayName(const QString& deviceId) const;
 
+    void refreshDeviceAccessCodeNow(
+        const QString& deviceId,
+        std::function<void(const QString& accessCode)> onSuccess,
+        std::function<void(int httpStatus,
+                            const QString& code,
+                            const QString& detail)> onError);
+
     // Connection record
     Q_INVOKABLE void recordConnection(const QString& deviceId, int duration,
                                        const QString& status, const QString& errorMsg = QString());

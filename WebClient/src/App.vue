@@ -159,12 +159,12 @@ async function restoreSession() {
   const accessTok  = params.get('access_token')
   const refreshTok = params.get('refresh_token')
   if (accessTok) {
-    localStorage.setItem('quickdesk_user_access_token', accessTok)
-    if (refreshTok) localStorage.setItem('quickdesk_user_refresh_token', refreshTok)
+    userApi.adoptSession({ access_token: accessTok, refresh_token: refreshTok })
     updateAuthState()
   }
 
   if (!userApi.isLoggedIn()) return
+  userApi.scheduleProactiveRefresh()
   const r = await userApi.fetchMe()
   if (r.ok && r.data) {
     localStorage.setItem('quickdesk_user_info', JSON.stringify({

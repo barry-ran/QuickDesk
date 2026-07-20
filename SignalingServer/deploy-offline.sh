@@ -189,6 +189,7 @@ echo "  Health:  curl http://localhost:$PORT/health"
 echo "  Admin:   http://localhost:$PORT/admin/"
 echo "  Logs:    COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT_NAME docker compose logs -f"
 echo "  Data:    $DATA_DIR"
+echo "  App log: $DATA_DIR/logs/signaling.log"
 if [ -n "$DOMAIN" ]; then
     echo "  URL:     http://$DOMAIN"
 fi

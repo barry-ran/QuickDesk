@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"quickdesk/signaling/internal/models"
+	"quickdesk/signaling/internal/observability"
 	"quickdesk/signaling/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -117,12 +118,7 @@ func (h *RealtimeHandler) HandleEvent(ctx context.Context, evt service.Event) {
 	// to the revoked family — NOT every WS for this user. Broadcasting to
 	// all connections would log out other devices (e.g. Qt client) that
 	// share the same user_id but have their own independent session family.
-	revokedFamily := ""
-	if evt.Type == service.EventSessionRevoked {
-		if fid, ok := evt.Data["family_id"]; ok {
-			revokedFamily, _ = fid.(string)
-		}
-	}
+	revokedFamily := revokedFamilyID(evt)
 
 	h.eventsMu.RLock()
 	conns := h.events[evt.UserID]
@@ -144,6 +140,22 @@ func (h *RealtimeHandler) HandleEvent(ctx context.Context, evt service.Event) {
 			Data:      evt.Data,
 		})
 	}
+	if evt.Type == service.EventSessionRevoked {
+		observability.Event("realtime_events", "session_revoked_fanout", map[string]interface{}{
+			"family_id": revokedFamily, "recipients": len(snap), "server_rev": evt.ServerRev, "user_id": evt.UserID,
+		})
+	}
+}
+
+// revokedFamilyID returns the sole session family that may receive a scoped
+// session.revoked event. An empty result deliberately represents a genuine
+// account-wide revocation (password reset, admin force logout, etc.).
+func revokedFamilyID(evt service.Event) string {
+	if evt.Type != service.EventSessionRevoked || evt.Data == nil {
+		return ""
+	}
+	familyID, _ := evt.Data["family_id"].(string)
+	return familyID
 }
 
 // nextRev returns the next monotonically-increasing server_rev. Used only
@@ -215,18 +227,27 @@ func (h *RealtimeHandler) HandleEvents(c *gin.Context) {
 	conn.SetReadDeadline(time.Now().Add(firstFrameTimeout))
 	var af authFrame
 	if err := conn.ReadJSON(&af); err != nil {
+		observability.Event("realtime_events", "authentication_failed", map[string]interface{}{
+			"client_ip": c.ClientIP(), "reason": "first_frame_timeout_or_invalid", "request_id": c.GetString("request_id"),
+		})
 		_ = conn.WriteControl(websocket.CloseMessage,
 			websocket.FormatCloseMessage(4401, "auth timeout"), time.Now().Add(time.Second))
 		_ = conn.Close()
 		return
 	}
 	if af.Type != "auth" || af.AccessToken == "" {
+		observability.Event("realtime_events", "authentication_failed", map[string]interface{}{
+			"client_ip": c.ClientIP(), "reason": "missing_auth_frame", "request_id": c.GetString("request_id"),
+		})
 		_ = conn.WriteJSON(eventWire{Type: "error", Data: map[string]interface{}{"code": "AUTH_INVALID"}})
 		_ = conn.Close()
 		return
 	}
 	familyID, uid, err := h.tokens.LookupAccessToken(c.Request.Context(), service.ScopeUser, af.AccessToken)
 	if err != nil {
+		observability.Event("realtime_events", "authentication_failed", map[string]interface{}{
+			"client_ip": c.ClientIP(), "reason": "invalid_access_token", "request_id": c.GetString("request_id"),
+		})
 		_ = conn.WriteJSON(eventWire{Type: "error", Data: map[string]interface{}{"code": "TOKEN_INVALID"}})
 		_ = conn.Close()
 		return
@@ -255,6 +276,9 @@ func (h *RealtimeHandler) HandleEvents(c *gin.Context) {
 	// baseline, and clients use server_rev to ignore stale queued events.
 	h.registerEventConn(ec)
 	defer h.unregisterEventConn(ec)
+	observability.Event("realtime_events", "connected", map[string]interface{}{
+		"family_id": familyID, "request_id": c.GetString("request_id"), "user_id": uid,
+	})
 
 	rev := h.nextRev()
 	conn.SetWriteDeadline(time.Now().Add(wsWriteTimeout))
@@ -444,7 +468,7 @@ func (h *RealtimeHandler) buildSnapshot(ctx context.Context, userID uint) (map[s
 	for _, d := range devices {
 		deviceIDs = append(deviceIDs, d.DeviceID)
 	}
-	online := h.presence.BulkOnline(ctx, deviceIDs)
+	presenceStates := h.presence.BulkState(ctx, deviceIDs)
 	remarks := map[string]string{}
 	var uds []models.UserDevice
 	h.db.WithContext(ctx).
@@ -454,8 +478,21 @@ func (h *RealtimeHandler) buildSnapshot(ctx context.Context, userID uint) (map[s
 		remarks[u.DeviceID] = u.Remark
 	}
 	deviceItems := make([]map[string]interface{}, 0, len(devices))
+	onlineCount := 0
+	loggedInCount := 0
+	diagParts := make([]string, 0, len(devices))
 	for i := range devices {
 		d := &devices[i]
+		state := presenceStates[d.DeviceID]
+		loggedIn := d.LoggedIn && state.Online
+		if state.Online {
+			onlineCount++
+		}
+		if loggedIn {
+			loggedInCount++
+		}
+		diagParts = append(diagParts, fmt.Sprintf("%s{hb=%t ws=%d online=%t intent=%t logged_in=%t}",
+			d.DeviceID, state.Heartbeat, state.WSCount, state.Online, d.LoggedIn, loggedIn))
 		lastSeen := ""
 		if !d.LastSeenAt.IsZero() {
 			lastSeen = d.LastSeenAt.UTC().Format("2006-01-02T15:04:05Z")
@@ -464,8 +501,8 @@ func (h *RealtimeHandler) buildSnapshot(ctx context.Context, userID uint) (map[s
 			"device_id":    d.DeviceID,
 			"device_name":  d.DeviceName,
 			"remark":       remarks[d.DeviceID],
-			"online":       online[d.DeviceID],
-			"logged_in":    d.LoggedIn && online[d.DeviceID],
+			"online":       state.Online,
+			"logged_in":    loggedIn,
 			"access_code":  d.AccessCode,
 			"os":           d.OS,
 			"os_version":   d.OSVersion,
@@ -473,6 +510,8 @@ func (h *RealtimeHandler) buildSnapshot(ctx context.Context, userID uint) (map[s
 			"last_seen_at": lastSeen,
 		})
 	}
+	log.Printf("[presence/snapshot] user=%d devices=%d online=%d logged_in=%d presence=%s",
+		userID, len(deviceItems), onlineCount, loggedInCount, strings.Join(diagParts, ";"))
 	favItems := make([]map[string]interface{}, 0, len(favorites))
 	for _, f := range favorites {
 		favItems = append(favItems, map[string]interface{}{
@@ -622,7 +661,13 @@ func (h *RealtimeHandler) HandleSignal(c *gin.Context) {
 			state := h.presence.State(c.Request.Context(), sc.deviceID)
 			log.Printf("[realtime/signal] host presence connected device=%s session=%s presence={%s}",
 				sc.deviceID, sessionID, state.String())
-			if h.presence.IsOnline(c.Request.Context(), sc.deviceID) && h.presence.RememberOnlineCandidate(c.Request.Context(), sc.deviceID) {
+			rememberedNow := false
+			if state.Online {
+				rememberedNow = h.presence.RememberOnlineCandidate(c.Request.Context(), sc.deviceID)
+			}
+			if state.Online && rememberedNow {
+				log.Printf("[presence] device online via host_ws device=%s session=%s presence={%s}",
+					sc.deviceID, sessionID, state.String())
 				if d, err := h.devices.GetByDeviceID(c.Request.Context(), sc.deviceID); err == nil && d.UserID != nil {
 					h.bus.Publish(c.Request.Context(), service.Event{
 						Type:     service.EventDeviceOnlineChanged,
@@ -635,6 +680,9 @@ func (h *RealtimeHandler) HandleSignal(c *gin.Context) {
 						},
 					})
 				}
+			} else {
+				log.Printf("[presence] host_ws online_event_skipped device=%s session=%s presence={%s} remembered_now=%t",
+					sc.deviceID, sessionID, state.String(), rememberedNow)
 			}
 		} else {
 			log.Printf("[realtime/signal] host presence mark failed device=%s session=%s err=%v",
@@ -795,6 +843,22 @@ func (sc *signalConn) close() {
 //	host 鈫?server: expect {client_id:...} in payload, route to that client.
 //	client 鈫?server: always route to the host for this device.
 func (h *RealtimeHandler) routeSignalMessage(from *signalConn, raw []byte) {
+	var control struct {
+		Type string `json:"type"`
+	}
+	if err := json.Unmarshal(raw, &control); err == nil {
+		switch control.Type {
+		case "ping":
+			from.send(mustMarshal(map[string]interface{}{
+				"type":        "pong",
+				"server_time": time.Now().UTC().Format("2006-01-02T15:04:05Z"),
+			}))
+			return
+		case "pong":
+			return
+		}
+	}
+
 	switch from.role {
 	case service.SignalRoleHost:
 		// Peek at client_id without rewriting the payload.

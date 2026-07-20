@@ -22,12 +22,29 @@ constexpr int kRequestTimeoutMs = 10000;
 // Refresh the access token this many seconds before its nominal expiry
 // to avoid 401 races. 60s gives plenty of slack for slow networks.
 constexpr int kAccessRefreshMarginSeconds = 60;
+constexpr int kProactiveRefreshMarginSeconds = 5 * 60;
+constexpr int kProactiveRefreshRetrySeconds = 60;
 }
 
 AuthManager::AuthManager(ServerManager* serverManager, QObject* parent)
     : QObject(parent)
     , m_serverManager(serverManager)
 {
+    m_accessRefreshTimer.setSingleShot(true);
+    connect(&m_accessRefreshTimer, &QTimer::timeout, this, [this]() {
+        if (!m_isLoggedIn || m_refreshToken.isEmpty()) return;
+        LOG_INFO("[AuthManager] Proactive access token refresh triggered");
+        refreshAccessToken([this](bool ok) {
+            if (!m_isLoggedIn || m_refreshToken.isEmpty()) return;
+            if (ok) {
+                scheduleAccessTokenRefresh();
+                return;
+            }
+            LOG_WARN("[AuthManager] Proactive refresh unavailable; retrying in {}s",
+                     kProactiveRefreshRetrySeconds);
+            m_accessRefreshTimer.start(kProactiveRefreshRetrySeconds * 1000);
+        });
+    });
 }
 
 void AuthManager::setHostManager(HostManager* host)
@@ -290,6 +307,8 @@ void AuthManager::applyTokens(const QByteArray& responseBody)
     if (!m_username.isEmpty()) {
         lcc.setUsername(m_username);
     }
+
+    scheduleAccessTokenRefresh();
 }
 
 void AuthManager::refreshAccessToken(std::function<void(bool)> done)
@@ -332,11 +351,15 @@ void AuthManager::refreshAccessToken(std::function<void(bool)> done)
                     LOG_INFO("[AuthManager] Access token refreshed");
                     ok = true;
                 } else {
-                    // REFRESH_INVALID or expired → hard logout.
                     auto [code, msg] = parseProblem(data, errorMsg);
-                    LOG_WARN("[AuthManager] Refresh failed: code={} msg={}",
-                             code.toStdString(), msg.toStdString());
-                    clearSession();
+                    if (statusCode == 401) {
+                        LOG_WARN("[AuthManager] Refresh rejected: code={} msg={}; clearing session",
+                                 code.toStdString(), msg.toStdString());
+                        clearSession();
+                    } else {
+                        LOG_WARN("[AuthManager] Refresh unavailable: status={} code={} msg={}; preserving session",
+                                 statusCode, code.toStdString(), msg.toStdString());
+                    }
                 }
 
                 auto q = std::move(m_refreshQueue);
@@ -347,6 +370,39 @@ void AuthManager::refreshAccessToken(std::function<void(bool)> done)
                 }
             });
         });
+}
+
+void AuthManager::scheduleAccessTokenRefresh()
+{
+    m_accessRefreshTimer.stop();
+    if (!m_isLoggedIn || m_refreshToken.isEmpty()) return;
+
+    QDateTime now = QDateTime::currentDateTimeUtc();
+    if (!m_accessExpiresAt.isValid() || m_accessExpiresAt <= now) {
+        m_accessRefreshTimer.start(0);
+        LOG_INFO("[AuthManager] Scheduled immediate proactive access token refresh");
+        return;
+    }
+
+    qint64 msecs = now.msecsTo(m_accessExpiresAt.addSecs(-kProactiveRefreshMarginSeconds));
+    if (msecs < 0) msecs = 0;
+    if (msecs > std::numeric_limits<int>::max()) {
+        msecs = std::numeric_limits<int>::max();
+    }
+    m_accessRefreshTimer.start(static_cast<int>(msecs));
+    LOG_INFO("[AuthManager] Scheduled proactive access token refresh in {}s",
+             msecs / 1000);
+}
+
+void AuthManager::stopAccessTokenRefreshTimer()
+{
+    m_accessRefreshTimer.stop();
+}
+
+void AuthManager::handleServerSessionRevoked()
+{
+    LOG_WARN("[AuthManager] Server revoked current user session; preserving device session intent");
+    clearSession();
 }
 
 // -----------------------------------------------------------------------
@@ -631,6 +687,7 @@ void AuthManager::clearSession()
     m_refreshToken.clear();
     m_accessExpiresAt = QDateTime();
     m_refreshExpiresAt = QDateTime();
+    stopAccessTokenRefreshTimer();
 
     auto& lcc = core::LocalConfigCenter::instance();
     lcc.setUserToken("");

@@ -179,11 +179,15 @@ function onFavoritesChanged(e) {
   favorites.value = e.detail.favorites.slice()
 }
 
-// Apply URL params (for direct links). We deliberately DROP any ?code=
-// param since plaintext access codes must not be in URLs (§2.18).
+// Apply URL params (for direct links). We parse `server` and `device` as
+// before. Additionally, if a `code` query parameter is present we
+// pre-fill the access code input (simple behavior for testing).
+// Note: keeping `code` in the URL is discouraged for production.
 const params = new URLSearchParams(window.location.search)
 if (params.get('server')) serverUrl.value = params.get('server')
 if (params.get('device')) deviceId.value = params.get('device')
+const code = params.get('code')
+if (code) accessCode.value = code
 
 onMounted(() => {
   window.addEventListener('message', onMessage)

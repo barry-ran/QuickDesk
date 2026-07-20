@@ -8,6 +8,8 @@ import (
 	"sync"
 	"time"
 
+	"quickdesk/signaling/internal/observability"
+
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 )
@@ -137,6 +139,12 @@ func (b *EventBus) Publish(ctx context.Context, evt Event) {
 			evt.ServerRev = v
 		}
 	}
+	if evt.Type == EventSessionRevoked {
+		observability.Event("event_bus", "session_revoked", map[string]interface{}{
+			"event_id": evt.ID, "family_id": stringField(evt.Data, "family_id"),
+			"reason": stringField(evt.Data, "reason"), "server_rev": evt.ServerRev, "user_id": evt.UserID,
+		})
+	}
 
 	// Append to Redis stream for resume/snapshot replay (§2.8). If the
 	// stream write fails, enqueue the event onto the retry list so the
@@ -188,6 +196,14 @@ func (b *EventBus) Publish(ctx context.Context, evt Event) {
 			}
 		}
 	}
+}
+
+func stringField(fields map[string]interface{}, key string) string {
+	if fields == nil {
+		return ""
+	}
+	value, _ := fields[key].(string)
+	return value
 }
 
 // eventRetryKey is the Redis list where events land if their stream write

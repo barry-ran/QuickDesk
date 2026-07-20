@@ -197,14 +197,8 @@ class UserSync extends EventTarget {
     }
     if (type === 'session.revoked') {
       if (!this._shouldApplyFrame(type, msg.server_rev)) return
-      // §2.17 / T9: current access_token was revoked server-side.
-      // Behaviour parity with Qt (CloudDeviceManager.cpp:652 logs this
-      // and calls AuthManager::logout which runs the two-step flow).
-      // WebClient has no host process; userApi.handleServerRevoked()
-      // fires DELETE /v1/me/sessions/current best-effort and then
-      // triggers the same onSessionEnded() callback the HTTP layer
-      // uses, so App.vue pops the login dialog + "session expired"
-      // toast uniformly.
+      // The server already revoked this session family. Clear local user
+      // credentials only; do not issue a second logout mutation.
       this.stop()
       this.dispatchEvent(new CustomEvent('session-revoked'))
       userApi.handleServerRevoked()

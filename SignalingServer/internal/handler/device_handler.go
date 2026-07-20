@@ -6,6 +6,7 @@ import (
 
 	"quickdesk/signaling/internal/middleware"
 	"quickdesk/signaling/internal/models"
+	"quickdesk/signaling/internal/observability"
 	"quickdesk/signaling/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -219,6 +220,12 @@ func (h *DeviceHandler) Bind(c *gin.Context) {
 	// the non-secret DeviceItem fields so clients can converge via ordered
 	// WS patches without issuing a racing HTTP list fetch.
 	if result.PreviousOwner != nil {
+		observability.Event("device", "ownership_transferred", map[string]interface{}{
+			"device_id":     req.DeviceID,
+			"new_user_id":   uid,
+			"previous_user": *result.PreviousOwner,
+			"request_id":    c.GetString("request_id"),
+		})
 		h.bus.Publish(c.Request.Context(), service.Event{
 			Type:     service.EventDeviceOwnershipLost,
 			UserID:   *result.PreviousOwner,
@@ -248,6 +255,11 @@ func (h *DeviceHandler) Bind(c *gin.Context) {
 			},
 		})
 	} else {
+		observability.Event("device", "bound", map[string]interface{}{
+			"device_id":  req.DeviceID,
+			"request_id": c.GetString("request_id"),
+			"user_id":    uid,
+		})
 		h.bus.Publish(c.Request.Context(), service.Event{
 			Type:     service.EventDeviceBound,
 			UserID:   uid,
@@ -273,6 +285,11 @@ func (h *DeviceHandler) Unbind(c *gin.Context) {
 		DeviceID: deviceID,
 		Data:     map[string]interface{}{"device_id": deviceID},
 	})
+	observability.Event("device", "unbound", map[string]interface{}{
+		"device_id":  deviceID,
+		"request_id": c.GetString("request_id"),
+		"user_id":    uid,
+	})
 	c.JSON(http.StatusOK, gin.H{"status": "ok"})
 }
 
@@ -292,6 +309,11 @@ func (h *DeviceHandler) ClearSession(c *gin.Context) {
 			"device_id": deviceID,
 			"logged_in": false,
 		},
+	})
+	observability.Event("device", "session_cleared", map[string]interface{}{
+		"device_id":  deviceID,
+		"request_id": c.GetString("request_id"),
+		"user_id":    uid,
 	})
 	c.JSON(http.StatusOK, gin.H{"status": "ok"})
 }

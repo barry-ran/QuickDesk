@@ -66,8 +66,27 @@ All Docker deployment scripts store user data in a host directory by default. Da
 |------|----------------|---------------------|
 | PostgreSQL | `~/.quickdesk/signaling/<instance-name>/postgres` | `/data/postgres` |
 | Redis | `~/.quickdesk/signaling/<instance-name>/redis` | `/data/redis` |
+| Signaling application logs | `~/.quickdesk/signaling/<instance-name>/logs` | `/data/logs` |
 
 Rebuilding the image, restarting the container, or running `docker compose up -d` does not clear this directory. Data only disappears if the instance data directory is manually deleted, or if you switch to a different `DATA_DIR` and mount a new empty directory.
+
+### Production Logs and Troubleshooting
+
+The signaling service writes to both container stdout and `$DATA_DIR/logs/signaling.log`. The file rotates at 50MB by default and retains five rotated files (`signaling.log.1` through `.5`). Configure this in `.env`:
+
+```bash
+LOG_DIR=/data/logs          # Keep this for Docker; use an absolute path on bare metal
+LOG_MAX_SIZE_MB=50
+LOG_MAX_BACKUPS=5
+```
+
+Logs never include access/refresh tokens, device secrets, or plaintext access codes. Business diagnostics use `component=... event=... key=value`. Important entries include `component=event_bus event=session_revoked`, `[auth] refresh family revoked`, `component=auth event=session_created`, `component=device event=ownership_transferred`, `[realtime/signal]`, `[presence]`, and authorization/slow-request events.
+
+```bash
+tail -F "$DATA_DIR/logs/signaling.log"
+grep 'event=session_revoked' "$DATA_DIR/logs/signaling.log"
+grep 'request_id="..."' "$DATA_DIR/logs/signaling.log"
+```
 
 To customize the data directory, set `DATA_DIR` before running the deploy script. `DATA_DIR` should point to one instance's dedicated directory; do not share one directory across multiple instances. For Linux production, explicitly placing data under `/data/quickdesk/...` or a dedicated data disk is recommended for backups and operations:
 

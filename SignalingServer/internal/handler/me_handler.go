@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"quickdesk/signaling/internal/middleware"
+	"quickdesk/signaling/internal/observability"
 	"quickdesk/signaling/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -61,6 +62,11 @@ func (h *MeHandler) ChangePassword(c *gin.Context) {
 	// devices must log in again with the new password (R32). The bus
 	// event below fans out to all connected events WebSockets too.
 	h.tokens.RevokeAllForSubject(c.Request.Context(), service.ScopeUser, uid)
+	observability.Event("auth", "sessions_revoked", map[string]interface{}{
+		"reason":     "password_changed",
+		"request_id": c.GetString("request_id"),
+		"user_id":    uid,
+	})
 	h.bus.Publish(c.Request.Context(), service.Event{
 		Type:   service.EventSessionRevoked,
 		UserID: uid,
@@ -205,6 +211,9 @@ func (h *MeHandler) DeleteCurrentSession(c *gin.Context) {
 	if family != "" {
 		_ = h.tokens.RevokeFamilyForSubject(c.Request.Context(), service.ScopeUser, uid, family)
 	}
+	observability.Event("auth", "session_revoked", map[string]interface{}{
+		"family_id": family, "reason": "self_logout", "request_id": c.GetString("request_id"), "user_id": uid,
+	})
 	h.bus.Publish(c.Request.Context(), service.Event{
 		Type:   service.EventSessionRevoked,
 		UserID: uid,
@@ -229,6 +238,9 @@ func (h *MeHandler) DeleteSessionByID(c *gin.Context) {
 		ProblemInternal(c, err.Error())
 		return
 	}
+	observability.Event("auth", "session_revoked", map[string]interface{}{
+		"family_id": familyID, "reason": "user_session_management", "request_id": c.GetString("request_id"), "user_id": uid,
+	})
 	h.bus.Publish(c.Request.Context(), service.Event{
 		Type:   service.EventSessionRevoked,
 		UserID: uid,

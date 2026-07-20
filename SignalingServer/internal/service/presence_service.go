@@ -209,16 +209,15 @@ func (p *PresenceService) IsOnline(ctx context.Context, deviceID string) bool {
 	return p.State(ctx, deviceID).Online
 }
 
-// BulkOnline looks up multiple device IDs at once, returning a map of
-// deviceID → online. Used by list endpoints like GET /v1/me/devices so we
-// don't do N round-trips.
-func (p *PresenceService) BulkOnline(ctx context.Context, deviceIDs []string) map[string]bool {
-	out := make(map[string]bool, len(deviceIDs))
+// BulkState looks up multiple device IDs at once and returns the full
+// presence decision inputs. It is intentionally side-effect free except for
+// stale ws_instances cleanup inside liveWSCount().
+func (p *PresenceService) BulkState(ctx context.Context, deviceIDs []string) map[string]PresenceState {
+	out := make(map[string]PresenceState, len(deviceIDs))
 	if len(deviceIDs) == 0 {
 		return out
 	}
-	// Pipeline the hb existence checks. WS liveness uses the per-device
-	// instance set maintained by MarkWSConnected/MarkWSDisconnected.
+
 	pipe := p.rdb.Pipeline()
 	cmds := make(map[string]*redis.IntCmd, len(deviceIDs))
 	for _, id := range deviceIDs {
@@ -229,11 +228,27 @@ func (p *PresenceService) BulkOnline(ctx context.Context, deviceIDs []string) ma
 	}
 	for _, id := range deviceIDs {
 		hb := cmds[id].Val() > 0
-		if !hb {
-			out[id] = false
-			continue
+		wsCount := 0
+		if hb {
+			wsCount = p.liveWSCount(ctx, id)
 		}
-		out[id] = p.liveWSCount(ctx, id) > 0
+		out[id] = PresenceState{
+			Heartbeat: hb,
+			WSCount:   wsCount,
+			Online:    hb && wsCount > 0,
+		}
+	}
+	return out
+}
+
+// BulkOnline looks up multiple device IDs at once, returning a map of
+// deviceID → online. Used by list endpoints like GET /v1/me/devices so we
+// don't do N round-trips.
+func (p *PresenceService) BulkOnline(ctx context.Context, deviceIDs []string) map[string]bool {
+	out := make(map[string]bool, len(deviceIDs))
+	states := p.BulkState(ctx, deviceIDs)
+	for id, state := range states {
+		out[id] = state.Online
 	}
 	return out
 }

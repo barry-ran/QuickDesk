@@ -39,7 +39,7 @@ ENV LC_ALL=C.UTF-8
 
 COPY --from=builder /signaling /opt/quickdesk/signaling
 
-RUN mkdir -p /data/postgres /data/redis /opt/quickdesk/logs \
+RUN mkdir -p /data/postgres /data/redis /data/logs \
     && chown -R postgres:postgres /data/postgres
 
 COPY start.sh /opt/quickdesk/start.sh

@@ -13,12 +13,19 @@
 
 const ACCESS_TOKEN_KEY  = 'quickdesk_user_access_token';
 const REFRESH_TOKEN_KEY = 'quickdesk_user_refresh_token';
+const ACCESS_EXPIRES_KEY  = 'quickdesk_user_access_expires_at';
+const REFRESH_EXPIRES_KEY = 'quickdesk_user_refresh_expires_at';
 const USER_INFO_KEY     = 'quickdesk_user_info';
+
+const PROACTIVE_REFRESH_MARGIN_MS = 5 * 60 * 1000;
+const PROACTIVE_REFRESH_RETRY_MS = 60 * 1000;
+const FALLBACK_REFRESH_INTERVAL_MS = 90 * 60 * 1000;
 
 class UserApi {
   constructor(baseUrl) {
     this._baseUrl = '';
     this._refreshInFlight = null;
+    this._refreshTimer = null;
     if (baseUrl) this.setBaseUrl(baseUrl);
   }
 
@@ -45,12 +52,42 @@ class UserApi {
     if (!p) return;
     if (p.access_token)  localStorage.setItem(ACCESS_TOKEN_KEY,  p.access_token);
     if (p.refresh_token) localStorage.setItem(REFRESH_TOKEN_KEY, p.refresh_token);
+    if (p.access_expires_at) localStorage.setItem(ACCESS_EXPIRES_KEY, p.access_expires_at);
+    if (p.refresh_expires_at) localStorage.setItem(REFRESH_EXPIRES_KEY, p.refresh_expires_at);
+    this.scheduleProactiveRefresh();
   }
 
   _clearSession() {
+    this.stopProactiveRefresh();
     localStorage.removeItem(ACCESS_TOKEN_KEY);
     localStorage.removeItem(REFRESH_TOKEN_KEY);
+    localStorage.removeItem(ACCESS_EXPIRES_KEY);
+    localStorage.removeItem(REFRESH_EXPIRES_KEY);
     localStorage.removeItem(USER_INFO_KEY);
+  }
+
+  scheduleProactiveRefresh() {
+    this.stopProactiveRefresh();
+    if (!this.getToken() || !this.getRefreshToken()) return;
+    const expRaw = localStorage.getItem(ACCESS_EXPIRES_KEY);
+    const expMs = expRaw ? Date.parse(expRaw) : NaN;
+    let delay = Number.isFinite(expMs)
+      ? expMs - Date.now() - PROACTIVE_REFRESH_MARGIN_MS
+      : FALLBACK_REFRESH_INTERVAL_MS;
+    if (delay < 0) delay = 0;
+    this._refreshTimer = setTimeout(async () => {
+      const ok = await this._refreshSingleFlight();
+      if (ok) {
+        this.scheduleProactiveRefresh();
+      } else if (this.getToken() && this.getRefreshToken()) {
+        this._refreshTimer = setTimeout(() => this.scheduleProactiveRefresh(), PROACTIVE_REFRESH_RETRY_MS);
+      }
+    }, delay);
+  }
+
+  stopProactiveRefresh() {
+    if (this._refreshTimer) clearTimeout(this._refreshTimer);
+    this._refreshTimer = null;
   }
 
   _authHeaders() {
@@ -136,6 +173,17 @@ class UserApi {
       status:    status   || 'success',
       error_msg: errorMsg || '',
     });
+  }
+
+  // -------- access-code verification (§2.6 / §2.18) --------
+
+  async verifyAccessCode(deviceId, code) {
+    return this._request(
+      'POST',
+      `/v1/devices/${encodeURIComponent(deviceId)}/access-code:verify`,
+      { code },
+      { noRefresh: true },
+    );
   }
 }
 

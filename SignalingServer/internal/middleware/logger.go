@@ -1,15 +1,17 @@
 package middleware
 
 import (
-	"log"
 	"time"
 
+	"quickdesk/signaling/internal/observability"
 	"quickdesk/signaling/internal/service"
 
 	"github.com/gin-gonic/gin"
 )
 
-// LoggerMiddleware logs HTTP requests
+// LoggerMiddleware emits only failed or slow HTTP requests. Successful hot
+// paths such as host heartbeat are intentionally omitted to keep production
+// logs useful during incident analysis.
 func LoggerMiddleware(metrics *service.MetricsService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
@@ -26,7 +28,16 @@ func LoggerMiddleware(metrics *service.MetricsService) gin.HandlerFunc {
 			metrics.RecordHTTPRequest(path)
 		}
 
-		log.Printf("[%s] %s %s - %d (%v)",
-			method, path, c.ClientIP(), statusCode, latency)
+		if statusCode >= 400 || latency >= time.Second {
+			requestID, _ := c.Get("request_id")
+			observability.Event("http", "request", map[string]interface{}{
+				"client_ip":  c.ClientIP(),
+				"latency_ms": latency.Milliseconds(),
+				"method":     method,
+				"path":       path,
+				"request_id": requestID,
+				"status":     statusCode,
+			})
+		}
 	}
 }

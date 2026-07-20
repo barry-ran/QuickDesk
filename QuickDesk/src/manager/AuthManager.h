@@ -5,6 +5,7 @@
 #include <QObject>
 #include <QString>
 #include <QDateTime>
+#include <QTimer>
 #include <functional>
 
 namespace quickdesk {
@@ -66,6 +67,11 @@ public:
     Q_INVOKABLE void logout(const QString& deviceId = QString());
     Q_INVOKABLE void fetchUserInfo();
 
+    // Handles a server-initiated user-session revocation. Unlike logout(),
+    // this must not clear the local device's logged_in_intent: the server
+    // has revoked user authentication, not the host device session.
+    void handleServerSessionRevoked();
+
     bool isLoggedIn() const;
     QString username() const;
     uint userId() const;
@@ -111,9 +117,12 @@ private:
     // Issue a session from /v1/auth/sessions(-sms|register) response JSON.
     void applyTokens(const QByteArray& responseBody);
 
-    // Refresh silently. Calls `done(true)` on success, `done(false)` on
-    // failure (in which case session is already cleared).
+    // Refresh silently. Calls `done(true)` on success. A definitive 401
+    // clears the session; transport and server errors preserve it so a
+    // transient outage cannot log the user out.
     void refreshAccessToken(std::function<void(bool)> done);
+    void scheduleAccessTokenRefresh();
+    void stopAccessTokenRefreshTimer();
 
     // Clear local session + emit loggedOut. Safe to call multiple times.
     void clearSession();
@@ -146,6 +155,7 @@ private:
     QString m_refreshToken;
     QDateTime m_accessExpiresAt;
     QDateTime m_refreshExpiresAt;
+    QTimer m_accessRefreshTimer;
 
     // Prevent concurrent refresh storms: queue callbacks while a refresh
     // is in flight.

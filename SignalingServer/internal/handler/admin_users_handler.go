@@ -8,6 +8,7 @@ import (
 
 	"quickdesk/signaling/internal/middleware"
 	"quickdesk/signaling/internal/models"
+	"quickdesk/signaling/internal/observability"
 	"quickdesk/signaling/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -146,24 +147,24 @@ func (h *AdminUsersHandler) GetDetails(c *gin.Context) {
 	enrichedDevices := make([]gin.H, 0, len(userDevices))
 	for _, ud := range userDevices {
 		row := gin.H{
-			"device_id":        ud.DeviceID,
-			"remark":           ud.Remark,
-			"first_bound_at":   ud.FirstBoundAt,
-			"last_connect_at":  ud.LastConnectAt,
-			"connect_count":    ud.ConnectCount,
-			"status":           ud.Status,
+			"device_id":       ud.DeviceID,
+			"remark":          ud.Remark,
+			"first_bound_at":  ud.FirstBoundAt,
+			"last_connect_at": ud.LastConnectAt,
+			"connect_count":   ud.ConnectCount,
+			"status":          ud.Status,
 		}
 		if d := devicesByID[ud.DeviceID]; d != nil {
-			row["device_uuid"]  = d.DeviceUUID
+			row["device_uuid"] = d.DeviceUUID
 			row["device_name"] = d.DeviceName
-			row["os"]           = d.OS
-			row["os_version"]   = d.OSVersion
-			row["app_version"]  = d.AppVersion
-			row["access_code"]  = d.AccessCode
+			row["os"] = d.OS
+			row["os_version"] = d.OSVersion
+			row["app_version"] = d.AppVersion
+			row["access_code"] = d.AccessCode
 			row["last_seen_at"] = d.LastSeenAt
 			isOnline := online[d.DeviceID]
-			row["online"]       = isOnline
-			row["logged_in"]    = d.LoggedIn && isOnline
+			row["online"] = isOnline
+			row["logged_in"] = d.LoggedIn && isOnline
 		}
 		enrichedDevices = append(enrichedDevices, row)
 	}
@@ -236,6 +237,7 @@ func (h *AdminUsersHandler) Create(c *gin.Context) {
 		h.db.WithContext(c.Request.Context()).Model(u).Updates(updates)
 	}
 	h.audit.Log(c.Request.Context(), middleware.MustAdminID(c), "", "user.create", "user", formatUint(u.ID), "", c.ClientIP())
+	h.logAdminAction(c, "user_created", u.ID, nil)
 	c.JSON(http.StatusCreated, u)
 }
 
@@ -288,6 +290,7 @@ func (h *AdminUsersHandler) Patch(c *gin.Context) {
 			UserID: u.ID,
 			Data:   map[string]interface{}{"reason": "admin_password_reset"},
 		})
+		h.logAdminAction(c, "user_password_reset", u.ID, nil)
 	}
 
 	updates := map[string]interface{}{}
@@ -340,7 +343,13 @@ func (h *AdminUsersHandler) Delete(c *gin.Context) {
 	}
 	// Revoke any lingering sessions.
 	h.tokens.RevokeAllForSubject(c.Request.Context(), service.ScopeUser, uint(id))
+	h.bus.Publish(c.Request.Context(), service.Event{
+		Type:   service.EventSessionRevoked,
+		UserID: uint(id),
+		Data:   map[string]interface{}{"reason": "admin_user_deleted"},
+	})
 	h.audit.Log(c.Request.Context(), middleware.MustAdminID(c), "", "user.delete", "user", c.Param("id"), "", c.ClientIP())
+	h.logAdminAction(c, "user_deleted", uint(id), nil)
 	c.JSON(http.StatusOK, gin.H{"status": "ok"})
 }
 
@@ -358,6 +367,7 @@ func (h *AdminUsersHandler) RevokeSessions(c *gin.Context) {
 		Data:   map[string]interface{}{"reason": "admin_forced"},
 	})
 	h.audit.Log(c.Request.Context(), middleware.MustAdminID(c), "", "user.sessions.revoke", "user", c.Param("id"), "", c.ClientIP())
+	h.logAdminAction(c, "user_sessions_revoked", uint(id), nil)
 	c.JSON(http.StatusOK, gin.H{"status": "ok"})
 }
 
@@ -416,11 +426,21 @@ func (h *AdminUsersHandler) Batch(c *gin.Context) {
 		}
 		for _, id := range req.IDs {
 			h.tokens.RevokeAllForSubject(c.Request.Context(), service.ScopeUser, id)
+			h.bus.Publish(c.Request.Context(), service.Event{
+				Type:   service.EventSessionRevoked,
+				UserID: id,
+				Data:   map[string]interface{}{"reason": "admin_user_disabled"},
+			})
 		}
 	case "delete":
 		for _, id := range req.IDs {
 			_ = h.users.Delete(c.Request.Context(), id)
 			h.tokens.RevokeAllForSubject(c.Request.Context(), service.ScopeUser, id)
+			h.bus.Publish(c.Request.Context(), service.Event{
+				Type:   service.EventSessionRevoked,
+				UserID: id,
+				Data:   map[string]interface{}{"reason": "admin_user_deleted"},
+			})
 		}
 	case "set_level":
 		if req.Level == "" {
@@ -437,5 +457,19 @@ func (h *AdminUsersHandler) Batch(c *gin.Context) {
 	}
 	details, _ := json.Marshal(req)
 	h.audit.Log(c.Request.Context(), middleware.MustAdminID(c), "", "user.batch", "user", "", string(details), c.ClientIP())
+	h.logAdminAction(c, "user_batch_updated", 0, map[string]interface{}{"operation": req.Op, "target_count": len(req.IDs)})
 	c.JSON(http.StatusOK, gin.H{"status": "ok"})
+}
+
+func (h *AdminUsersHandler) logAdminAction(c *gin.Context, action string, userID uint, fields map[string]interface{}) {
+	if fields == nil {
+		fields = map[string]interface{}{}
+	}
+	fields["action"] = action
+	fields["admin_id"] = middleware.MustAdminID(c)
+	fields["request_id"] = c.GetString("request_id")
+	if userID != 0 {
+		fields["user_id"] = userID
+	}
+	observability.Event("admin", "user_action", fields)
 }

@@ -83,16 +83,31 @@ class RemoteDesktopApp {
         const params = new URLSearchParams(window.location.search);
         const serverUrl = params.get('server') || 'ws://localhost:8000';
         const deviceId = params.get('device');
+        userApi.setBaseUrl(serverUrl);
+        userApi.scheduleProactiveRefresh();
         // §2.18: URL carries a one-shot signal_token (key "st"), NOT the
         // plaintext access_code. The access_code is handed off via
         // sessionStorage (see src/utils/remoteLauncher.js) — same-origin,
         // never on the wire / browser history. SPAKE2 still needs the
         // access_code as the shared secret so the host can verify the
         // peer end-to-end (§2.6).
-        const signalToken = params.get('st');
-        const handoff = this._readHandoff(signalToken);
-        const accessCode = handoff && handoff.access_code;
+        const signalTokenFromUrl = params.get('st');
+        const handoff = this._readHandoff(signalTokenFromUrl);
+        let accessCode = handoff && handoff.access_code;
         const preferredVideoCodec = params.get('codec') || '';
+        userApi.setBaseUrl(serverUrl);
+
+        let signalToken = signalTokenFromUrl;
+        if (handoff && accessCode) {
+            this._writeCurrentAccessCode(deviceId, accessCode);
+        } else {
+            accessCode = this._readCurrentAccessCode(deviceId);
+            // On refresh, the URL's `st` is usually already consumed.
+            // Re-verify the saved access_code to get a fresh one-shot
+            // signal_token. As long as the access_code remains valid,
+            // refresh can reconnect without asking the user to re-enter it.
+            signalToken = await this._issueFreshSignalToken(deviceId, accessCode, params);
+        }
 
         if (!deviceId || !signalToken || !accessCode) {
             this._log(t('log.missingParams'), 'error');
@@ -141,10 +156,62 @@ class RemoteDesktopApp {
         const key = `quickdesk_remote_handoff__${signalToken}`;
         try {
             const raw = sessionStorage.getItem(key);
-            if (raw) sessionStorage.removeItem(key);
-            return raw ? JSON.parse(raw) : null;
+            if (!raw) return null;
+            const obj = JSON.parse(raw);
+            try {
+                sessionStorage.removeItem(key);
+            } catch {}
+            return obj;
         } catch {
             return null;
+        }
+    }
+
+    _currentSessionKey(deviceId) {
+        return `quickdesk_remote_session__${deviceId}`;
+    }
+
+    _readCurrentAccessCode(deviceId) {
+        if (!deviceId) return '';
+        try {
+            const raw = sessionStorage.getItem(this._currentSessionKey(deviceId));
+            if (!raw) return '';
+            const obj = JSON.parse(raw);
+            return obj && obj.device_id === deviceId ? (obj.access_code || '') : '';
+        } catch {
+            return '';
+        }
+    }
+
+    _writeCurrentAccessCode(deviceId, accessCode) {
+        if (!deviceId || !accessCode) return;
+        try {
+            sessionStorage.setItem(this._currentSessionKey(deviceId), JSON.stringify({
+                device_id: deviceId,
+                access_code: accessCode,
+                updated_at: Date.now(),
+            }));
+        } catch {}
+    }
+
+    async _issueFreshSignalToken(deviceId, accessCode, params) {
+        if (!deviceId || !accessCode) return '';
+        try {
+            const v = await userApi.verifyAccessCode(deviceId, accessCode);
+            if (!v || !v.ok || !v.data || !v.data.signal_token) {
+                this._log('access-code verify did not return a signal_token', 'warning');
+                return '';
+            }
+            const signalToken = v.data.signal_token;
+            try {
+                params.set('st', signalToken);
+                const newUrl = window.location.pathname + (params.toString() ? '?' + params.toString() : '');
+                window.history.replaceState({}, document.title, newUrl);
+            } catch {}
+            return signalToken;
+        } catch (e) {
+            this._log(`verifyAccessCode error: ${e && e.message ? e.message : e}`, 'warning');
+            return '';
         }
     }
 

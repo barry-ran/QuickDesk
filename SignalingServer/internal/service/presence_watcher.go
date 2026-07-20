@@ -21,7 +21,9 @@ import (
 // events instead of waiting for the user to refresh the device list.
 //
 // The goroutine requires the Redis server to have been started with
-//   notify-keyspace-events Ex
+//
+//	notify-keyspace-events Ex
+//
 // (or equivalent `CONFIG SET`). If the subscription fails we log once and
 // keep retrying — the server stays usable; devices just rely on the
 // synchronous wsconn DEL path for online-changed events.
@@ -129,6 +131,8 @@ func (w *PresenceWatcher) handleExpiry(ctx context.Context, key string) {
 	// may still hold the wsconn key, so "online" is still live by our
 	// derivation — no event necessary.
 	if w.presence.IsOnline(ctx, deviceID) {
+		log.Printf("[presence] heartbeat expired but device still online device=%s presence={%s}",
+			deviceID, w.presence.State(ctx, deviceID).String())
 		return
 	}
 
@@ -157,6 +161,8 @@ func (w *PresenceWatcher) publishOfflineIfRemembered(ctx context.Context, device
 	if !w.presence.ForgetOnlineCandidate(ctx, deviceID) {
 		return
 	}
+	log.Printf("[presence] device offline device=%s presence={%s}",
+		deviceID, w.presence.State(ctx, deviceID).String())
 
 	// Resolve owner so we can route the user-scoped event.
 	d, err := w.deviceRepo.GetByDeviceID(ctx, deviceID)

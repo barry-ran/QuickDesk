@@ -254,9 +254,27 @@ Window {
             return false
         }
 
-        // Available screen space (leave margin for taskbar, etc.)
-        var maxWidth = scr.desktopAvailableWidth * 0.92
-        var maxHeight = scr.desktopAvailableHeight * 0.92
+        // Use this screen's available geometry, not desktopAvailableWidth/
+        // desktopAvailableHeight. The latter represent the whole virtual
+        // desktop and can make the window larger than a 1080p monitor in a
+        // mixed-resolution multi-monitor setup.
+        var available = scr.availableGeometry
+        if (!available || available.width <= 0 || available.height <= 0) {
+            // Keep a safe fallback for platforms that do not expose an
+            // available geometry through QML.
+            available = {
+                x: scr.virtualX,
+                y: scr.virtualY,
+                width: scr.width,
+                height: scr.height
+            }
+        }
+
+        // Leave an additional outer margin so native window decorations,
+        // including the title bar, remain reachable.
+        var outerMargin = 16
+        var maxWidth = Math.max(1, available.width - outerMargin * 2)
+        var maxHeight = Math.max(1, available.height - outerMargin * 2)
 
         // Account for tab bar height
         var tabBarH = tabBar.height > 0 ? tabBar.height : 36
@@ -271,14 +289,14 @@ Window {
         // Center on screen
         remoteWindow.width  = newWidth
         remoteWindow.height = newHeight
-        remoteWindow.x = Math.round((scr.width  - newWidth)  / 2) + scr.virtualX
-        remoteWindow.y = Math.round((scr.height - newHeight) / 2) + scr.virtualY
+        remoteWindow.x = available.x + Math.round((available.width - newWidth) / 2)
+        remoteWindow.y = available.y + Math.round((available.height - newHeight) / 2)
 
         console.log("Resized window to", newWidth + "x" + newHeight,
                      "for remote desktop", fw + "x" + fh,
                      "(scale:", scale.toFixed(3) + ")",
                      "screen:", scr.width + "x" + scr.height,
-                     "available:", scr.desktopAvailableWidth + "x" + scr.desktopAvailableHeight)
+                     "available:", available.width + "x" + available.height)
         return true
     }
 

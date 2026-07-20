@@ -31,7 +31,7 @@ private:
 
 private:
     QNetworkAccessManager* m_networkAccessManager = nullptr;
-    QMap<int, HttpRequestCallback> m_tasks;
+    QMap<quintptr, HttpRequestCallback> m_tasks;
 };
 
 }

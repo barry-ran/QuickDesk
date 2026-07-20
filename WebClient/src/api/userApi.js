@@ -11,18 +11,24 @@
 
 const ACCESS_TOKEN_KEY  = 'quickdesk_user_access_token'
 const REFRESH_TOKEN_KEY = 'quickdesk_user_refresh_token'
+const ACCESS_EXPIRES_KEY  = 'quickdesk_user_access_expires_at'
+const REFRESH_EXPIRES_KEY = 'quickdesk_user_refresh_expires_at'
 const USER_INFO_KEY     = 'quickdesk_user_info'
 const SERVER_URL_KEY    = 'quickdesk_signaling_url'
 export const DEFAULT_SERVER = 'ws://qdsignaling.quickcoder.cc:8060'
 
 // Legacy key cleaned up on load so old sessions are not retained.
 const LEGACY_TOKEN_KEY = 'quickdesk_user_token'
+const PROACTIVE_REFRESH_MARGIN_MS = 5 * 60 * 1000
+const PROACTIVE_REFRESH_RETRY_MS = 60 * 1000
+const FALLBACK_REFRESH_INTERVAL_MS = 90 * 60 * 1000
 
 class UserApi {
   constructor() {
     this._baseUrl = ''
     this._refreshInFlight = null   // Promise<bool> — collapses concurrent refresh
     this._onSessionEndedHandler = null
+    this._refreshTimer = null
     if (localStorage.getItem(LEGACY_TOKEN_KEY)) {
       localStorage.removeItem(LEGACY_TOKEN_KEY)
     }
@@ -61,18 +67,54 @@ class UserApi {
     if (!payload) return
     if (payload.access_token)  localStorage.setItem(ACCESS_TOKEN_KEY, payload.access_token)
     if (payload.refresh_token) localStorage.setItem(REFRESH_TOKEN_KEY, payload.refresh_token)
+    if (payload.access_expires_at) localStorage.setItem(ACCESS_EXPIRES_KEY, payload.access_expires_at)
+    if (payload.refresh_expires_at) localStorage.setItem(REFRESH_EXPIRES_KEY, payload.refresh_expires_at)
     if (payload.user) {
       const u = payload.user
       localStorage.setItem(USER_INFO_KEY, JSON.stringify({
         id: u.id, username: u.username, phone: u.phone, email: u.email,
       }))
     }
+    this.scheduleProactiveRefresh()
+  }
+
+  adoptSession(payload) {
+    this._saveSession(payload)
   }
 
   clearSession() {
+    this.stopProactiveRefresh()
     localStorage.removeItem(ACCESS_TOKEN_KEY)
     localStorage.removeItem(REFRESH_TOKEN_KEY)
+    localStorage.removeItem(ACCESS_EXPIRES_KEY)
+    localStorage.removeItem(REFRESH_EXPIRES_KEY)
     localStorage.removeItem(USER_INFO_KEY)
+  }
+
+  scheduleProactiveRefresh() {
+    this.stopProactiveRefresh()
+    if (!this.getToken() || !this.getRefreshToken()) return
+
+    const expRaw = localStorage.getItem(ACCESS_EXPIRES_KEY)
+    const expMs = expRaw ? Date.parse(expRaw) : NaN
+    let delay = Number.isFinite(expMs)
+      ? expMs - Date.now() - PROACTIVE_REFRESH_MARGIN_MS
+      : FALLBACK_REFRESH_INTERVAL_MS
+    if (delay < 0) delay = 0
+
+    this._refreshTimer = setTimeout(async () => {
+      const ok = await this._refreshSingleFlight()
+      if (ok) {
+        this.scheduleProactiveRefresh()
+      } else if (this.getToken() && this.getRefreshToken()) {
+        this._refreshTimer = setTimeout(() => this.scheduleProactiveRefresh(), PROACTIVE_REFRESH_RETRY_MS)
+      }
+    }, delay)
+  }
+
+  stopProactiveRefresh() {
+    if (this._refreshTimer) clearTimeout(this._refreshTimer)
+    this._refreshTimer = null
   }
 
   /**
@@ -88,17 +130,11 @@ class UserApi {
 
   /**
    * External trigger for the session-ended flow, used by userSync.js
-   * when the server pushes `session.revoked` on the realtime WS.
-   * Fires a best-effort DELETE /v1/me/sessions/current (T9 — we still
-   * hit the endpoint so any lingering server-side state gets cleaned
-   * up; a 401 response is expected and ignored) and then delegates to
-   * _sessionEnded() so the shell pops to login.
+   * when the server pushes `session.revoked` on the realtime WS. The
+   * server has already revoked the family, so do not make a second logout
+   * request that could mutate device-session state elsewhere.
    */
   handleServerRevoked() {
-    // Fire-and-forget; don't trigger the refresh cascade since the
-    // server-initiated revoke means the refresh token family is dead.
-    this._req('DELETE', '/v1/me/sessions/current', undefined, { noRefresh: true })
-      .catch(() => {})
     this._sessionEnded()
   }
 
@@ -173,7 +209,9 @@ class UserApi {
     // 401 with a refresh token on hand → attempt single silent refresh.
     const refreshed = await this._refreshSingleFlight()
     if (!refreshed) {
-      return { ok: false, data: null, code: 'REFRESH_INVALID', error: 'session ended', status: 401 }
+      // Refresh transport failures are retryable and deliberately retain
+      // local credentials. A definitive 401 clears them in _refreshOnce().
+      return { ok: false, data: null, code: 'REFRESH_UNAVAILABLE', error: 'refresh unavailable', status: 0 }
     }
 
     // Retry once.
@@ -197,31 +235,49 @@ class UserApi {
   async _refreshSingleFlight() {
     if (this._refreshInFlight) return this._refreshInFlight
     this._refreshInFlight = (async () => {
-      try {
-        const rt = this.getRefreshToken()
-        if (!rt) return false
-        const resp = await fetch(`${this._baseUrl}/v1/auth/tokens:refresh`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ refresh_token: rt }),
-        })
-        if (!resp.ok) {
-          // §2.15: refresh rejected → clear session.
-          this._sessionEnded()
-          return false
-        }
-        const data = await resp.json().catch(() => null)
-        if (!data || !data.access_token) { this._sessionEnded(); return false }
-        this._saveSession(data)
-        return true
-      } catch {
-        // Network error during refresh — do not clear session (user may retry).
-        return false
-      } finally {
-        this._refreshInFlight = null
+      const originalRefreshToken = this.getRefreshToken()
+      if (!originalRefreshToken) return false
+
+      const refresh = async () => {
+        // A tab that waited for another tab's rotation must use the new
+        // shared localStorage token instead of replaying the old one.
+        if (this.getRefreshToken() !== originalRefreshToken && this.getToken()) return true
+        return this._refreshOnce(originalRefreshToken)
       }
+
+      // Web Locks serializes refresh rotation across all same-origin tabs.
+      // Fallback keeps legacy browsers functional, albeit without that guard.
+      if (typeof navigator !== 'undefined' && navigator.locks?.request) {
+        return navigator.locks.request('quickdesk-user-refresh', { mode: 'exclusive' }, refresh)
+      }
+      return refresh()
     })()
-    return this._refreshInFlight
+    try {
+      return await this._refreshInFlight
+    } finally {
+      this._refreshInFlight = null
+    }
+  }
+
+  async _refreshOnce(refreshToken) {
+    try {
+      const resp = await fetch(`${this._baseUrl}/v1/auth/tokens:refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh_token: refreshToken }),
+      })
+      if (resp.status === 401) {
+        this._sessionEnded()
+        return false
+      }
+      if (!resp.ok) return false
+      const data = await resp.json().catch(() => null)
+      if (!data || !data.access_token || !data.refresh_token) return false
+      this._saveSession(data)
+      return true
+    } catch {
+      return false
+    }
   }
 
   // ========================================================================

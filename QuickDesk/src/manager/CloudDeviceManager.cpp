@@ -13,6 +13,8 @@
 #include <QTimer>
 #include <QRandomGenerator>
 
+#include <algorithm>
+
 #ifndef QUICKDESK_API_KEY
 #define QUICKDESK_API_KEY ""
 #endif
@@ -225,19 +227,52 @@ void CloudDeviceManager::setDeviceRemark(const QString& deviceId, const QString&
 
 void CloudDeviceManager::refreshDeviceAccessCode(const QString& deviceId, qint64 eventRev)
 {
-    if (!m_authManager->isLoggedIn() || deviceId.isEmpty()) return;
+    refreshDeviceAccessCodeNow(
+        deviceId,
+        [deviceId](const QString&) {
+            LOG_INFO("[CloudDeviceManager] Refreshed access_code for device: {}",
+                     deviceId.toStdString());
+        },
+        [deviceId](int statusCode, const QString&, const QString& detail) {
+            LOG_WARN("[CloudDeviceManager] refreshDeviceAccessCode({}) failed: status={} err={}",
+                     deviceId.toStdString(), statusCode, detail.toStdString());
+        });
+    Q_UNUSED(eventRev);
+}
+
+void CloudDeviceManager::refreshDeviceAccessCodeNow(
+    const QString& deviceId,
+    std::function<void(const QString& accessCode)> onSuccess,
+    std::function<void(int httpStatus, const QString& code, const QString& detail)> onError)
+{
+    if (!m_authManager->isLoggedIn() || deviceId.isEmpty()) {
+        if (onError) {
+            onError(0, QStringLiteral("NOT_LOGGED_IN"),
+                    QStringLiteral("User is not logged in"));
+        }
+        return;
+    }
 
     QUrl url(httpBaseUrl() + "v1/me/devices/" + deviceId);
 
-    LOG_INFO("[CloudDeviceManager] Refreshing access_code for device={} (event_rev={})",
-             deviceId.toStdString(), eventRev);
+    LOG_INFO("[CloudDeviceManager] Refreshing access_code for device={}",
+             deviceId.toStdString());
 
     m_authManager->request("GET", url, QString(),
-        [this, deviceId, eventRev](int statusCode, const std::string& errorMsg, const std::string& data) {
-            QMetaObject::invokeMethod(this, [this, statusCode, errorMsg, data, deviceId, eventRev]() {
+        [this, deviceId, onSuccess = std::move(onSuccess), onError = std::move(onError)](
+            int statusCode, const std::string& errorMsg, const std::string& data) mutable {
+            QMetaObject::invokeMethod(this, [this, statusCode, errorMsg, data, deviceId,
+                                             onSuccess = std::move(onSuccess),
+                                             onError = std::move(onError)]() mutable {
                 if (statusCode != 200 || !errorMsg.empty()) {
-                    LOG_WARN("[CloudDeviceManager] refreshDeviceAccessCode({}) failed: status={} err={}",
-                             deviceId.toStdString(), statusCode, errorMsg);
+                    QJsonDocument errDoc = QJsonDocument::fromJson(QByteArray::fromStdString(data));
+                    QJsonObject errObj = errDoc.object();
+                    QString code = errObj.value("code").toString();
+                    QString detail = errObj.value("detail").toString();
+                    if (detail.isEmpty()) detail = QString::fromStdString(errorMsg);
+                    LOG_WARN("[CloudDeviceManager] refreshDeviceAccessCode({}) failed: status={} code={} err={}",
+                             deviceId.toStdString(), statusCode, code.toStdString(), detail.toStdString());
+                    if (onError) onError(statusCode, code, detail);
                     return;
                 }
 
@@ -247,6 +282,10 @@ void CloudDeviceManager::refreshDeviceAccessCode(const QString& deviceId, qint64
                 if (accessCode.isEmpty()) {
                     LOG_WARN("[CloudDeviceManager] refreshDeviceAccessCode({}) returned empty access_code",
                              deviceId.toStdString());
+                    if (onError) {
+                        onError(statusCode, QStringLiteral("INVALID_RESPONSE"),
+                                QStringLiteral("server returned empty access_code"));
+                    }
                     return;
                 }
 
@@ -260,32 +299,37 @@ void CloudDeviceManager::refreshDeviceAccessCode(const QString& deviceId, qint64
 
                 if (idx < 0) {
                     QVariantMap row = obj.toVariantMap();
-                    setDeviceRev(deviceId, eventRev);
+                    if (m_serverRev > deviceRev(deviceId)) {
+                        setDeviceRev(deviceId, m_serverRev);
+                    }
                     m_myDevices.append(row);
                     emit myDevicesChanged();
                     LOG_INFO("[CloudDeviceManager] Refreshed access_code and inserted device: {}",
                              deviceId.toStdString());
+                    if (onSuccess) onSuccess(accessCode);
                     return;
                 }
 
                 QVariantMap row = m_myDevices[idx].toMap();
                 if (row["access_code"].toString() == accessCode) {
-                    if (eventRev > deviceRev(deviceId)) {
-                        setDeviceRev(deviceId, eventRev);
+                    if (m_serverRev > deviceRev(deviceId)) {
+                        setDeviceRev(deviceId, m_serverRev);
                     }
                     LOG_INFO("[CloudDeviceManager] access_code already current for device={}",
                              deviceId.toStdString());
+                    if (onSuccess) onSuccess(accessCode);
                     return;
                 }
 
                 row["access_code"] = accessCode;
-                if (eventRev > deviceRev(deviceId)) {
-                    setDeviceRev(deviceId, eventRev);
+                if (m_serverRev > deviceRev(deviceId)) {
+                    setDeviceRev(deviceId, m_serverRev);
                 }
                 m_myDevices[idx] = row;
                 emit myDevicesChanged();
                 LOG_INFO("[CloudDeviceManager] Refreshed access_code for device: {}",
                          deviceId.toStdString());
+                if (onSuccess) onSuccess(accessCode);
             });
         });
 }
@@ -870,9 +914,19 @@ void CloudDeviceManager::handleSnapshotFrame(const QJsonObject& msg)
     QJsonArray devices = data["devices"].toArray();
     m_myDevices.clear();
     m_deviceRevs.clear();
+    int onlineCount = 0;
+    int loggedInCount = 0;
+    QStringList diagParts;
     for (const auto& v : devices) {
         QJsonObject obj = v.toObject();
         QVariantMap row = obj.toVariantMap();
+        if (obj["online"].toBool()) ++onlineCount;
+        if (obj["logged_in"].toBool()) ++loggedInCount;
+        diagParts.append(QStringLiteral("%1{online=%2 logged_in=%3 os=%4}")
+            .arg(obj["device_id"].toString(),
+                 obj["online"].toBool() ? QStringLiteral("true") : QStringLiteral("false"),
+                 obj["logged_in"].toBool() ? QStringLiteral("true") : QStringLiteral("false"),
+                 obj["os"].toString()));
         setDeviceRev(obj["device_id"].toString(), rev);
         m_myDevices.append(row);
     }
@@ -885,8 +939,10 @@ void CloudDeviceManager::handleSnapshotFrame(const QJsonObject& msg)
     }
     emit myFavoritesChanged();
 
-    LOG_INFO("[CloudDeviceManager] snapshot applied: {} devices, {} favorites (server_rev={})",
-             m_myDevices.size(), m_myFavorites.size(), m_serverRev);
+    std::sort(diagParts.begin(), diagParts.end());
+    LOG_INFO("[CloudDeviceManager] snapshot applied: devices={} online={} logged_in={} favorites={} server_rev={} details={}",
+             m_myDevices.size(), onlineCount, loggedInCount, m_myFavorites.size(), m_serverRev,
+             diagParts.join(';').toStdString());
 }
 
 void CloudDeviceManager::handleEventFrame(const QJsonObject& msg)
@@ -899,12 +955,8 @@ void CloudDeviceManager::handleEventFrame(const QJsonObject& msg)
     } else if (type.startsWith("favorite.")) {
         applyFavoriteEvent(type, data);
     } else if (type == "session.revoked") {
-        LOG_WARN("[CloudDeviceManager] session.revoked received — forcing logout");
-        // AuthManager clears local session + emits loggedOut → QML pops
-        // to login page. We ask logout() with empty device_id so it goes
-        // through the two-step flow (best-effort session clear is fine
-        // even though the server has already nuked it).
-        m_authManager->logout(QString());
+        LOG_WARN("[CloudDeviceManager] session.revoked received — clearing user session without changing device session intent");
+        m_authManager->handleServerSessionRevoked();
     } else {
         LOG_DEBUG("[CloudDeviceManager] unhandled event type: {}",
                   type.toStdString());
@@ -989,6 +1041,8 @@ void CloudDeviceManager::applyDeviceEvent(const QString& type, const QJsonObject
     };
 
     if (type == "device.online.changed") {
+        bool prevOnline = row["online"].toBool();
+        bool prevLoggedIn = row["logged_in"].toBool();
         copyField("online");
         // logged_in is derived from logged_in_intent && online; if the
         // server didn't send it, recompute locally.
@@ -1000,9 +1054,20 @@ void CloudDeviceManager::applyDeviceEvent(const QString& type, const QJsonObject
             row["logged_in"] = online && prevLI;
             changed = true;
         }
+        LOG_INFO("[CloudDeviceManager] device.online.changed device={} rev={} online {}->{} logged_in {}->{} payload_online={} payload_logged_in={}",
+                 deviceId.toStdString(), rev,
+                 prevOnline, row["online"].toBool(),
+                 prevLoggedIn, row["logged_in"].toBool(),
+                 data.contains("online"), data.contains("logged_in"));
     } else if (type == "device.session.updated") {
+        bool prevOnline = row["online"].toBool();
+        bool prevLoggedIn = row["logged_in"].toBool();
         copyField("logged_in");
         copyField("online");
+        LOG_INFO("[CloudDeviceManager] device.session.updated device={} rev={} online {}->{} logged_in {}->{}",
+                 deviceId.toStdString(), rev,
+                 prevOnline, row["online"].toBool(),
+                 prevLoggedIn, row["logged_in"].toBool());
     } else if (type == "device.access_code.changed") {
         // §2.16: event data does NOT carry plaintext access_code. The
         // device row revision still advances so older HTTP/snapshot data

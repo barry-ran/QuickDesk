@@ -6,7 +6,7 @@ REDIS_DIR=/data/redis
 
 # Ensure data directories exist with correct ownership (needed when
 # the host mounts an empty volume over /data)
-LOG_DIR=/opt/quickdesk/logs
+LOG_DIR=/data/logs
 
 mkdir -p "$PG_DATA" "$REDIS_DIR" "$LOG_DIR"
 chown -R postgres:postgres "$PG_DATA" "$LOG_DIR"
@@ -29,7 +29,8 @@ gosu postgres psql -tc "SELECT 1 FROM pg_database WHERE datname='${DB_NAME:-quic
 
 # ---- Redis ----
 echo "[quickdesk] Starting Redis..."
-redis-server --daemonize yes --dir "$REDIS_DIR" --appendonly yes --bind 127.0.0.1
+redis-server --daemonize yes --dir "$REDIS_DIR" --appendonly yes --bind 127.0.0.1 \
+    --logfile "$LOG_DIR/redis.log"
 
 # Wait for Redis to be ready
 echo "[quickdesk] Waiting for Redis to be ready..."
@@ -48,7 +49,8 @@ if [ "$REDIS_READY" -eq 0 ]; then
     echo "[quickdesk] WARNING: Redis not ready after 30s, likely corrupted AOF. Resetting persistence data..."
     redis-cli shutdown nosave 2>/dev/null || true
     rm -rf "$REDIS_DIR/appendonlydir" "$REDIS_DIR/dump.rdb"
-    redis-server --daemonize yes --dir "$REDIS_DIR" --appendonly yes --bind 127.0.0.1
+    redis-server --daemonize yes --dir "$REDIS_DIR" --appendonly yes --bind 127.0.0.1 \
+        --logfile "$LOG_DIR/redis.log"
     sleep 2
     if redis-cli ping 2>/dev/null | grep -q PONG; then
         echo "[quickdesk] Redis restarted successfully with clean state."
@@ -61,4 +63,5 @@ fi
 # ---- Signaling Server ----
 echo "[quickdesk] Starting signaling server..."
 cd /opt/quickdesk
+export LOG_DIR
 exec ./signaling

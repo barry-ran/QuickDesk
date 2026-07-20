@@ -10,6 +10,7 @@ import (
 
 	"quickdesk/signaling/internal/config"
 	"quickdesk/signaling/internal/middleware"
+	"quickdesk/signaling/internal/observability"
 	"quickdesk/signaling/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -17,12 +18,13 @@ import (
 )
 
 // HostHandler implements the device-side surface under /v1/devices/*:
-//   POST /v1/devices:provision                    (X-API-Key only)
-//   POST /v1/devices/:device_id/heartbeat         (device_secret)
-//   POST /v1/devices/:device_id/signal-tokens     (device_secret)
-//   PUT  /v1/devices/:device_id/access-code       (device_secret)
-//   GET  /v1/ice-config                           (X-API-Key OR device_secret)
-//   POST /v1/devices/:device_id/access-code:verify (X-API-Key OR Origin-allowed)
+//
+//	POST /v1/devices:provision                    (X-API-Key only)
+//	POST /v1/devices/:device_id/heartbeat         (device_secret)
+//	POST /v1/devices/:device_id/signal-tokens     (device_secret)
+//	PUT  /v1/devices/:device_id/access-code       (device_secret)
+//	GET  /v1/ice-config                           (X-API-Key OR device_secret)
+//	POST /v1/devices/:device_id/access-code:verify (X-API-Key OR Origin-allowed)
 //
 // See docs §2.5, §2.6, §2.10, §2.19, §2.23.
 type HostHandler struct {
@@ -92,6 +94,11 @@ func (h *HostHandler) Provision(c *gin.Context) {
 		ProblemInternal(c, err.Error())
 		return
 	}
+	observability.Event("device", "provisioned", map[string]interface{}{
+		"device_id":  result.DeviceID,
+		"is_new":     result.IsNew,
+		"request_id": c.GetString("request_id"),
+	})
 	c.JSON(http.StatusOK, provisionResp{
 		DeviceID:     result.DeviceID,
 		DeviceSecret: result.DeviceSecret,
@@ -135,7 +142,13 @@ func (h *HostHandler) Heartbeat(c *gin.Context) {
 		ProblemInternal(c, "failed to refresh heartbeat presence")
 		return
 	}
-	if h.presence.IsOnline(c.Request.Context(), deviceID) && h.presence.RememberOnlineCandidate(c.Request.Context(), deviceID) {
+	state := h.presence.State(c.Request.Context(), deviceID)
+	rememberedNow := false
+	if state.Online {
+		rememberedNow = h.presence.RememberOnlineCandidate(c.Request.Context(), deviceID)
+	}
+	if state.Online && rememberedNow {
+		log.Printf("[presence] device online via heartbeat device=%s presence={%s}", deviceID, state.String())
 		if d, err := h.devices.GetByDeviceID(c.Request.Context(), deviceID); err == nil && d.UserID != nil {
 			h.bus.Publish(c.Request.Context(), service.Event{
 				Type:     service.EventDeviceOnlineChanged,
@@ -148,6 +161,9 @@ func (h *HostHandler) Heartbeat(c *gin.Context) {
 				},
 			})
 		}
+	} else if state.Online {
+		log.Printf("[presence] heartbeat online_event_skipped device=%s presence={%s} remembered_now=%t",
+			deviceID, state.String(), rememberedNow)
 	}
 
 	c.JSON(http.StatusOK, heartbeatResp{
@@ -168,6 +184,9 @@ type signalTokenResp struct {
 func (h *HostHandler) IssueHostSignalToken(c *gin.Context) {
 	deviceID := middleware.MustDeviceID(c)
 	if blocked, _ := h.rateLimit.SignalTokenThrottle(c.Request.Context(), deviceID); blocked {
+		observability.Event("signal", "host_token_rate_limited", map[string]interface{}{
+			"device_id": deviceID, "request_id": c.GetString("request_id"),
+		})
 		ProblemTooManyRequests(c, ProblemCodeRateLimited, "signal-tokens rate exceeded", 1)
 		return
 	}
@@ -295,8 +314,9 @@ func splitLines(s string) []string {
 }
 
 // buildTurnCredential implements coturn's `use-auth-secret` pattern:
-//   username = "<unix_ts>:<anything>"
-//   credential = base64( HMAC-SHA1(secret, username) )
+//
+//	username = "<unix_ts>:<anything>"
+//	credential = base64( HMAC-SHA1(secret, username) )
 func buildTurnCredential(secret string, ttlSec int) (user, cred string) {
 	if ttlSec <= 0 {
 		ttlSec = 86400
@@ -366,6 +386,9 @@ func (h *HostHandler) VerifyAccessCode(c *gin.Context) {
 	// of host presence.
 	if !matches {
 		if failure, _ := h.rateLimit.RecordVerifyFailure(c.Request.Context(), deviceID, ip); failure.TripsLimit {
+			observability.Event("access_verify", "rate_limited", map[string]interface{}{
+				"device_id": deviceID, "ip": ip, "request_id": c.GetString("request_id"),
+			})
 			// Tripped a per-device error counter (not the per-IP total
 			// counter), so §2.10 mandates 403 + Retry-After.
 			if failure.RetryAfterSec > 0 {
@@ -374,6 +397,9 @@ func (h *HostHandler) VerifyAccessCode(c *gin.Context) {
 			ProblemForbidden(c, ProblemCodeTooManyAttempts, "Too many failed attempts")
 			return
 		}
+		observability.Event("access_verify", "rejected", map[string]interface{}{
+			"device_id": deviceID, "ip": ip, "request_id": c.GetString("request_id"), "reason": "invalid_code",
+		})
 		ProblemForbidden(c, ProblemCodeInvalidCode, "Access code is incorrect")
 		return
 	}
@@ -401,6 +427,9 @@ func (h *HostHandler) VerifyAccessCode(c *gin.Context) {
 		ProblemInternal(c, err.Error())
 		return
 	}
+	observability.Event("access_verify", "accepted", map[string]interface{}{
+		"client_id": req.ClientID, "device_id": deviceID, "ip": ip, "request_id": c.GetString("request_id"),
+	})
 	c.JSON(http.StatusOK, verifyCodeResp{
 		SignalToken: tok,
 		ExpiresAt:   exp.Format("2006-01-02T15:04:05Z"),

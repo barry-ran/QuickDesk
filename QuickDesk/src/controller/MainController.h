@@ -297,6 +297,14 @@ private:
     QString getBuiltinSkillsDir() const;
     void setupWebSocketApiEvents();
     void bindHostDeviceIfReady(const char* reason);
+    void verifyAndConnectToRemoteHost(const QString& deviceId,
+                                      const QString& accessCode,
+                                      const QString& serverUrl,
+                                      bool allowRefreshRetry);
+    void reportVerifyAccessCodeFailure(const QString& deviceId,
+                                       int httpStatus,
+                                       const QString& code,
+                                       const QString& detail);
 
     // MCP HTTP process management
     void startMcpHttpProcess();

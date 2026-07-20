@@ -21,6 +21,7 @@ import (
 	"quickdesk/signaling/internal/httpx"
 	"quickdesk/signaling/internal/middleware"
 	"quickdesk/signaling/internal/models"
+	"quickdesk/signaling/internal/observability"
 	"quickdesk/signaling/internal/repository"
 	"quickdesk/signaling/internal/service"
 
@@ -36,8 +37,16 @@ import (
 var Version string
 
 func main() {
-	log.Println("Starting QuickDesk Signaling Server...")
 	cfg := config.Load()
+	logPath, err := observability.Configure(observability.Config{
+		Dir:        cfg.Runtime.LogDir,
+		MaxSizeMB:  cfg.Runtime.LogMaxSizeMB,
+		MaxBackups: cfg.Runtime.LogMaxBackups,
+	})
+	if err != nil {
+		log.Fatalf("configure application logging: %v", err)
+	}
+	log.Printf("Starting QuickDesk Signaling Server; persistent_log=%s", logPath)
 	if cfg.Runtime.PprofAddr != "" {
 		if !isLoopbackAddr(cfg.Runtime.PprofAddr) {
 			log.Printf("pprof disabled: PPROF_ADDR must bind to loopback, got %q", cfg.Runtime.PprofAddr)

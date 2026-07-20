@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"quickdesk/signaling/internal/httpx"
+	"quickdesk/signaling/internal/observability"
 	"quickdesk/signaling/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -41,11 +42,13 @@ func (a *UserAuth) Required() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		token := bearerOrQuery(c)
 		if token == "" {
+			observability.Event("auth", "rejected", map[string]interface{}{"path": c.Request.URL.Path, "reason": "missing_user_token", "request_id": c.GetString("request_id")})
 			httpx.Unauthorized(c, httpx.CodeUnauthorized, "Missing access token")
 			return
 		}
 		family, uid, err := a.tokens.LookupAccessToken(c.Request.Context(), service.ScopeUser, token)
 		if err != nil {
+			observability.Event("auth", "rejected", map[string]interface{}{"path": c.Request.URL.Path, "reason": "invalid_user_token", "request_id": c.GetString("request_id")})
 			httpx.Unauthorized(c, httpx.CodeTokenExpired, "Access token invalid or expired")
 			return
 		}
@@ -113,11 +116,13 @@ func (a *AdminAuth) Required() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		token := bearerOrQuery(c)
 		if token == "" {
+			observability.Event("auth", "rejected", map[string]interface{}{"path": c.Request.URL.Path, "reason": "missing_admin_token", "request_id": c.GetString("request_id")})
 			httpx.Unauthorized(c, httpx.CodeUnauthorized, "Missing admin access token")
 			return
 		}
 		family, aid, err := a.tokens.LookupAccessToken(c.Request.Context(), service.ScopeAdmin, token)
 		if err != nil {
+			observability.Event("auth", "rejected", map[string]interface{}{"path": c.Request.URL.Path, "reason": "invalid_admin_token", "request_id": c.GetString("request_id")})
 			httpx.Unauthorized(c, httpx.CodeTokenExpired, "Admin token invalid or expired")
 			return
 		}
@@ -162,11 +167,13 @@ func (a *DeviceAuth) Required() gin.HandlerFunc {
 		}
 		secret := bearerOrQuery(c)
 		if secret == "" {
+			observability.Event("device_auth", "rejected", map[string]interface{}{"device_id": deviceID, "reason": "missing_secret", "request_id": c.GetString("request_id")})
 			httpx.Unauthorized(c, httpx.CodeUnauthorized, "Missing device secret")
 			return
 		}
 		ok, err := a.devices.VerifyDeviceSecret(c.Request.Context(), deviceID, secret)
 		if err != nil {
+			observability.Event("device_auth", "rejected", map[string]interface{}{"device_id": deviceID, "reason": "device_not_found", "request_id": c.GetString("request_id")})
 			// Device row not found �?treat as bad credentials (don't leak
 			// existence) �?but signal NOT_FOUND so a host that's been
 			// rotated can detect it and re-provision (§2.21 / scenario 26).
@@ -174,6 +181,7 @@ func (a *DeviceAuth) Required() gin.HandlerFunc {
 			return
 		}
 		if !ok {
+			observability.Event("device_auth", "rejected", map[string]interface{}{"device_id": deviceID, "reason": "secret_mismatch", "request_id": c.GetString("request_id")})
 			httpx.Unauthorized(c, httpx.CodeDeviceSecretBad, "Device secret mismatch")
 			return
 		}

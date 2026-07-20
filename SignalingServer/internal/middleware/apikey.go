@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"quickdesk/signaling/internal/httpx"
+	"quickdesk/signaling/internal/observability"
 	"quickdesk/signaling/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -71,6 +72,9 @@ func (a *APIKeyAuth) Required() gin.HandlerFunc {
 			c.Next()
 			return
 		}
+		observability.Event("api_auth", "rejected", map[string]interface{}{
+			"origin": c.GetHeader("Origin"), "path": c.Request.URL.Path, "request_id": c.GetString("request_id"),
+		})
 		httpx.Forbidden(c, httpx.CodeForbidden, "Invalid or missing API key / origin not allowed")
 	}
 }
@@ -90,5 +94,5 @@ type staticProvider struct {
 	origins []string
 }
 
-func (p *staticProvider) GetAPIKey() string          { return p.apiKey }
+func (p *staticProvider) GetAPIKey() string           { return p.apiKey }
 func (p *staticProvider) GetAllowedOrigins() []string { return p.origins }
