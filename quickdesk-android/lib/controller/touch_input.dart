@@ -98,10 +98,12 @@ class TouchInputController {
   Matrix4 buildTransformMatrix() {
     final cx = viewportWidth / 2;
     final cy = viewportHeight / 2;
+    // translateByDouble/scaleByDouble 是 vector_math 对已废弃 dynamic 版
+    // translate/scale 的类型化替代；w 分量传 1 与旧行为一致。
     return Matrix4.identity()
-      ..translate(cx + translateX, cy + translateY)
-      ..scale(scale, scale, 1)
-      ..translate(-cx, -cy);
+      ..translateByDouble(cx + translateX, cy + translateY, 0, 1)
+      ..scaleByDouble(scale, scale, 1, 1)
+      ..translateByDouble(-cx, -cy, 0, 1);
   }
 
   // ==================== 手势入口 ====================
