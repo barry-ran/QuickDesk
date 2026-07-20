@@ -13,7 +13,7 @@ dependencies:
     sdk: flutter
 
   # WebRTC (same libwebrtc lineage as Chromium Remoting)
-  flutter_webrtc: ^1.2.0
+  flutter_webrtc: ^1.5.2
 
   # Protocol stack
   crypto: ^3.0.3

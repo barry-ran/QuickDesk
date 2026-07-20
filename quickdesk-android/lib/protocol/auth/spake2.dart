@@ -1,7 +1,8 @@
 /// spake2.dart - SPAKE2 Curve25519 认证协议（Dart 移植）
 ///
-/// 1:1 对照 WebClient/js/auth/spake2.js（其严格参照 BoringSSL spake25519.cc
-/// 与 Chromium spake2_authenticator.cc），作为 Android 客户端协议栈 PoC。
+/// 直接对照 Chromium 140 固定的 BoringSSL `spake25519.cc` 与
+/// `spake2_authenticator.cc`。WebClient 的 JavaScript 版本仍可作为旧端点
+/// 互通参考，但这里额外复刻了 BoringSSL 的 password-scalar 兼容修正。
 ///
 /// 协议流程:
 /// 1. 双方各生成 SPAKE2 消息 (generateMessage)
@@ -22,8 +23,10 @@ import 'edwards25519.dart';
 /// BoringSSL 的 SPAKE2 M/N 点 (与 RFC 9382 不同!)
 /// M: SHA-256 迭代哈希 'edwards25519 point generation seed (M)' 生成
 /// N: SHA-256 迭代哈希 'edwards25519 point generation seed (N)' 生成
-const String mHex = '5ada7e4bf6ddd9adb6626d32131c6b5c51a1e347a3478f53cfcf441b88eed12e';
-const String nHex = '10e3df0ae37d8e7a99b5fe74b44672103dbddcbd06af680d71329a11693bc778';
+const String mHex =
+    '5ada7e4bf6ddd9adb6626d32131c6b5c51a1e347a3478f53cfcf441b88eed12e';
+const String nHex =
+    '10e3df0ae37d8e7a99b5fe74b44672103dbddcbd06af680d71329a11693bc778';
 
 /// 角色定义（与 BoringSSL spake2_role_alice/bob 对应）
 const int spake2RoleAlice = 0; // Client
@@ -96,12 +99,48 @@ EdwardsPoint multiplyWithCofactor(EdwardsPoint point, BigInt reducedScalar) {
   return result;
 }
 
-/// 密码 → 标量: SHA512(password) → sc_reduce
-/// (BoringSSL 的 password scalar hack 可安全省略，见 spake2.js 注释)
+/// 将 BoringSSL `x25519_sc_reduce` 的结果调整为 8 的倍数。
+///
+/// Chromium 140 固定的 BoringSSL 实现不会直接左移密码标量，因为那会破坏
+/// 与旧端点的兼容性；它按当前低三位依次加上 L、2L、4L。对主阶子群点
+/// 这些加法等价于零，但会清除 M/N 掩码点上的小阶分量。
+BigInt applyBoringSslPasswordScalarHack(BigInt reducedScalar) {
+  if (reducedScalar < BigInt.zero || reducedScalar >= curveOrder) {
+    throw ArgumentError.value(
+      reducedScalar,
+      'reducedScalar',
+      'must be in [0, curveOrder)',
+    );
+  }
+
+  var scalar = reducedScalar;
+  var order = curveOrder;
+  if ((scalar & BigInt.one) != BigInt.zero) {
+    scalar += order;
+  }
+
+  order <<= 1;
+  if ((scalar & BigInt.two) != BigInt.zero) {
+    scalar += order;
+  }
+
+  order <<= 1;
+  if ((scalar & BigInt.from(4)) != BigInt.zero) {
+    scalar += order;
+  }
+
+  assert((scalar & BigInt.from(7)) == BigInt.zero);
+  return scalar;
+}
+
+/// 密码 → 标量: SHA512(password) → sc_reduce → BoringSSL 兼容修正。
 ({BigInt scalar, Uint8List hash}) passwordToScalar(List<int> passwordBytes) {
   final passwordHash = sha512Bytes(passwordBytes);
-  final scalar = scReduce(passwordHash);
-  return (scalar: scalar == BigInt.zero ? BigInt.one : scalar, hash: passwordHash);
+  final reducedScalar = scReduce(passwordHash);
+  return (
+    scalar: applyBoringSslPasswordScalarHack(reducedScalar),
+    hash: passwordHash,
+  );
 }
 
 /// 生成随机私钥: random(64 bytes) → sc_reduce（余因子 ×8 在点运算时应用）
@@ -111,8 +150,7 @@ BigInt generateReducedPrivateKey([Random? rng]) {
   for (var i = 0; i < 64; i++) {
     randomData[i] = r.nextInt(256);
   }
-  final reduced = scReduce(randomData);
-  return reduced == BigInt.zero ? BigInt.one : reduced;
+  return scReduce(randomData);
 }
 
 /// PrefixWithLength - 4 字节大端长度前缀（对照 spake2_authenticator.cc）
@@ -155,7 +193,8 @@ class Spake2Context {
 
     final blindingPoint = role == spake2RoleAlice ? pointM : pointN;
 
-    final pubPoint = multiplyWithCofactor(EdwardsPoint.base, reducedPrivateKey!);
+    final pubPoint =
+        multiplyWithCofactor(EdwardsPoint.base, reducedPrivateKey!);
     final blindedPoint = blindingPoint.multiply(passwordScalar!);
     final myMsgPoint = pubPoint.add(blindedPoint);
 
@@ -223,7 +262,8 @@ class Spake2Context {
 
   /// 验证哈希:
   /// HMAC_SHA256(auth_key, ("host"|"client") + PrefixWithLength(local) + PrefixWithLength(remote))
-  Uint8List calculateVerificationHash(bool fromHost, String localId, String remoteId) {
+  Uint8List calculateVerificationHash(
+      bool fromHost, String localId, String remoteId) {
     if (authKey == null) {
       throw StateError('Must call processMessage() first');
     }

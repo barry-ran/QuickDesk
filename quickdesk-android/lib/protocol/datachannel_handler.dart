@@ -1,8 +1,7 @@
-/// datachannel_handler.dart - DataChannel 处理器
+/// datachannel_handler.dart - DataChannel 处理器（主控端）
 ///
-/// 对照 WebClient/js/protocol/datachannel-handler.js（M1 范围：
-/// control/event 双通道 + 光标/剪贴板/能力/VideoLayout 事件；
-/// 文件传输与 actions 通道留待 M2）。
+/// 对照 WebClient/js/protocol/datachannel-handler.js：
+/// control/event 双通道 + 剪贴板/能力/VideoLayout 事件分发。
 library;
 
 import 'dart:async';
@@ -18,24 +17,15 @@ class DataChannelHandler {
   bool _controlReady = false;
   bool _eventReady = false;
 
-  String hostCapabilities = '';
-
   final _controlReadyCtrl = StreamController<void>.broadcast();
-  final _eventReadyCtrl = StreamController<void>.broadcast();
-  final _cursorShapeCtrl = StreamController<CursorShapeInfo>.broadcast();
   final _clipboardCtrl = StreamController<ClipboardEventMsg>.broadcast();
   final _capabilitiesCtrl = StreamController<String>.broadcast();
   final _videoLayoutCtrl = StreamController<VideoLayoutMsg>.broadcast();
 
   Stream<void> get onControlReady => _controlReadyCtrl.stream;
-  Stream<void> get onEventReady => _eventReadyCtrl.stream;
-  Stream<CursorShapeInfo> get onCursorShape => _cursorShapeCtrl.stream;
   Stream<ClipboardEventMsg> get onClipboard => _clipboardCtrl.stream;
   Stream<String> get onCapabilities => _capabilitiesCtrl.stream;
   Stream<VideoLayoutMsg> get onVideoLayout => _videoLayoutCtrl.stream;
-
-  bool get controlReady => _controlReady;
-  bool get eventReady => _eventReady;
 
   /// 接管一个新的 DataChannel（Host 创建的入站通道，或本端创建的出站通道）
   void handleDataChannel(RTCDataChannel channel) {
@@ -80,7 +70,6 @@ class DataChannelHandler {
     channel.onDataChannelState = (state) {
       if (state == RTCDataChannelState.RTCDataChannelOpen) {
         _eventReady = true;
-        _eventReadyCtrl.add(null);
       } else if (state == RTCDataChannelState.RTCDataChannelClosed) {
         _eventReady = false;
       }
@@ -91,15 +80,11 @@ class DataChannelHandler {
   }
 
   void _handleControlMessage(ControlMessage message) {
-    if (message.cursorShape != null) {
-      _cursorShapeCtrl.add(message.cursorShape!);
-    }
     if (message.clipboardEvent != null) {
       _clipboardCtrl.add(message.clipboardEvent!);
     }
     if (message.capabilities != null) {
-      hostCapabilities = message.capabilities!.capabilities;
-      _capabilitiesCtrl.add(hostCapabilities);
+      _capabilitiesCtrl.add(message.capabilities!);
     }
     if (message.videoLayout != null) {
       _videoLayoutCtrl.add(message.videoLayout!);
@@ -154,20 +139,10 @@ class DataChannelHandler {
     _sendControl(encodeControlMessage(audioControlEnable: enable));
   }
 
-  void sendVideoControl(VideoControlMsg control) {
-    _sendControl(encodeControlMessage(videoControl: control));
-  }
-
-  void sendClientResolution(ClientResolutionMsg resolution) {
-    _sendControl(encodeControlMessage(clientResolution: resolution));
-  }
-
   void dispose() {
     _controlChannel?.close();
     _eventChannel?.close();
     _controlReadyCtrl.close();
-    _eventReadyCtrl.close();
-    _cursorShapeCtrl.close();
     _clipboardCtrl.close();
     _capabilitiesCtrl.close();
     _videoLayoutCtrl.close();

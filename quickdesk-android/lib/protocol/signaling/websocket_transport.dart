@@ -36,7 +36,6 @@ class WebSocketTransport {
   bool _closed = false;
   Timer? _authTimer;
   String _selfClientId = '';
-  String _role = 'client';
 
   WebSocketTransport({
     required this.signalingUrl,
@@ -58,7 +57,6 @@ class WebSocketTransport {
     _closed = false;
     _authOk = false;
     _selfClientId = clientId;
-    _role = role;
 
     final base = signalingUrl.replaceAll(RegExp(r'/+$'), '');
     final wsUrl = '$base/v1/realtime/signal';
@@ -181,6 +179,4 @@ class WebSocketTransport {
     _ws = null;
     _authOk = false;
   }
-
-  String get role => _role;
 }

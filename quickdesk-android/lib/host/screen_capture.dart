@@ -1,10 +1,10 @@
 /// screen_capture.dart - 屏幕采集封装（被控端）
 ///
-/// 通过平台通道启动前台服务（满足 Android 10+/14 的 MediaProjection 约束），
-/// 再用 flutter_webrtc 的 getDisplayMedia 触发系统授权并拿到含视频轨的流。
+/// 先通过 flutter_webrtc 请求 MediaProjection 用户授权，再启动
+/// mediaProjection 类型前台服务，最后用缓存的授权结果创建屏幕流。
 ///
-/// 顺序很关键：必须**先** startService() 再 getDisplayMedia()，否则
-/// Android 14 会因缺少 mediaProjection 前台服务而拒绝采集。
+/// Android 14+ 会在授权前启动该类型前台服务时抛出 SecurityException；
+/// 同时必须等服务真正调用 startForeground 后，才能调用 getMediaProjection。
 library;
 
 import 'package:flutter/services.dart';
@@ -15,7 +15,8 @@ class ScreenCaptureResult {
   final int width;
   final int height;
 
-  ScreenCaptureResult({required this.stream, required this.width, required this.height});
+  ScreenCaptureResult(
+      {required this.stream, required this.width, required this.height});
 
   /// 采集流的真实 id（用于 VideoLayout.mediaStreamId，与 SDP msid 对齐）
   String get streamId => stream.id;
@@ -44,14 +45,27 @@ class ScreenCapture {
 
   MediaStream? get stream => _stream;
 
-  /// 启动采集：拉起前台服务 → 请求 MediaProjection → 返回视频流与尺寸。
+  /// 启动采集：请求 MediaProjection 授权 → 启动并确认前台服务 → 创建屏幕流。
   /// 失败（用户拒绝授权等）时抛异常，并回滚前台服务。
   Future<ScreenCaptureResult> start() async {
-    await _channel.invokeMethod('startService');
-    _serviceRunning = true;
-
     try {
-      // Android 端 flutter_webrtc 采集整块默认屏幕，忽略细粒度约束，video:true 即可。
+      // Android 14+ 必须先取得本次捕获授权，才能启动 mediaProjection 类型服务。
+      // fullScreenOnly 避免用户选中单个应用窗口，远控需要完整设备画面。
+      final granted =
+          await Helper.requestCapturePermission(fullScreenOnly: true);
+      if (!granted) {
+        throw PlatformException(
+          code: 'SCREEN_CAPTURE_PERMISSION_DENIED',
+          message: 'Screen capture permission was denied',
+        );
+      }
+
+      // 等原生服务实际完成 startForeground 后再创建 MediaProjection，不能只等待
+      // startForegroundService() 返回，否则服务启动与 getMediaProjection() 存在竞态。
+      await _channel.invokeMethod<bool>('startService');
+      _serviceRunning = true;
+
+      // requestCapturePermission 已把授权结果缓存到 flutter_webrtc，调用时不会再次弹窗。
       final stream = await navigator.mediaDevices.getDisplayMedia({
         'video': true,
         'audio': false,
@@ -59,8 +73,9 @@ class ScreenCapture {
       _stream = stream;
 
       final size = await _resolveSize(stream);
-      return ScreenCaptureResult(stream: stream, width: size.$1, height: size.$2);
-    } catch (e) {
+      return ScreenCaptureResult(
+          stream: stream, width: size.$1, height: size.$2);
+    } catch (_) {
       await stop();
       rethrow;
     }
@@ -80,7 +95,8 @@ class ScreenCapture {
     }
     // 回退：原生 WindowManager 真实屏幕尺寸
     try {
-      final size = await _channel.invokeMethod<Map<dynamic, dynamic>>('getScreenSize');
+      final size =
+          await _channel.invokeMethod<Map<dynamic, dynamic>>('getScreenSize');
       if (size != null) {
         final w = _asInt(size['width']);
         final h = _asInt(size['height']);

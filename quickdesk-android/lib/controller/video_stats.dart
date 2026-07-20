@@ -19,7 +19,6 @@ class VideoStatsData {
   double jitterMs = 0;
   int packetsLost = 0;
   int framesDropped = 0;
-  int packetRate = 0;
 
   String routeType = '—'; // P2P (Direct) / P2P (STUN) / Relay (TURN)
   String protocol = '—';
@@ -34,7 +33,6 @@ class VideoStatsCollector {
   Timer? _timer;
   int _prevBytes = 0;
   int _prevFrames = 0;
-  int _prevPackets = 0;
   double _prevTs = 0;
 
   VideoStatsCollector({required this.fetch, required this.onUpdate});
@@ -50,7 +48,6 @@ class VideoStatsCollector {
     _timer = null;
     _prevBytes = 0;
     _prevFrames = 0;
-    _prevPackets = 0;
     _prevTs = 0;
   }
 
@@ -102,16 +99,13 @@ class VideoStatsCollector {
 
       final bytes = _int(inboundVideo['bytesReceived']);
       final frames = _int(inboundVideo['framesDecoded']);
-      final packets = _int(inboundVideo['packetsReceived']);
       final dt = _prevTs > 0 ? (nowTs - _prevTs) / 1000.0 : 1.0;
       if (dt > 0 && _prevTs > 0) {
         data.fps = ((frames - _prevFrames) / dt).round();
         data.bitrateKbps = (((bytes - _prevBytes) * 8) / dt / 1000).round();
-        data.packetRate = ((packets - _prevPackets) / dt).round();
       }
       _prevBytes = bytes;
       _prevFrames = frames;
-      _prevPackets = packets;
       _prevTs = nowTs;
     }
 

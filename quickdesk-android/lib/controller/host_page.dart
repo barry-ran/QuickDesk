@@ -5,13 +5,12 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
+import '../core/app_settings.dart';
 import '../host/host_controller.dart';
 import '../host/input_injector.dart';
 import '../l10n/app_strings.dart';
-import 'connect_page.dart' show kDefaultSignalingUrl;
 
 class HostPage extends StatefulWidget {
   const HostPage({super.key});
@@ -63,12 +62,10 @@ class _HostPageState extends State<HostPage> {
   }
 
   Future<void> _init() async {
-    final prefs = await SharedPreferences.getInstance();
-    final url = prefs.getString('signaling_url') ?? kDefaultSignalingUrl;
-    final apiKey = prefs.getString('api_key');
+    final settings = await AppSettings.load();
     final controller = HostController(
-      signalingUrl: url,
-      apiKey: (apiKey == null || apiKey.isEmpty) ? null : apiKey,
+      signalingUrl: settings.signalingUrl,
+      apiKey: settings.apiKeyOrNull,
     );
     _subs.add(controller.onStatus.listen((s) {
       if (!mounted) return;

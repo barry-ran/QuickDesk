@@ -17,48 +17,32 @@
 library;
 
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 
+import 'datachannel_config.dart';
+import 'proto/wire.dart';
+
 const int _chunkSize = 8192;
 const int _bufferHighWater = _chunkSize * 8;
 
-// ==================== varint / 编码 ====================
+// ==================== 编码 ====================
 
-List<int> _encodeVarint(int value) {
-  final out = <int>[];
-  var v = value;
-  while (v > 0x7F) {
-    out.add((v & 0x7F) | 0x80);
-    v >>= 7;
-  }
-  out.add(v);
-  return out;
-}
+Uint8List _encMetadata(String filename, int size) => lengthDelimitedField(
+    1,
+    concatBytes([
+      lengthDelimitedField(1, filename),
+      varintField(2, size),
+    ]));
 
-Uint8List _wrapField(int tag, List<int> inner) =>
-    Uint8List.fromList([tag, ..._encodeVarint(inner.length), ...inner]);
+Uint8List _encData(Uint8List data) =>
+    lengthDelimitedField(2, lengthDelimitedField(1, data));
 
-Uint8List _encMetadata(String filename, int size) {
-  final nameBytes = utf8.encode(filename);
-  final inner = <int>[
-    0x0A, ..._encodeVarint(nameBytes.length), ...nameBytes, // filename=1 string
-    0x10, ..._encodeVarint(size), // size=2 varint
-  ];
-  return _wrapField(0x0A, inner);
-}
-
-Uint8List _encData(Uint8List data) {
-  final inner = <int>[0x0A, ..._encodeVarint(data.length), ...data];
-  return _wrapField(0x12, inner);
-}
-
-Uint8List _encEnd() => Uint8List.fromList([0x1A, 0x00]);
-Uint8List _encSuccess() => Uint8List.fromList([0x22, 0x00]);
-Uint8List _encRequestTransfer() => Uint8List.fromList([0x2A, 0x00]);
+Uint8List _encEnd() => lengthDelimitedField(3, Uint8List(0));
+Uint8List _encSuccess() => lengthDelimitedField(4, Uint8List(0));
+Uint8List _encRequestTransfer() => lengthDelimitedField(5, Uint8List(0));
 
 // ==================== 解码 ====================
 
@@ -71,101 +55,71 @@ class _FtMessage {
   int? errorType;
 }
 
-/// 简单游标：读 varint 并推进 offset
-class _Cursor {
-  final Uint8List d;
-  int pos = 0;
-  _Cursor(this.d);
-
-  bool get hasMore => pos < d.length;
-
-  int readVarint() {
-    var result = 0;
-    var shift = 0;
-    while (pos < d.length) {
-      final b = d[pos++];
-      result |= (b & 0x7F) << shift;
-      if ((b & 0x80) == 0) break;
-      shift += 7;
-    }
-    return result;
-  }
-}
-
 _FtMessage _decode(Uint8List data) {
   final msg = _FtMessage();
-  final c = _Cursor(data);
-  while (c.hasMore) {
-    final tag = c.d[c.pos++];
-    final field = tag >> 3;
-    final wire = tag & 0x07;
-    if (wire == 0) {
-      c.readVarint();
+  final reader = ProtobufReader(data);
+  while (reader.hasMore) {
+    final tag = reader.readTag();
+    if (tag.wireType != 2) {
+      reader.skipField(tag.wireType);
       continue;
     }
-    if (wire != 2) continue;
-    final len = c.readVarint();
-    final sub = Uint8List.sublistView(c.d, c.pos, c.pos + len);
-    c.pos += len;
-
-    switch (field) {
+    switch (tag.fieldNumber) {
       case 1:
-        _decodeMetadata(sub, msg);
+        _decodeMetadata(reader.readBytes(), msg);
         break;
       case 2:
-        msg.data = _decodeDataField(sub);
+        msg.data = _decodeDataField(reader.readBytes());
         break;
       case 3:
+        reader.skipField(tag.wireType);
         msg.end = true;
         break;
       case 4:
+        reader.skipField(tag.wireType);
         msg.success = true;
         break;
       case 6:
-        msg.errorType = (sub.length >= 2 && sub[0] == 0x08) ? sub[1] : 0;
+        final errReader = ProtobufReader(reader.readBytes());
+        msg.errorType = 0;
+        while (errReader.hasMore) {
+          final et = errReader.readTag();
+          if (et.fieldNumber == 1 && et.wireType == 0) {
+            msg.errorType = errReader.readVarint();
+          } else {
+            errReader.skipField(et.wireType);
+          }
+        }
         break;
       default:
-        break;
+        reader.skipField(tag.wireType);
     }
   }
   return msg;
 }
 
 void _decodeMetadata(Uint8List data, _FtMessage msg) {
-  final c = _Cursor(data);
-  while (c.hasMore) {
-    final tag = c.d[c.pos++];
-    final field = tag >> 3;
-    final wire = tag & 0x07;
-    if (field == 1 && wire == 2) {
-      final len = c.readVarint();
-      msg.metaFilename =
-          utf8.decode(Uint8List.sublistView(c.d, c.pos, c.pos + len), allowMalformed: true);
-      c.pos += len;
-    } else if (field == 2 && wire == 0) {
-      msg.metaSize = c.readVarint();
-    } else if (wire == 2) {
-      c.pos += c.readVarint();
-    } else if (wire == 0) {
-      c.readVarint();
+  final reader = ProtobufReader(data);
+  while (reader.hasMore) {
+    final tag = reader.readTag();
+    if (tag.fieldNumber == 1 && tag.wireType == 2) {
+      msg.metaFilename = reader.readString();
+    } else if (tag.fieldNumber == 2 && tag.wireType == 0) {
+      msg.metaSize = reader.readVarint();
+    } else {
+      reader.skipField(tag.wireType);
     }
   }
 }
 
 Uint8List _decodeDataField(Uint8List data) {
-  final c = _Cursor(data);
-  while (c.hasMore) {
-    final tag = c.d[c.pos++];
-    final field = tag >> 3;
-    final wire = tag & 0x07;
-    if (field == 1 && wire == 2) {
-      final len = c.readVarint();
-      return Uint8List.fromList(Uint8List.sublistView(c.d, c.pos, c.pos + len));
-    } else if (wire == 2) {
-      c.pos += c.readVarint();
-    } else if (wire == 0) {
-      c.readVarint();
+  final reader = ProtobufReader(data);
+  while (reader.hasMore) {
+    final tag = reader.readTag();
+    if (tag.fieldNumber == 1 && tag.wireType == 2) {
+      return reader.readBytes();
     }
+    reader.skipField(tag.wireType);
   }
   return Uint8List(0);
 }
@@ -212,7 +166,7 @@ class FileTransferManager {
       try {
         channel = await pcProvider().createDataChannel(
           'filetransfer-$id',
-          RTCDataChannelInit()..ordered = true,
+          createRemotingDataChannelInit(),
         );
       } catch (e) {
         ctrl.add(FileTransferProgress(
@@ -224,17 +178,21 @@ class FileTransferManager {
       channel.onDataChannelState = (state) async {
         if (state != RTCDataChannelState.RTCDataChannelOpen) return;
         try {
-          await channel.send(RTCDataChannelMessage.fromBinary(_encMetadata(filename, total)));
+          await channel.send(
+              RTCDataChannelMessage.fromBinary(_encMetadata(filename, total)));
           var offset = 0;
           while (offset < total && !cancelled) {
-            final end = (offset + _chunkSize) > total ? total : offset + _chunkSize;
+            final end =
+                (offset + _chunkSize) > total ? total : offset + _chunkSize;
             final chunk = Uint8List.sublistView(bytes, offset, end);
-            await channel.send(RTCDataChannelMessage.fromBinary(_encData(chunk)));
+            await channel
+                .send(RTCDataChannelMessage.fromBinary(_encData(chunk)));
             offset = end;
             ctrl.add(FileTransferProgress(
                 filename: filename, bytes: offset, totalBytes: total));
             var guard = 0;
-            while ((channel.bufferedAmount ?? 0) > _bufferHighWater && guard < 500) {
+            while ((channel.bufferedAmount ?? 0) > _bufferHighWater &&
+                guard < 500) {
               await Future<void>.delayed(const Duration(milliseconds: 20));
               guard++;
             }
@@ -260,7 +218,10 @@ class FileTransferManager {
         } else if (ft.errorType != null) {
           cancelled = true;
           ctrl.add(FileTransferProgress(
-              filename: filename, bytes: 0, totalBytes: total, error: 'host error ${ft.errorType}'));
+              filename: filename,
+              bytes: 0,
+              totalBytes: total,
+              error: 'host error ${ft.errorType}'));
           await channel.close();
           await ctrl.close();
         }
@@ -281,10 +242,11 @@ class FileTransferManager {
       try {
         channel = await pcProvider().createDataChannel(
           'filetransfer-$id',
-          RTCDataChannelInit()..ordered = true,
+          createRemotingDataChannelInit(),
         );
       } catch (e) {
-        ctrl.add(FileTransferProgress(filename: '', bytes: 0, totalBytes: 0, error: '$e'));
+        ctrl.add(FileTransferProgress(
+            filename: '', bytes: 0, totalBytes: 0, error: '$e'));
         await ctrl.close();
         return;
       }
@@ -298,9 +260,11 @@ class FileTransferManager {
       channel.onDataChannelState = (state) async {
         if (state != RTCDataChannelState.RTCDataChannelOpen) return;
         try {
-          await channel.send(RTCDataChannelMessage.fromBinary(_encRequestTransfer()));
+          await channel
+              .send(RTCDataChannelMessage.fromBinary(_encRequestTransfer()));
         } catch (e) {
-          ctrl.add(FileTransferProgress(filename: filename, bytes: 0, totalBytes: 0, error: '$e'));
+          ctrl.add(FileTransferProgress(
+              filename: filename, bytes: 0, totalBytes: 0, error: '$e'));
           await ctrl.close();
         }
       };
@@ -314,11 +278,13 @@ class FileTransferManager {
           // 文件名确定后再开写入流
           savePath = '$saveDir${Platform.pathSeparator}$filename';
           sink = File(savePath!).openWrite();
-          ctrl.add(FileTransferProgress(filename: filename, bytes: 0, totalBytes: total));
+          ctrl.add(FileTransferProgress(
+              filename: filename, bytes: 0, totalBytes: total));
         } else if (ft.data != null) {
           sink?.add(ft.data!);
           received += ft.data!.length;
-          ctrl.add(FileTransferProgress(filename: filename, bytes: received, totalBytes: total));
+          ctrl.add(FileTransferProgress(
+              filename: filename, bytes: received, totalBytes: total));
         } else if (ft.end) {
           await channel.send(RTCDataChannelMessage.fromBinary(_encSuccess()));
           await sink?.flush();
@@ -334,7 +300,10 @@ class FileTransferManager {
         } else if (ft.errorType != null) {
           await sink?.close();
           ctrl.add(FileTransferProgress(
-              filename: filename, bytes: received, totalBytes: total, error: 'host error ${ft.errorType}'));
+              filename: filename,
+              bytes: received,
+              totalBytes: total,
+              error: 'host error ${ft.errorType}'));
           await channel.close();
           await ctrl.close();
         }

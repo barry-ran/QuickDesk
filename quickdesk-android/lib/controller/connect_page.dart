@@ -2,14 +2,12 @@
 library;
 
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../api/signaling_api.dart';
+import '../core/app_settings.dart';
 import '../l10n/app_strings.dart';
 import 'connection_store.dart';
-import 'remote_page.dart';
-
-const kDefaultSignalingUrl = 'wss://qd.quickcoder.cn';
+import 'remote/remote_page.dart';
 
 class ConnectPage extends StatefulWidget {
   const ConnectPage({super.key});
@@ -44,20 +42,20 @@ class _ConnectPageState extends State<ConnectPage> {
   }
 
   Future<void> _loadPrefs() async {
-    final prefs = await SharedPreferences.getInstance();
+    final settings = await AppSettings.load();
+    if (!mounted) return;
     setState(() {
-      _serverCtrl.text = prefs.getString('signaling_url') ?? kDefaultSignalingUrl;
-      _apiKeyCtrl.text = prefs.getString('api_key') ?? '';
-      _deviceIdCtrl.text = prefs.getString('last_device_id') ?? '';
+      _serverCtrl.text = settings.signalingUrl;
+      _apiKeyCtrl.text = settings.apiKey;
+      _deviceIdCtrl.text = settings.lastDeviceId;
     });
   }
 
-  Future<void> _savePrefs() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('signaling_url', _serverCtrl.text.trim());
-    await prefs.setString('api_key', _apiKeyCtrl.text.trim());
-    await prefs.setString('last_device_id', _deviceIdCtrl.text.trim());
-  }
+  Future<void> _savePrefs() => AppSettings.save(
+        signalingUrl: _serverCtrl.text,
+        apiKey: _apiKeyCtrl.text,
+        lastDeviceId: _deviceIdCtrl.text,
+      );
 
   Future<void> _connect() async {
     final deviceId = _deviceIdCtrl.text.trim().replaceAll(' ', '');

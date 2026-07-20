@@ -11,12 +11,7 @@
 /// 时返回一次，需本地持久化（见 HostCredentialStore）。
 library;
 
-import 'dart:async';
-import 'dart:convert';
-
-import 'package:http/http.dart' as http;
-
-import 'signaling_api.dart' show IceServerEntry, SignalingApiException;
+import 'signaling_http.dart';
 
 class HostProvisionResult {
   final String deviceId;
@@ -30,36 +25,8 @@ class HostProvisionResult {
   });
 }
 
-class HostApi {
-  /// 信令服务器 ws:// 或 wss:// 地址（与设置页一致），内部转 http(s)
-  final String signalingWsUrl;
-
-  /// provision 需要的 X-API-Key（自建服务器开启保护时）
-  final String? apiKey;
-
-  late final String _httpBase = _wsToHttp(signalingWsUrl);
-
-  HostApi(this.signalingWsUrl, {this.apiKey});
-
-  static String _wsToHttp(String wsUrl) {
-    var url = wsUrl.trim();
-    if (url.startsWith('wss://')) {
-      url = 'https://${url.substring(6)}';
-    } else if (url.startsWith('ws://')) {
-      url = 'http://${url.substring(5)}';
-    }
-    while (url.endsWith('/')) {
-      url = url.substring(0, url.length - 1);
-    }
-    return url;
-  }
-
-  Map<String, String> _headers({String? deviceSecret}) => {
-        'Content-Type': 'application/json',
-        if (apiKey != null && apiKey!.isNotEmpty) 'X-API-Key': apiKey!,
-        if (deviceSecret != null && deviceSecret.isNotEmpty)
-          'Authorization': 'Bearer $deviceSecret',
-      };
+class HostApi extends SignalingHttpBase {
+  HostApi(super.signalingWsUrl, {super.apiKey});
 
   /// 首次注册设备，换取 device_id + device_secret（device_secret 只此一次可见）
   Future<HostProvisionResult> provision({
@@ -69,28 +36,13 @@ class HostApi {
     String osVersion = '',
     String appVersion = '',
   }) async {
-    final resp = await http
-        .post(
-          Uri.parse('$_httpBase/v1/devices:provision'),
-          headers: _headers(),
-          body: jsonEncode({
-            'device_uuid': deviceUuid,
-            'machine_fingerprint': machineFingerprint,
-            'os': os,
-            'os_version': osVersion,
-            'app_version': appVersion,
-          }),
-        )
-        .timeout(const Duration(seconds: 10));
-
-    final json = _decodeBody(resp);
-    if (resp.statusCode != 200) {
-      throw SignalingApiException(
-        resp.statusCode,
-        (json['code'] ?? 'UNKNOWN').toString(),
-        (json['message'] ?? resp.body).toString(),
-      );
-    }
+    final json = await requestJson('POST', '/v1/devices:provision', body: {
+      'device_uuid': deviceUuid,
+      'machine_fingerprint': machineFingerprint,
+      'os': os,
+      'os_version': osVersion,
+      'app_version': appVersion,
+    });
     return HostProvisionResult(
       deviceId: (json['device_id'] ?? '').toString(),
       deviceSecret: (json['device_secret'] ?? '').toString(),
@@ -106,26 +58,16 @@ class HostApi {
     String osVersion = '',
     String appVersion = '',
   }) async {
-    final resp = await http
-        .post(
-          Uri.parse('$_httpBase/v1/devices/$deviceId/heartbeat'),
-          headers: _headers(deviceSecret: deviceSecret),
-          body: jsonEncode({
-            'os': os,
-            'os_version': osVersion,
-            'app_version': appVersion,
-          }),
-        )
-        .timeout(const Duration(seconds: 10));
-
-    final json = _decodeBody(resp);
-    if (resp.statusCode != 200) {
-      throw SignalingApiException(
-        resp.statusCode,
-        (json['code'] ?? 'UNKNOWN').toString(),
-        (json['message'] ?? resp.body).toString(),
-      );
-    }
+    final json = await requestJson(
+      'POST',
+      '/v1/devices/$deviceId/heartbeat',
+      bearer: deviceSecret,
+      body: {
+        'os': os,
+        'os_version': osVersion,
+        'app_version': appVersion,
+      },
+    );
     return (json['turn_config_version'] as num?)?.toInt() ?? 0;
   }
 
@@ -134,24 +76,14 @@ class HostApi {
     required String deviceId,
     required String deviceSecret,
   }) async {
-    final resp = await http
-        .post(
-          Uri.parse('$_httpBase/v1/devices/$deviceId/signal-tokens'),
-          headers: _headers(deviceSecret: deviceSecret),
-        )
-        .timeout(const Duration(seconds: 10));
-
-    final json = _decodeBody(resp);
-    if (resp.statusCode != 200) {
-      throw SignalingApiException(
-        resp.statusCode,
-        (json['code'] ?? 'UNKNOWN').toString(),
-        (json['message'] ?? resp.body).toString(),
-      );
-    }
+    final json = await requestJson(
+      'POST',
+      '/v1/devices/$deviceId/signal-tokens',
+      bearer: deviceSecret,
+    );
     final token = json['signal_token'] as String?;
     if (token == null || token.isEmpty) {
-      throw SignalingApiException(resp.statusCode, 'NO_TOKEN', 'missing signal_token');
+      throw SignalingApiException(200, 'NO_TOKEN', 'missing signal_token');
     }
     return token;
   }
@@ -162,62 +94,17 @@ class HostApi {
     required String deviceSecret,
     required String accessCode,
   }) async {
-    final resp = await http
-        .put(
-          Uri.parse('$_httpBase/v1/devices/$deviceId/access-code'),
-          headers: _headers(deviceSecret: deviceSecret),
-          body: jsonEncode({'access_code': accessCode}),
-        )
-        .timeout(const Duration(seconds: 10));
-
-    if (resp.statusCode != 200) {
-      final json = _decodeBody(resp);
-      throw SignalingApiException(
-        resp.statusCode,
-        (json['code'] ?? 'UNKNOWN').toString(),
-        (json['message'] ?? resp.body).toString(),
-      );
-    }
+    await requestJson(
+      'PUT',
+      '/v1/devices/$deviceId/access-code',
+      bearer: deviceSecret,
+      body: {'access_code': accessCode},
+    );
   }
 
   /// 获取 ICE 配置（device_secret 鉴权）；失败返回空列表
   Future<List<IceServerEntry>> getIceServers({
     required String deviceSecret,
-  }) async {
-    try {
-      final resp = await http
-          .get(
-            Uri.parse('$_httpBase/v1/ice-config'),
-            headers: _headers(deviceSecret: deviceSecret),
-          )
-          .timeout(const Duration(seconds: 3));
-      if (resp.statusCode != 200) return [];
-
-      final json = _decodeBody(resp);
-      final list = (json['ice_servers'] ?? json['iceServers']) as List<dynamic>? ?? [];
-      return list.map((server) {
-        final map = server as Map<String, dynamic>;
-        final urlsRaw = map['urls'];
-        final urls = urlsRaw is String
-            ? [urlsRaw]
-            : (urlsRaw as List<dynamic>).map((u) => u.toString()).toList();
-        return IceServerEntry(
-          urls: urls,
-          username: map['username'] as String?,
-          credential: map['credential'] as String?,
-        );
-      }).toList();
-    } catch (_) {
-      return [];
-    }
-  }
-
-  Map<String, dynamic> _decodeBody(http.Response resp) {
-    try {
-      final decoded = jsonDecode(utf8.decode(resp.bodyBytes));
-      return decoded is Map<String, dynamic> ? decoded : {};
-    } catch (_) {
-      return {};
-    }
-  }
+  }) =>
+      fetchIceServers(bearer: deviceSecret);
 }

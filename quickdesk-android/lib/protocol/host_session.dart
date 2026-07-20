@@ -1,21 +1,20 @@
 /// host_session.dart - 被控端会话状态机（Host / responder 角色）
 ///
 /// 与 client_session.dart 互为镜像，负责被桌面端/其它客户端控制时的协议处理。
-/// 采用与 Chromium Host 一致的**两次协商**流程（对齐 Qt/Web 各端客户端）：
+/// 与 Chromium Remoting Host 一致，认证与 WebRTC 传输分阶段进行：
 ///
-///   第一次协商（基础连接）：
-///   1. client → session-initiate（offer #1 + auth supported-methods）
-///   2. Host：setRemote(offer #1) → createAnswer #1（视频轨未加，媒体 inactive）
-///      → session-accept（answer #1 + method + 自己的 SPAKE2 消息）
-///      answer #1 未签名（auth_key 尚未就绪，client 不校验 session-accept 签名）
-///   3. session-info 往返完成 SPAKE2（client 发 spake+hash，Host 回 hash）
-///
-///   第二次协商（视频，认证后，走已连好的同一传输）：
-///   4. Host 加屏幕视频轨 + 建 'control' DataChannel → createOffer #2
-///      → 用 auth_key 对 SDP 签名 → transport-info(offer)
-///   5. client → transport-info(answer #2, 带签名)，Host 校验签名后 setRemote
-///   6. 双向 transport-info 交换 ICE candidate（认证前缓冲，认证后 flush）
+///   Chromium 标准流程：
+///   1. client → session-initiate（仅 auth supported-methods + 空 WebRTC transport）
+///   2. Host → session-accept（仅 method + 自己的 SPAKE2 消息 + 空 transport）
+///   3. session-info 往返完成 SPAKE2
+///   4. 认证完成后 Host 才创建 PeerConnection，加屏幕轨和 'control' DataChannel
+///      → createOffer → 用 auth_key 签名 → transport-info(offer)
+///   5. client → transport-info(answer, 带签名)，Host 校验后 setRemote
+///   6. 双向 transport-info 交换 ICE candidate
 ///   7. client 创建 'event' DataChannel，Host 收到后把输入事件交给注入层
+///
+/// 为兼容旧版 Android/Web 客户端，如果 session-initiate 仍携带初始 offer，
+/// Host 会先返回基础 answer，再在认证后按上述步骤发起媒体重协商。
 ///
 /// 一个 HostSession 复用一条 host 信令 WS，可服务多个并发客户端
 /// （按 signaling client_id 区分），共享同一路屏幕采集 MediaStream。
@@ -25,14 +24,15 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:crypto/crypto.dart' as crypto;
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 
 import '../api/signaling_api.dart' show IceServerEntry;
 import 'auth/spake2_authenticator.dart';
+import 'datachannel_config.dart';
 import 'host_input.dart';
 import 'proto/protobuf_messages.dart';
 import 'signaling/jingle.dart';
+import 'signaling/sdp_signature.dart';
 import 'signaling/websocket_transport.dart';
 
 const String _hostResource = 'chromoting_ftl_quickdesk_host';
@@ -59,6 +59,9 @@ class HostSession {
 
   /// SPAKE2 共享密钥哈希：HMAC(device_id, device_id + access_code)
   final Uint8List sharedSecretHash;
+
+  /// Chromium Client 要求 Host 第一条 SPAKE2 消息携带 DER X.509 证书（base64）。
+  final String hostCertificate;
 
   final String deviceId;
 
@@ -89,12 +92,14 @@ class HostSession {
   Stream<int> get onPeerCountChange => _peerCtrl.stream;
   Stream<String> get onLog => _logCtrl.stream;
 
-  int get peerCount => _peers.values.where((p) => p.state == HostPeerState.connected).length;
+  int get peerCount =>
+      _peers.values.where((p) => p.state == HostPeerState.connected).length;
 
   HostSession({
     required this.signalingUrl,
     required this.deviceId,
     required this.sharedSecretHash,
+    required this.hostCertificate,
     required this.screenStreamProvider,
     required this.screenWidth,
     required this.screenHeight,
@@ -231,11 +236,15 @@ class _HostPeer {
   RTCDataChannel? _controlChannel;
   RTCDataChannel? _eventChannel;
   bool _controlReady = false;
+  bool _eventReady = false;
+  bool _initialControlMessagesSent = false;
+  bool _closing = false;
 
   HostPeerState state = HostPeerState.negotiating;
   bool _remoteDescriptionSet = false;
   bool _mediaNegotiationStarted = false;
   bool _authenticated = false;
+  bool _transportOfferSent = false;
 
   final List<RTCIceCandidate> _pendingRemoteCandidates = [];
   final List<RTCIceCandidate> _pendingLocalCandidates = [];
@@ -272,10 +281,23 @@ class _HostPeer {
     if (message.sid.isNotEmpty &&
         _jingle.sessionId != null &&
         message.sid != _jingle.sessionId) {
-      if (message.iqType == 'set' && message.iqId.isNotEmpty && message.from.isNotEmpty) {
-        session._sendToClient(clientId, _jingle.buildIqResult(message.iqId, message.from));
+      if (message.iqType == 'set' &&
+          message.iqId.isNotEmpty &&
+          message.from.isNotEmpty) {
+        session._sendToClient(
+            clientId, _jingle.buildIqResult(message.iqId, message.from));
       }
       return;
+    }
+
+    // Chromium 要求先回 IQ result，再发送由该请求触发的 session-accept、
+    // session-info 或 transport-info；否则桌面端的 IQ 请求队列可能将后续消息
+    // 判为异常时序。这里与 JingleSessionManager::SendReply 保持一致。
+    if (message.iqType == 'set' &&
+        message.iqId.isNotEmpty &&
+        message.from.isNotEmpty) {
+      session._sendToClient(
+          clientId, _jingle.buildIqResult(message.iqId, message.from));
     }
 
     switch (message.action) {
@@ -289,7 +311,8 @@ class _HostPeer {
         await _handleTransportInfo(message);
         break;
       case 'session-terminate':
-        session._log('peer[$clientId] terminated by client: ${message.terminateInfo?.reason}');
+        session._log('peer[$clientId] terminated by client: '
+            '${message.terminateInfo?.describe() ?? 'unknown'}');
         await close(sendTerminate: false);
         session._onPeerClosed(clientId);
         break;
@@ -298,33 +321,45 @@ class _HostPeer {
       default:
         session._log('peer[$clientId] unhandled action: ${message.action}');
     }
-
-    // 对 type=set 的 IQ 回 result（XMPP 要求）
-    if (message.iqType == 'set' && message.iqId.isNotEmpty && message.from.isNotEmpty) {
-      session._sendToClient(clientId, _jingle.buildIqResult(message.iqId, message.from));
-    }
   }
 
   Future<void> _handleSessionInitiate(JingleMessage message) async {
     session._log('peer[$clientId] session-initiate (sid=${message.sid})');
 
-    // 复用 client 的 sid，remote JID 取 initiator（client 的精确 FTL resource）
+    // Chromium 将 SPAKE2 的身份绑定到实际发送 IQ 的 `from` 地址。
+    // `initiator` 只是 Jingle 元数据，不能覆盖信令层地址；否则动态 client UUID
+    // 不一致时双方会派生不同的 auth_key。
+    final peerJid = message.from;
+    if (peerJid.isEmpty) {
+      await _fail('session-initiate missing sender JID');
+      return;
+    }
+    if (message.initiator.isNotEmpty && message.initiator != peerJid) {
+      session._log(
+        'peer[$clientId] initiator/from mismatch: '
+        '${message.initiator} != $peerJid; binding auth to from',
+      );
+    }
+
     _jingle.sessionId = message.sid;
     _jingle.localJid = session._hostJid;
-    _jingle.remoteJid = message.initiator.isNotEmpty ? message.initiator : message.from;
+    _jingle.remoteJid = peerJid;
 
     // SPAKE2 Bob：local=hostJid, remote=clientJid
     _auth = Spake2HostAuthenticator(
       _jingle.localJid,
       _jingle.remoteJid,
       session.sharedSecretHash,
+      certificate: session.hostCertificate,
     );
 
-    // 校验 client 支持的方法
+    // Chromium NegotiatingHostAuthenticator 同时支持客户端直接指定 method，
+    // 或通过 supported-methods 让 Host 选择共同方法。
     final clientAuth = message.authMessage;
-    if (clientAuth == null || clientAuth.supportedMethods == null) {
-      session._log('peer[$clientId] session-initiate missing supported-methods');
-      await _fail('no auth in session-initiate');
+    if (clientAuth == null ||
+        (clientAuth.supportedMethods == null && clientAuth.method == null)) {
+      session._log('peer[$clientId] session-initiate missing auth method');
+      await _fail('no auth method in session-initiate');
       return;
     }
     _auth!.processMessage(clientAuth);
@@ -333,30 +368,43 @@ class _HostPeer {
       return;
     }
 
-    // 需要 client 的初始 offer 来建立基础连接（第一次协商）
-    if (message.sdp == null || message.sdp!.sdp.isEmpty) {
-      await _fail('session-initiate missing offer SDP');
+    state = HostPeerState.authenticating;
+    final authMsg = _auth!.getNextMessage();
+    final initialSdp = message.sdp;
+
+    if (initialSdp == null || initialSdp.sdp.isEmpty) {
+      // Chromium 标准流程：session-initiate/session-accept 只协商认证，
+      // WebRTC 在认证完成后才启动。transport 元素仍需存在，但内容为空。
+      session._sendToClient(
+        clientId,
+        _jingle.buildSessionAccept(null, authMsg),
+      );
+      session._log('peer[$clientId] sent auth-only session-accept');
       return;
     }
 
-    await _createPeerConnection();
+    if (initialSdp.type != 'offer') {
+      await _fail('session-initiate SDP is not an offer');
+      return;
+    }
 
-    // 第一次协商（基础连接）：应答 client 的 offer。
-    // 此时视频轨尚未加入（认证后才推），故 answer 里媒体为 inactive；
-    // 该 answer 未签名（auth_key 尚未就绪），client 不校验 session-accept 的签名。
-    // DataChannel 与视频留待认证后的第二次协商（host 作为 offerer，带签名）。
+    // 兼容旧版 Android/Web 客户端：它们在 session-initiate 中就携带
+    // 基础 offer。先应答该 offer，认证后再由 Host 发起带视频的重协商。
+    await _createPeerConnection();
     try {
       await _pc!.setRemoteDescription(
-          RTCSessionDescription(message.sdp!.sdp, 'offer'));
+        RTCSessionDescription(initialSdp.sdp, 'offer'),
+      );
       _remoteDescriptionSet = true;
       final answer = await _pc!.createAnswer();
       await _pc!.setLocalDescription(answer);
 
-      state = HostPeerState.authenticating;
-      final authMsg = _auth!.getNextMessage();
       session._sendToClient(
-          clientId, _jingle.buildSessionAccept(answer.sdp!, authMsg));
-      session._log('peer[$clientId] sent session-accept (answer + auth)');
+        clientId,
+        _jingle.buildSessionAccept(answer.sdp, authMsg),
+      );
+      session
+          ._log('peer[$clientId] sent legacy session-accept (answer + auth)');
 
       await _flushRemoteCandidates();
     } catch (e) {
@@ -380,34 +428,56 @@ class _HostPeer {
       session._sendToClient(clientId, _jingle.buildSessionInfo(next));
     }
 
-    if (_auth!.state == AuthState.accepted) {
+    if (_auth!.state == AuthState.accepted && !_authenticated) {
       session._log('peer[$clientId] authenticated');
       _authenticated = true;
       // 认证完成 → host 作为 offerer 发起媒体协商
       await _startMediaNegotiation();
-      _flushLocalCandidates();
     }
   }
 
   Future<void> _handleTransportInfo(JingleMessage message) async {
+    if (_pc == null) {
+      // Chromium 标准流程中，PeerConnection 应在认证成功时由 Host 创建。
+      // 认证完成前到达的 ICE 先缓存；异常提前到达的 SDP 则拒绝，避免空引用
+      // 被外层队列吞掉后只表现为模糊的“通道错误”。
+      for (final info in message.iceCandidates) {
+        _pendingRemoteCandidates.add(
+          RTCIceCandidate(info.candidate, info.sdpMid, info.sdpMLineIndex),
+        );
+      }
+      if (message.sdp != null) {
+        await _fail('transport SDP arrived before authentication');
+      }
+      return;
+    }
+
     // client 的 answer（对 host offer 的应答）
     if (message.sdp != null && message.sdp!.type == 'answer') {
-      if (!_verifySignature(message.sdp!.sdp, 'answer', message.sdp!.signature)) {
-        session._log('peer[$clientId] WARNING: answer signature mismatch');
+      if (!_verifySignature(
+          message.sdp!.sdp, 'answer', message.sdp!.signature)) {
+        await _fail('answer signature mismatch');
+        return;
       }
       try {
         await _pc!.setRemoteDescription(
-            RTCSessionDescription(message.sdp!.sdp, 'answer'));
+          RTCSessionDescription(message.sdp!.sdp, 'answer'),
+        );
         _remoteDescriptionSet = true;
         session._log('peer[$clientId] remote answer set');
         await _flushRemoteCandidates();
       } catch (e) {
-        session._log('peer[$clientId] setRemoteDescription failed: $e');
+        await _fail('setRemoteDescription failed: $e');
+        return;
       }
+    } else if (message.sdp != null) {
+      await _fail('unexpected transport SDP type: ${message.sdp!.type}');
+      return;
     }
 
     for (final info in message.iceCandidates) {
-      final candidate = RTCIceCandidate(info.candidate, info.sdpMid, info.sdpMLineIndex);
+      final candidate =
+          RTCIceCandidate(info.candidate, info.sdpMid, info.sdpMLineIndex);
       if (_remoteDescriptionSet) {
         try {
           await _pc!.addCandidate(candidate);
@@ -421,6 +491,8 @@ class _HostPeer {
   }
 
   Future<void> _createPeerConnection() async {
+    if (_pc != null) return;
+
     final config = <String, dynamic>{
       'iceServers': session.iceServers.map((e) => e.toRtcConfig()).toList(),
       'bundlePolicy': 'max-bundle',
@@ -430,7 +502,10 @@ class _HostPeer {
 
     _pc!.onIceCandidate = (candidate) {
       if (candidate.candidate == null || candidate.candidate!.isEmpty) return;
-      if (!_authenticated) {
+      // Chromium 会把认证后的 transport-info 直接交给 WebrtcTransport。
+      // 必须保证签名 offer 先到，不能让 setLocalDescription 触发的 candidate
+      // 抢在 offer 前面发送。
+      if (!_authenticated || !_transportOfferSent) {
         _pendingLocalCandidates.add(candidate);
         return;
       }
@@ -441,65 +516,130 @@ class _HostPeer {
       session._log('peer[$clientId] ICE: $s');
       if (s == RTCIceConnectionState.RTCIceConnectionStateConnected ||
           s == RTCIceConnectionState.RTCIceConnectionStateCompleted) {
-        if (state != HostPeerState.connected) {
-          state = HostPeerState.connected;
-          session._onPeerConnected();
-        }
+        session._log(
+          'peer[$clientId] ICE connected; waiting for control/event channels',
+        );
       } else if (s == RTCIceConnectionState.RTCIceConnectionStateFailed) {
-        _fail('ICE failed');
+        unawaited(_fail('ICE failed'));
       }
+    };
+
+    _pc!.onConnectionState = (s) {
+      session._log('peer[$clientId] connection: $s');
+    };
+
+    _pc!.onIceGatheringState = (s) {
+      session._log('peer[$clientId] ICE gathering: $s');
+    };
+
+    _pc!.onSignalingState = (s) {
+      session._log('peer[$clientId] signaling: $s');
     };
 
     // client 会创建 'event' DataChannel（输入事件）
     _pc!.onDataChannel = (channel) {
-      session._log('peer[$clientId] datachannel: ${channel.label}');
+      session._log(
+        'peer[$clientId] incoming datachannel: ${channel.label} '
+        '(sid=${channel.id}, state=${channel.state})',
+      );
       if (channel.label == 'event') {
         _setupEventChannel(channel);
       }
     };
   }
 
-  /// 认证完成后：加视频轨 + 建 control 通道 + 生成签名 offer
+  /// 认证完成后：创建连接、加视频轨和 control 通道，再生成签名 offer。
   Future<void> _startMediaNegotiation() async {
     if (_mediaNegotiationStarted) return;
     _mediaNegotiationStarted = true;
 
-    // 加入屏幕视频轨（sendonly）
-    final stream = session.screenStreamProvider();
-    for (final track in stream.getVideoTracks()) {
-      await _pc!.addTrack(track, stream);
-    }
+    try {
+      await _createPeerConnection();
 
-    // host 创建 'control' 通道（下发 cursor/clipboard/capabilities/VideoLayout）
-    _controlChannel = await _pc!.createDataChannel(
-      'control',
-      RTCDataChannelInit()..ordered = true,
-    );
-    _controlChannel!.onDataChannelState = (s) {
-      if (s == RTCDataChannelState.RTCDataChannelOpen) {
-        _controlReady = true;
-        _onControlOpen();
-      } else if (s == RTCDataChannelState.RTCDataChannelClosed) {
-        _controlReady = false;
+      // 加入屏幕视频轨（sendonly）
+      final stream = session.screenStreamProvider();
+      for (final track in stream.getVideoTracks()) {
+        session._log(
+          'peer[$clientId] adding screen track: id=${track.id}, '
+          'enabled=${track.enabled}, muted=${track.muted}',
+        );
+        track.onMute = () {
+          session._log('peer[$clientId] screen track muted: ${track.id}');
+        };
+        track.onUnMute = () {
+          session._log('peer[$clientId] screen track unmuted: ${track.id}');
+        };
+        track.onEnded = () {
+          session._log('peer[$clientId] screen track ended: ${track.id}');
+        };
+        await _pc!.addTrack(track, stream);
       }
-    };
-    _controlChannel!.onMessage = (msg) {
-      if (msg.isBinary) _handleControlMessage(msg.binary);
-    };
 
-    final offer = await _pc!.createOffer();
-    await _pc!.setLocalDescription(offer);
+      // host 创建 'control' 通道（下发 cursor/clipboard/capabilities/VideoLayout）
+      _controlChannel = await _pc!.createDataChannel(
+        'control',
+        createRemotingDataChannelInit(),
+      );
+      session._log(
+        'peer[$clientId] created control datachannel: '
+        'sid=${_controlChannel!.id}',
+      );
+      _controlChannel!.onDataChannelState = _handleControlChannelState;
+      _controlChannel!.onMessage = (msg) {
+        if (msg.isBinary) _handleControlMessage(msg.binary);
+      };
+      // 入站通道对象会携带初始 OPEN 状态；出站通道在极快网络下也可能在
+      // Dart 回调绑定前完成打开，因此绑定后必须立即检查当前状态。
+      _handleControlChannelState(_controlChannel!.state);
 
-    final signature = _signSdp(offer.sdp!, 'offer');
-    session._sendToClient(
-      clientId,
-      _jingle.buildTransportInfoSdp(offer.sdp!, 'offer', signature: signature),
+      final offer = await _pc!.createOffer();
+      final sdp = offer.sdp;
+      if (sdp == null || sdp.isEmpty) {
+        throw StateError('createOffer returned empty SDP');
+      }
+      final signature = signSdp(_auth!.authKey!, sdp, 'offer');
+      if (signature.isEmpty) {
+        throw StateError('authentication key unavailable for SDP signature');
+      }
+
+      // Chromium 先通过 transport-info 发送已签名 SDP，再调用
+      // SetLocalDescription。保持相同时序，确保 ICE candidate 永远排在 offer 后。
+      session._sendToClient(
+        clientId,
+        _jingle.buildTransportInfoSdp(sdp, 'offer', signature: signature),
+      );
+      _transportOfferSent = true;
+      session._log('peer[$clientId] sent signed offer (transport-info)');
+
+      await _pc!.setLocalDescription(offer);
+      _flushLocalCandidates();
+    } catch (e) {
+      await _fail('media negotiation failed: $e');
+    }
+  }
+
+  void _handleControlChannelState(RTCDataChannelState? channelState) {
+    session._log(
+      'peer[$clientId] control datachannel: $channelState '
+      '(sid=${_controlChannel?.id})',
     );
-    session._log('peer[$clientId] sent signed offer (transport-info)');
+    final wasReady = _controlReady;
+    _controlReady = channelState == RTCDataChannelState.RTCDataChannelOpen;
+    if (_controlReady && !wasReady) {
+      _onControlOpen();
+    } else if ((channelState == RTCDataChannelState.RTCDataChannelClosing ||
+            channelState == RTCDataChannelState.RTCDataChannelClosed) &&
+        !_closing) {
+      unawaited(_fail('control datachannel closed'));
+      return;
+    }
+    _notifyIfChannelsReady();
   }
 
   void _onControlOpen() {
-    // 首先协商能力，再下发屏幕布局
+    if (_initialControlMessagesSent) return;
+    _initialControlMessagesSent = true;
+
     if (session.capabilities.isNotEmpty) {
       _sendControl(encodeControlMessage(capabilities: session.capabilities));
     }
@@ -528,6 +668,7 @@ class _HostPeer {
 
   void _setupEventChannel(RTCDataChannel channel) {
     _eventChannel = channel;
+    channel.onDataChannelState = _handleEventChannelState;
     channel.onMessage = (msg) {
       if (!msg.isBinary) return;
       try {
@@ -537,6 +678,33 @@ class _HostPeer {
         session._log('peer[$clientId] bad event message: $e');
       }
     };
+    _handleEventChannelState(channel.state);
+  }
+
+  void _handleEventChannelState(RTCDataChannelState? channelState) {
+    session._log(
+      'peer[$clientId] event datachannel: $channelState '
+      '(sid=${_eventChannel?.id})',
+    );
+    _eventReady = channelState == RTCDataChannelState.RTCDataChannelOpen;
+    if ((channelState == RTCDataChannelState.RTCDataChannelClosing ||
+            channelState == RTCDataChannelState.RTCDataChannelClosed) &&
+        !_closing) {
+      unawaited(_fail('event datachannel closed'));
+      return;
+    }
+    _notifyIfChannelsReady();
+  }
+
+  void _notifyIfChannelsReady() {
+    if (!_controlReady || !_eventReady || _closing) return;
+    if (state == HostPeerState.connected) return;
+
+    state = HostPeerState.connected;
+    session._log(
+      'peer[$clientId] connected: control/event datachannels are open',
+    );
+    session._onPeerConnected();
   }
 
   void _dispatchInput(EventMessage event) {
@@ -607,49 +775,47 @@ class _HostPeer {
     _pendingRemoteCandidates.clear();
   }
 
-  /// HMAC-SHA256(auth_key, `"<type> " + NormalizedForSignature(sdp)`)
-  String _signSdp(String sdp, String type) {
-    final authKey = _auth?.authKey;
-    if (authKey == null) return '';
-    final normalized = sdp
-        .split('\n')
-        .map((l) => l.trim())
-        .where((l) => l.isNotEmpty)
-        .join('\n');
-    final message = utf8.encode('$type $normalized\n');
-    final mac = crypto.Hmac(crypto.sha256, authKey).convert(message);
-    return base64Encode(Uint8List.fromList(mac.bytes));
-  }
-
   bool _verifySignature(String sdp, String type, String? signature) {
-    if (signature == null || signature.isEmpty) return false;
-    return _signSdp(sdp, type) == signature;
+    final authKey = _auth?.authKey;
+    if (authKey == null) return false;
+    return verifySdpSignature(authKey, sdp, type, signature);
   }
 
   Future<void> _fail(String reason) async {
+    if (_closing || state == HostPeerState.closed) return;
     session._log('peer[$clientId] failed: $reason');
     state = HostPeerState.failed;
-    await close(sendTerminate: true);
+    // 失败用 general-error，客户端（含 Chromium 端）才会按错误而非正常断开处理
+    await close(sendTerminate: true, terminateReason: 'general-error');
     session._onPeerClosed(clientId);
   }
 
-  Future<void> close({required bool sendTerminate}) async {
-    if (state == HostPeerState.closed) return;
+  Future<void> close({
+    required bool sendTerminate,
+    String terminateReason = 'success',
+  }) async {
+    if (_closing || state == HostPeerState.closed) return;
+    _closing = true;
     if (sendTerminate && _jingle.sessionId != null) {
       try {
-        session._sendToClient(clientId, _jingle.buildSessionTerminate('success'));
+        session._sendToClient(
+            clientId, _jingle.buildSessionTerminate(terminateReason));
       } catch (_) {}
     }
-    state = HostPeerState.closed;
+    _controlReady = false;
+    _eventReady = false;
     _queue.clear();
     _processing = false;
     try {
       await _controlChannel?.close();
       await _eventChannel?.close();
     } catch (_) {}
+    _controlChannel = null;
+    _eventChannel = null;
     if (_pc != null) {
       await _pc!.close();
       _pc = null;
     }
+    state = HostPeerState.closed;
   }
 }

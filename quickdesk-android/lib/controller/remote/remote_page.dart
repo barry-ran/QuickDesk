@@ -1,6 +1,7 @@
 /// remote_page.dart - 远程桌面页
 ///
-/// 视频渲染（RTCVideoRenderer）+ 触控板输入 + 虚拟键盘 + 工具条。
+/// 视频渲染（RTCVideoRenderer）+ 触控板输入 + 虚拟键盘；
+/// 工具条 / 统计面板 / 文件传输弹层见同目录组件。
 library;
 
 import 'dart:async';
@@ -13,16 +14,21 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
-import '../api/signaling_api.dart';
-import '../l10n/app_strings.dart';
-import '../protocol/client_session.dart';
-import '../protocol/file_transfer.dart';
-import '../protocol/proto/protobuf_messages.dart';
-import 'clipboard_sync.dart';
-import 'connection_store.dart';
-import 'keycode_mapper.dart';
-import 'touch_input.dart';
-import 'video_stats.dart';
+import '../../api/signaling_api.dart';
+import '../../core/geometry.dart';
+import '../../l10n/app_strings.dart';
+import '../../protocol/client_session.dart';
+import '../../protocol/file_transfer.dart';
+import '../../protocol/proto/protobuf_messages.dart';
+import '../clipboard_sync.dart';
+import '../connection_store.dart';
+import '../keycode_mapper.dart';
+import '../touch_input.dart';
+import '../video_stats.dart';
+import 'cursor_painter.dart';
+import 'remote_toolbar.dart';
+import 'stats_panel.dart';
+import 'transfer_sheet.dart';
 
 class RemotePage extends StatefulWidget {
   final String signalingUrl;
@@ -76,6 +82,10 @@ class _RemotePageState extends State<RemotePage> {
   FileTransferManager? _fileTransfer;
   String _hostCaps = '';
 
+  bool _firstFrame = false;
+  /// true = 横屏锁定；false = 竖屏锁定。进入远程页默认横屏（桌面被控更合适）。
+  bool _landscape = true;
+
   @override
   void initState() {
     super.initState();
@@ -88,7 +98,39 @@ class _RemotePageState extends State<RemotePage> {
     _touch.onCursorMoved = () {
       if (mounted) setState(() {});
     };
+    _touch.onTransformChanged = () {
+      if (mounted) setState(() {});
+    };
+    _applyOrientation();
     _init();
+  }
+
+  Future<void> _applyOrientation() async {
+    await SystemChrome.setPreferredOrientations(
+      _landscape
+          ? const [
+              DeviceOrientation.landscapeLeft,
+              DeviceOrientation.landscapeRight,
+            ]
+          : const [
+              DeviceOrientation.portraitUp,
+              DeviceOrientation.portraitDown,
+            ],
+    );
+    // 沉浸式：横屏时少占一点边距
+    await SystemChrome.setEnabledSystemUIMode(
+      SystemUiMode.immersiveSticky,
+    );
+  }
+
+  Future<void> _toggleOrientation() async {
+    setState(() => _landscape = !_landscape);
+    await _applyOrientation();
+  }
+
+  Future<void> _restoreOrientation() async {
+    await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    await SystemChrome.setPreferredOrientations(DeviceOrientation.values);
   }
 
   Future<void> _init() async {
@@ -124,13 +166,26 @@ class _RemotePageState extends State<RemotePage> {
     // 新流到达 → 刷新渲染
     _subs.add(_session.onRemoteStreamsChanged.listen((_) => _applyStream()));
 
+    // 首帧已绘制 → 去掉「等待画面」遮罩
+    _renderer.onFirstFrameRendered = () {
+      if (!_firstFrame) {
+        _firstFrame = true;
+        if (mounted) setState(() {});
+      }
+    };
+
     // 视频尺寸变化 → 更新触控坐标系。
     // 无 VideoLayout，或 VideoLayout 未给出有效尺寸（如被控端采集尺寸为 0）时，
     // 用解码帧的真实尺寸兜底，避免触控分辨率停留在 0 导致光标无法移动。
     _renderer.onResize = () {
       final vw = _renderer.videoWidth.toInt();
       final vh = _renderer.videoHeight.toInt();
-      if ((_displays.isEmpty || _touch.remoteWidth <= 0 || _touch.remoteHeight <= 0) &&
+      if (vw > 0 && vh > 0) {
+        _firstFrame = true;
+      }
+      if ((_displays.isEmpty ||
+              _touch.remoteWidth <= 0 ||
+              _touch.remoteHeight <= 0) &&
           vw > 0 &&
           vh > 0) {
         _touch.setRemoteResolution(vw, vh);
@@ -152,7 +207,8 @@ class _RemotePageState extends State<RemotePage> {
     _subs.add(_session.dcHandler.onVideoLayout.listen(_onVideoLayout));
 
     try {
-      await _session.connect(widget.deviceId, widget.accessCode, widget.signalToken);
+      await _session.connect(
+          widget.deviceId, widget.accessCode, widget.signalToken);
     } catch (_) {
       // 状态流里已处理
     }
@@ -174,7 +230,8 @@ class _RemotePageState extends State<RemotePage> {
 
   Future<void> _pickAndUpload() async {
     final result = await FilePicker.platform.pickFiles(withData: false);
-    final picked = (result != null && result.files.isNotEmpty) ? result.files.first : null;
+    final picked =
+        (result != null && result.files.isNotEmpty) ? result.files.first : null;
     if (picked == null || picked.path == null || _fileTransfer == null) return;
     final bytes = await File(picked.path!).readAsBytes();
     if (!mounted) return;
@@ -199,7 +256,8 @@ class _RemotePageState extends State<RemotePage> {
     try {
       final ext = await getExternalStorageDirectory();
       if (ext != null) {
-        final downloads = Directory('${ext.path}${Platform.pathSeparator}QuickDesk');
+        final downloads =
+            Directory('${ext.path}${Platform.pathSeparator}QuickDesk');
         if (!downloads.existsSync()) downloads.createSync(recursive: true);
         return downloads.path;
       }
@@ -216,9 +274,7 @@ class _RemotePageState extends State<RemotePage> {
       context: context,
       isDismissible: false,
       enableDrag: false,
-      builder: (ctx) {
-        return _TransferSheet(title: title, stream: stream);
-      },
+      builder: (ctx) => TransferSheet(title: title, stream: stream),
     );
   }
 
@@ -287,7 +343,7 @@ class _RemotePageState extends State<RemotePage> {
     if (mounted) setState(() {});
   }
 
-  void _applyStream() {
+  Future<void> _applyStream() async {
     MediaStream? stream;
     if (_selectedStreamId != null) {
       stream = _session.remoteStreams[_selectedStreamId];
@@ -296,10 +352,17 @@ class _RemotePageState extends State<RemotePage> {
         ? null
         : _session.remoteStreams.values.first;
     if (stream == null) return;
-    if (_renderer.srcObject?.id != stream.id) {
+
+    final videoTracks = stream.getVideoTracks();
+    final trackId = videoTracks.isEmpty ? null : videoTracks.first.id;
+
+    // 显式绑定 video track，避免仅设 stream 时 Android 纹理未正确挂上
+    try {
+      await _renderer.setSrcObject(stream: stream, trackId: trackId);
+    } catch (_) {
       _renderer.srcObject = stream;
-      if (mounted) setState(() {});
     }
+    if (mounted) setState(() {});
   }
 
   // ==================== 键盘 ====================
@@ -319,9 +382,11 @@ class _RemotePageState extends State<RemotePage> {
     if (usb == null) return KeyEventResult.ignored;
 
     if (event is KeyDownEvent) {
-      _session.dcHandler.sendKeyEvent(KeyEventMsg(pressed: true, usbKeycode: usb));
+      _session.dcHandler
+          .sendKeyEvent(KeyEventMsg(pressed: true, usbKeycode: usb));
     } else if (event is KeyUpEvent) {
-      _session.dcHandler.sendKeyEvent(KeyEventMsg(pressed: false, usbKeycode: usb));
+      _session.dcHandler
+          .sendKeyEvent(KeyEventMsg(pressed: false, usbKeycode: usb));
     }
     return KeyEventResult.handled;
   }
@@ -341,7 +406,13 @@ class _RemotePageState extends State<RemotePage> {
   Offset? get _twoFingerCenter {
     if (_pointers.length < 2) return null;
     final positions = _pointers.values.toList();
-    return (positions[0] + positions[1]) / 2;
+    return twoFingerCenterOf(positions[0], positions[1]);
+  }
+
+  double? get _twoFingerDistance {
+    if (_pointers.length < 2) return null;
+    final positions = _pointers.values.toList();
+    return twoFingerDistance(positions[0], positions[1]);
   }
 
   void _handlePointerDown(PointerDownEvent e) {
@@ -349,13 +420,20 @@ class _RemotePageState extends State<RemotePage> {
     _pointerCount = _pointers.length;
     _touch.onPointerDown(e, _pointerCount);
     if (_pointerCount == 2) {
-      _touch.onTwoFingerStart(_twoFingerCenter!);
+      final center = _twoFingerCenter!;
+      final dist = _twoFingerDistance!;
+      _touch.onTwoFingerStart(center, dist);
     }
   }
 
   void _handlePointerMove(PointerMoveEvent e) {
     _pointers[e.pointer] = e.position;
-    _touch.onPointerMove(e, _pointerCount, twoFingerCenter: _twoFingerCenter);
+    _touch.onPointerMove(
+      e,
+      _pointerCount,
+      twoFingerCenter: _twoFingerCenter,
+      twoFingerDistance: _twoFingerDistance,
+    );
   }
 
   void _handlePointerUp(PointerUpEvent e) {
@@ -382,28 +460,77 @@ class _RemotePageState extends State<RemotePage> {
         body: SafeArea(
           child: Stack(
             children: [
-              // 视频画面（InteractiveViewer 提供捏合缩放/平移浏览）
+              // 视频画面：捏合缩放 / 平移由 TouchInputController 驱动
               if (_rendererReady)
                 Positioned.fill(
-                  child: Listener(
-                    onPointerDown: _handlePointerDown,
-                    onPointerMove: _handlePointerMove,
-                    onPointerUp: _handlePointerUp,
-                    onPointerCancel: (e) {
-                      _pointers.remove(e.pointer);
-                      _pointerCount = _pointers.length;
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      _touch.setViewportSize(
+                          constraints.maxWidth, constraints.maxHeight);
+                      return Listener(
+                        onPointerDown: _handlePointerDown,
+                        onPointerMove: _handlePointerMove,
+                        onPointerUp: _handlePointerUp,
+                        onPointerCancel: (e) {
+                          _pointers.remove(e.pointer);
+                          _pointerCount = _pointers.length;
+                        },
+                        behavior: HitTestBehavior.opaque,
+                        child: ClipRect(
+                          child: Transform(
+                            transform: _touch.buildTransformMatrix(),
+                            child: _buildRemoteVideo(),
+                          ),
+                        ),
+                      );
                     },
-                    behavior: HitTestBehavior.opaque,
-                    child: RTCVideoView(
-                      _renderer,
-                      objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitContain,
+                  ),
+                ),
+
+              // 已连接但还没收到远程画面时的提示
+              if (connected && !_firstFrame)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: Container(
+                      color: Colors.black,
+                      alignment: Alignment.center,
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const CircularProgressIndicator(),
+                          const SizedBox(height: 20),
+                          Text(L10n.t('remote.waitingFrame'),
+                              style: const TextStyle(
+                                  color: Colors.white70, fontSize: 15)),
+                        ],
+                      ),
                     ),
                   ),
                 ),
 
-              // 虚拟光标
-              if (connected && _touch.remoteWidth > 0)
+              // 虚拟光标（随画布缩放平移）
+              if (connected && _firstFrame && _touch.remoteWidth > 0)
                 _buildVirtualCursor(context),
+
+              // 左键按住提示
+              if (connected && _touch.leftButtonHeld)
+                Positioned(
+                  left: 12,
+                  bottom: 12,
+                  child: Material(
+                    color: Colors.orange.withValues(alpha: 0.85),
+                    borderRadius: BorderRadius.circular(8),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 6),
+                      child: Text(
+                        L10n.t('remote.leftHold'),
+                        style:
+                            const TextStyle(color: Colors.white, fontSize: 12),
+                      ),
+                    ),
+                  ),
+                ),
 
               // 连接状态遮罩
               if (!connected && _state != SessionState.closed)
@@ -417,7 +544,8 @@ class _RemotePageState extends State<RemotePage> {
                           const CircularProgressIndicator(),
                         const SizedBox(height: 24),
                         Text(_statusText,
-                            style: const TextStyle(color: Colors.white70, fontSize: 16)),
+                            style: const TextStyle(
+                                color: Colors.white70, fontSize: 16)),
                         if (_state == SessionState.failed) ...[
                           const SizedBox(height: 24),
                           FilledButton(
@@ -461,7 +589,7 @@ class _RemotePageState extends State<RemotePage> {
                 Positioned(
                   top: 56,
                   right: 8,
-                  child: _buildStatsPanel(),
+                  child: StatsPanel(data: _statsData),
                 ),
 
               // 浮动工具条
@@ -469,7 +597,30 @@ class _RemotePageState extends State<RemotePage> {
                 Positioned(
                   top: 8,
                   right: 8,
-                  child: _buildToolbar(context),
+                  child: RemoteToolbar(
+                    displays: _displays,
+                    activeDisplayIndex: _activeDisplayIndex,
+                    landscape: _landscape,
+                    zoomed: _touch.isZoomed,
+                    keyboardVisible: _keyboardVisible,
+                    statsVisible: _statsVisible,
+                    supportsFileTransfer: _supportsFileTransfer,
+                    onSelectDisplay: _selectDisplay,
+                    onToggleOrientation: _toggleOrientation,
+                    onResetZoom: () {
+                      _touch.resetZoom();
+                      setState(() {});
+                    },
+                    onToggleKeyboard: _toggleKeyboard,
+                    onSendClipboard: () async => _clipboard?.syncNow(),
+                    onToggleStats: _toggleStats,
+                    onUpload: _pickAndUpload,
+                    onDownload: _startDownload,
+                    onDisconnect: () async {
+                      await _session.disconnect();
+                      if (context.mounted) Navigator.of(context).pop();
+                    },
+                  ),
                 ),
             ],
           ),
@@ -478,182 +629,79 @@ class _RemotePageState extends State<RemotePage> {
     );
   }
 
-  Widget _buildStatsPanel() {
-    final d = _statsData;
-    final rows = <(String, String)>[
-      (L10n.t('stats.resolution'), d?.resolution ?? '—'),
-      (L10n.t('stats.codec'), d?.codec ?? '—'),
-      (L10n.t('stats.fps'), d != null ? '${d.fps} fps' : '—'),
-      (L10n.t('stats.bitrate'), d != null ? _fmtBitrate(d.bitrateKbps) : '—'),
-      (L10n.t('stats.rtt'), d != null ? '${d.rttMs} ms' : '—'),
-      (L10n.t('stats.jitter'), d != null ? '${d.jitterMs.toStringAsFixed(1)} ms' : '—'),
-      (L10n.t('stats.packetsLost'), d != null ? '${d.packetsLost}' : '—'),
-      (L10n.t('stats.framesDropped'), d != null ? '${d.framesDropped}' : '—'),
-      (L10n.t('stats.route'), d?.routeType ?? '—'),
-      (L10n.t('stats.protocol'), d?.protocol ?? '—'),
-    ];
+  /// 自定义视频层：按视频宽高比 letterbox，Texture 强制铺满计算出的区域。
+  Widget _buildRemoteVideo() {
+    return ColoredBox(
+      color: Colors.black,
+      child: ListenableBuilder(
+        listenable: _renderer,
+        builder: (context, _) {
+          final textureId = _renderer.textureId;
+          if (textureId == null || !_renderer.renderVideo) {
+            return const SizedBox.expand();
+          }
 
-    return Material(
-      color: Colors.black.withValues(alpha: 0.72),
-      borderRadius: BorderRadius.circular(10),
-      child: Container(
-        width: 220,
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(L10n.t('stats.title'),
-                style: const TextStyle(
-                    color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
-            const SizedBox(height: 8),
-            for (final (label, value) in rows)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 2),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(label,
-                        style: const TextStyle(color: Colors.white54, fontSize: 12)),
-                    const SizedBox(width: 8),
-                    Flexible(
-                      child: Text(
-                        value,
-                        textAlign: TextAlign.right,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(color: Colors.white, fontSize: 12),
-                      ),
-                    ),
-                  ],
+          final vw = _renderer.videoWidth.toDouble();
+          final vh = _renderer.videoHeight.toDouble();
+          final aspect =
+              (vw > 0 && vh > 0) ? vw / vh : _renderer.value.aspectRatio;
+
+          return LayoutBuilder(
+            builder: (context, constraints) {
+              final maxW = constraints.maxWidth;
+              final maxH = constraints.maxHeight;
+              if (!maxW.isFinite || !maxH.isFinite || maxW <= 0 || maxH <= 0) {
+                return SizedBox.expand(
+                  child: Texture(textureId: textureId),
+                );
+              }
+
+              // contain：完整显示远程画面，必要时留黑边；
+              // 与触控坐标映射共用 fitContain，保证光标与画面对齐
+              final rect = fitContain(
+                contentW: aspect,
+                contentH: 1,
+                boxW: maxW,
+                boxH: maxH,
+              );
+
+              return Center(
+                child: SizedBox(
+                  width: rect.width,
+                  height: rect.height,
+                  child: Texture(
+                    textureId: textureId,
+                    filterQuality: FilterQuality.low,
+                  ),
                 ),
-              ),
-          ],
-        ),
+              );
+            },
+          );
+        },
       ),
     );
   }
 
-  String _fmtBitrate(int kbps) {
-    if (kbps <= 0) return '—';
-    if (kbps >= 1000) return '${(kbps / 1000).toStringAsFixed(1)} Mbps';
-    return '$kbps kbps';
-  }
-
   Widget _buildVirtualCursor(BuildContext context) {
-    // 将远程坐标映射到屏幕坐标（contain 模式黑边补偿）
-    return LayoutBuilder(builder: (context, constraints) {
-      final vw = _touch.remoteWidth.toDouble();
-      final vh = _touch.remoteHeight.toDouble();
-      final cw = constraints.maxWidth;
-      final ch = constraints.maxHeight;
-      if (vw <= 0 || vh <= 0) return const SizedBox.shrink();
+    return Positioned.fill(
+      child: LayoutBuilder(builder: (context, constraints) {
+        _touch.setViewportSize(constraints.maxWidth, constraints.maxHeight);
+        final screen = _touch.cursorScreenPosition();
+        if (screen == null) return const SizedBox.shrink();
 
-      final videoAspect = vw / vh;
-      final containerAspect = cw / ch;
-      double renderW, renderH, offX, offY;
-      if (containerAspect > videoAspect) {
-        renderH = ch;
-        renderW = renderH * videoAspect;
-        offX = (cw - renderW) / 2;
-        offY = 0;
-      } else {
-        renderW = cw;
-        renderH = renderW / videoAspect;
-        offX = 0;
-        offY = (ch - renderH) / 2;
-      }
-
-      final sx = offX + (_touch.cursorX / vw) * renderW;
-      final sy = offY + (_touch.cursorY / vh) * renderH;
-
-      return Positioned(
-        left: sx - 3,
-        top: sy - 1,
-        child: IgnorePointer(
-          child: CustomPaint(size: const Size(20, 20), painter: _CursorPainter()),
-        ),
-      );
-    });
-  }
-
-  Widget _buildToolbar(BuildContext context) {
-    return Material(
-      color: Colors.black54,
-      borderRadius: BorderRadius.circular(24),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (_displays.length > 1)
-            PopupMenuButton<int>(
-              icon: const Icon(Icons.desktop_windows, color: Colors.white),
-              tooltip: L10n.t('remote.switchDisplay'),
-              onSelected: _selectDisplay,
-              itemBuilder: (context) => [
-                for (var i = 0; i < _displays.length; i++)
-                  PopupMenuItem<int>(
-                    value: i,
-                    child: Row(
-                      children: [
-                        Icon(
-                          i == _activeDisplayIndex
-                              ? Icons.radio_button_checked
-                              : Icons.radio_button_unchecked,
-                          size: 18,
-                        ),
-                        const SizedBox(width: 8),
-                        Text('${L10n.t('remote.display', {'n': i + 1})}'
-                            '${(_displays[i].width ?? 0) > 0 ? '  ${_displays[i].width}×${_displays[i].height}' : ''}'),
-                      ],
-                    ),
-                  ),
-              ],
+        return Stack(
+          children: [
+            Positioned(
+              left: screen.dx - 3,
+              top: screen.dy - 1,
+              child: IgnorePointer(
+                child: CustomPaint(
+                    size: const Size(20, 20), painter: const CursorPainter()),
+              ),
             ),
-          IconButton(
-            icon: Icon(Icons.keyboard, color: _keyboardVisible ? Colors.lightBlueAccent : Colors.white),
-            tooltip: L10n.t('remote.keyboard'),
-            onPressed: _toggleKeyboard,
-          ),
-          IconButton(
-            icon: const Icon(Icons.content_paste_go, color: Colors.white),
-            tooltip: L10n.t('remote.sendClipboard'),
-            onPressed: () async {
-              await _clipboard?.syncNow();
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(L10n.t('remote.clipboardSent')), duration: const Duration(seconds: 1)),
-                );
-              }
-            },
-          ),
-          IconButton(
-            icon: Icon(Icons.insights,
-                color: _statsVisible ? Colors.lightBlueAccent : Colors.white),
-            tooltip: L10n.t('remote.stats'),
-            onPressed: _toggleStats,
-          ),
-          if (_supportsFileTransfer)
-            PopupMenuButton<String>(
-              icon: const Icon(Icons.folder_open, color: Colors.white),
-              tooltip: L10n.t('file.transfer'),
-              onSelected: (v) {
-                if (v == 'upload') _pickAndUpload();
-                if (v == 'download') _startDownload();
-              },
-              itemBuilder: (context) => [
-                PopupMenuItem(value: 'upload', child: Text(L10n.t('file.upload'))),
-                PopupMenuItem(value: 'download', child: Text(L10n.t('file.download'))),
-              ],
-            ),
-          IconButton(
-            icon: const Icon(Icons.close, color: Colors.white),
-            tooltip: L10n.t('remote.disconnect'),
-            onPressed: () async {
-              await _session.disconnect();
-              if (context.mounted) Navigator.of(context).pop();
-            },
-          ),
-        ],
-      ),
+          ],
+        );
+      }),
     );
   }
 
@@ -665,6 +713,7 @@ class _RemotePageState extends State<RemotePage> {
     _clipboard?.dispose();
     _stats?.stop();
     WakelockPlus.disable();
+    _restoreOrientation();
     _touch.dispose();
     _session.dispose();
     _renderer.dispose();
@@ -672,115 +721,4 @@ class _RemotePageState extends State<RemotePage> {
     _textFocus.dispose();
     super.dispose();
   }
-}
-
-/// 文件传输进度底部弹层
-class _TransferSheet extends StatefulWidget {
-  final String title;
-  final Stream<FileTransferProgress> stream;
-
-  const _TransferSheet({required this.title, required this.stream});
-
-  @override
-  State<_TransferSheet> createState() => _TransferSheetState();
-}
-
-class _TransferSheetState extends State<_TransferSheet> {
-  FileTransferProgress? _p;
-  StreamSubscription<FileTransferProgress>? _sub;
-
-  @override
-  void initState() {
-    super.initState();
-    _sub = widget.stream.listen((p) {
-      if (mounted) setState(() => _p = p);
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final p = _p;
-    final done = p?.done == true;
-    final error = p?.error;
-    final finished = done || error != null;
-
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(widget.title, style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 12),
-            if (p != null) Text(p.filename, style: const TextStyle(fontWeight: FontWeight.w500)),
-            const SizedBox(height: 8),
-            if (error != null)
-              Text('${L10n.t('file.failed')}: $error',
-                  style: TextStyle(color: Theme.of(context).colorScheme.error))
-            else ...[
-              LinearProgressIndicator(value: p != null && p.totalBytes > 0 ? p.fraction : null),
-              const SizedBox(height: 8),
-              Text(_progressText(p, done)),
-            ],
-            const SizedBox(height: 16),
-            Align(
-              alignment: Alignment.centerRight,
-              child: FilledButton(
-                onPressed: finished ? () => Navigator.of(context).pop() : null,
-                child: Text(finished ? L10n.t('common.back') : L10n.t('common.cancel')),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  String _progressText(FileTransferProgress? p, bool done) {
-    if (p == null) return '...';
-    if (done) {
-      return p.savedPath != null
-          ? L10n.t('file.savedTo', {'path': p.savedPath})
-          : L10n.t('file.done');
-    }
-    final kb = (p.bytes / 1024).toStringAsFixed(0);
-    final total = p.totalBytes > 0 ? (p.totalBytes / 1024).toStringAsFixed(0) : '?';
-    return '$kb KB / $total KB';
-  }
-
-  @override
-  void dispose() {
-    _sub?.cancel();
-    super.dispose();
-  }
-}
-
-/// 标准箭头光标（对照 touch-handler.js 的 SVG path）
-class _CursorPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final path = Path()
-      ..moveTo(3, 2)
-      ..lineTo(3, 17)
-      ..lineTo(7.5, 12.5)
-      ..lineTo(11, 19)
-      ..lineTo(13.5, 18)
-      ..lineTo(10, 11.5)
-      ..lineTo(16, 11.5)
-      ..close();
-
-    canvas.drawPath(path, Paint()..color = Colors.white);
-    canvas.drawPath(
-      path,
-      Paint()
-        ..color = Colors.black
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.2
-        ..strokeJoin = StrokeJoin.round,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
