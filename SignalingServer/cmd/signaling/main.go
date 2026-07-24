@@ -180,6 +180,13 @@ func main() {
 	adminSettingsHandler := handler.NewAdminSettingsHandler(settingsService, bus, auditService)
 	adminPresetHandler := handler.NewAdminPresetHandler(presetService, auditService)
 	adminAuditHandler := handler.NewAdminAuditHandler(auditService)
+	adminLogsHandler := handler.NewAdminLogsHandler(
+		auditService,
+		db,
+		cfg.Runtime.LogDir,
+		cfg.Runtime.PostgresLogFile,
+		cfg.Runtime.RedisLogFile,
+	)
 	adminWebhooksHandler := handler.NewAdminWebhooksHandler(webhookService, auditService)
 	adminGroupsHandler := handler.NewAdminGroupsHandler(groupService, auditService)
 	adminStatsHandler := handler.NewAdminStatsHandler(deviceService, presenceService, metricsService, db)
@@ -369,6 +376,12 @@ func main() {
 
 		// Audit logs.
 		adminGuarded.GET("/audit-logs", adminAuditHandler.List)
+		adminGuarded.GET("/audit-logs:export", adminLogsHandler.ExportAudit)
+
+		// Raw operational log downloads are intentionally restricted to
+		// super administrators and a fixed server-side file allow-list.
+		adminGuarded.GET("/system/logs", adminLogsHandler.List)
+		adminGuarded.GET("/system/logs/:name", adminLogsHandler.Download)
 
 		// Preset.
 		adminGuarded.GET("/preset", adminPresetHandler.Get)

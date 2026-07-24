@@ -54,11 +54,13 @@ type Config struct {
 }
 
 type RuntimeConfig struct {
-	RunAutoMigrate bool
-	PprofAddr      string
-	LogDir         string
-	LogMaxSizeMB   int
-	LogMaxBackups  int
+	RunAutoMigrate  bool
+	PprofAddr       string
+	LogDir          string
+	LogMaxSizeMB    int
+	LogMaxBackups   int
+	PostgresLogFile string
+	RedisLogFile    string
 }
 
 type ServerConfig struct {
@@ -131,6 +133,8 @@ func Load() *Config {
 	viper.SetDefault("LOG_DIR", "logs")
 	viper.SetDefault("LOG_MAX_SIZE_MB", 50)
 	viper.SetDefault("LOG_MAX_BACKUPS", 5)
+	viper.SetDefault("POSTGRES_LOG_FILE", "")
+	viper.SetDefault("REDIS_LOG_FILE", "")
 
 	if err := viper.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
@@ -190,11 +194,13 @@ func Load() *Config {
 		Enabled:         smsEnabled,
 	}
 	cfg.Runtime = RuntimeConfig{
-		RunAutoMigrate: viper.GetBool("RUN_AUTO_MIGRATE"),
-		PprofAddr:      viper.GetString("PPROF_ADDR"),
-		LogDir:         viper.GetString("LOG_DIR"),
-		LogMaxSizeMB:   viper.GetInt("LOG_MAX_SIZE_MB"),
-		LogMaxBackups:  viper.GetInt("LOG_MAX_BACKUPS"),
+		RunAutoMigrate:  viper.GetBool("RUN_AUTO_MIGRATE"),
+		PprofAddr:       viper.GetString("PPROF_ADDR"),
+		LogDir:          viper.GetString("LOG_DIR"),
+		LogMaxSizeMB:    viper.GetInt("LOG_MAX_SIZE_MB"),
+		LogMaxBackups:   viper.GetInt("LOG_MAX_BACKUPS"),
+		PostgresLogFile: viper.GetString("POSTGRES_LOG_FILE"),
+		RedisLogFile:    viper.GetString("REDIS_LOG_FILE"),
 	}
 
 	apiKeyStatus := "disabled"

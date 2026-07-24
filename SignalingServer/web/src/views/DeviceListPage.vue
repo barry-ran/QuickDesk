@@ -65,11 +65,26 @@
           </template>
         </el-table-column>
         <el-table-column prop="app_version" :label="t('devices.appVersion')" width="110" sortable="custom" />
-        <el-table-column :label="t('devices.status')" width="90" sortable="custom" prop="online">
+        <el-table-column :label="t('devices.status')" width="100" sortable="custom" prop="online">
           <template #default="{ row }">
-            <el-tag :type="row.online ? 'success' : 'info'" size="small">
-              {{ row.online ? t('devices.online') : t('devices.offline') }}
+            <el-tag :type="isOnline(row) ? 'success' : 'info'" size="small">
+              {{ isOnline(row) ? t('devices.online') : t('devices.offline') }}
             </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column :label="t('devices.heartbeat')" width="105">
+          <template #default="{ row }">
+            <el-tag :type="row.presence?.heartbeat ? 'success' : 'info'" size="small">
+              {{ row.presence?.heartbeat ? t('common.on') : t('common.off') }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column :label="t('devices.wsCount')" width="95">
+          <template #default="{ row }">{{ row.presence?.ws_count ?? 0 }}</template>
+        </el-table-column>
+        <el-table-column :label="t('devices.offlineReason')" min-width="150" show-overflow-tooltip>
+          <template #default="{ row }">
+            {{ isOnline(row) ? '-' : row.offline_reason || '-' }}
           </template>
         </el-table-column>
         <el-table-column :label="t('devices.lastSeen')" width="170" sortable="custom" prop="last_seen_at">
@@ -127,7 +142,7 @@ import { getGroups } from '../api/device_groups.js'
 import { exportCSV } from '../utils/export.js'
 import CursorPagination from '../components/CursorPagination.vue'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const router = useRouter()
 const loading = ref(false)
 const devices = ref([])
@@ -156,7 +171,11 @@ const sort = reactive({
 
 function formatDate(dateStr) {
   if (!dateStr) return '-'
-  return new Date(dateStr).toLocaleString('zh-CN')
+  return new Date(dateStr).toLocaleString(locale.value)
+}
+
+function isOnline(device) {
+  return Boolean(device.online)
 }
 
 async function loadDevices() {

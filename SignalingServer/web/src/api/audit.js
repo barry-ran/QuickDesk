@@ -1,5 +1,6 @@
 // /v1/admin/audit-logs (§2.2).
 import { authJson } from './auth.js'
+import { downloadFile } from './system.js'
 
 const BASE = '/v1/admin/audit-logs'
 
@@ -15,4 +16,8 @@ export function getAuditLogs(params = {}) {
   if (params.dateTo)   q.set('date_to',   params.dateTo)
   const qs = q.toString()
   return authJson(`${BASE}${qs ? `?${qs}` : ''}`)
+}
+
+export function exportAuditLogs(format) {
+  return downloadFile(`${BASE}:export?format=${encodeURIComponent(format)}`)
 }

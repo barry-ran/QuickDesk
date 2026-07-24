@@ -12,16 +12,16 @@ import (
 // PresenceService manages the two Redis signals that together define
 // whether a device is "online":
 //
-//   qd:presence:device:{id}:hb           TTL 90s, refreshed by heartbeat
-//   qd:presence:device:{id}:ws:{inst}    TTL 24h, one per host signaling WS
-//                                         connection; instance UUID prevents
-//                                         the old-process DEL from stomping
-//                                         a new process's key (§2.14)
-//   qd:presence:instance:{inst}          TTL 15s, refreshed by each live
-//                                         SignalingServer process. Stale ws
-//                                         keys from crashed/restarted servers
-//                                         are ignored once their instance key
-//                                         expires.
+//	qd:presence:device:{id}:hb           TTL 90s, refreshed by heartbeat
+//	qd:presence:device:{id}:ws:{inst}    TTL 24h, one per host signaling WS
+//	                                      connection; instance UUID prevents
+//	                                      the old-process DEL from stomping
+//	                                      a new process's key (§2.14)
+//	qd:presence:instance:{inst}          TTL 15s, refreshed by each live
+//	                                      SignalingServer process. Stale ws
+//	                                      keys from crashed/restarted servers
+//	                                      are ignored once their instance key
+//	                                      expires.
 //
 // A device is online iff hb exists AND at least one ws:* key exists.
 // Either signal alone isn't enough — see §2.4 rationale.
@@ -39,6 +39,21 @@ type PresenceState struct {
 
 func (s PresenceState) String() string {
 	return fmt.Sprintf("hb=%t ws_count=%d online=%t", s.Heartbeat, s.WSCount, s.Online)
+}
+
+// OfflineReason returns the authoritative reason a device is unavailable.
+// It is empty while the composite presence state is online.
+func (s PresenceState) OfflineReason() string {
+	if s.Online {
+		return ""
+	}
+	if !s.Heartbeat && s.WSCount == 0 {
+		return "no_heartbeat_and_no_ws"
+	}
+	if !s.Heartbeat {
+		return "heartbeat_missing"
+	}
+	return "ws_disconnected"
 }
 
 const (
@@ -112,6 +127,13 @@ func (p *PresenceService) MarkWSConnected(ctx context.Context, deviceID string) 
 	pipe.Expire(ctx, p.wsInstancesKey(deviceID), presenceWSTTL)
 	_, err := pipe.Exec(ctx)
 	return err
+}
+
+// RefreshWSPresence renews the WS presence lease for an already authenticated
+// host signaling connection. A long-lived WebSocket must renew this lease so
+// it remains online beyond presenceWSTTL.
+func (p *PresenceService) RefreshWSPresence(ctx context.Context, deviceID string) error {
+	return p.MarkWSConnected(ctx, deviceID)
 }
 
 // MarkWSDisconnected deletes this instance's WS presence key for deviceID.

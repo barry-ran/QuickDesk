@@ -1,4 +1,4 @@
-﻿package handler
+package handler
 
 import (
 	"errors"
@@ -75,11 +75,11 @@ func (h *AdminDevicesHandler) List(c *gin.Context) {
 	for _, d := range devs {
 		ids = append(ids, d.DeviceID)
 	}
-	online := h.presence.BulkOnline(c.Request.Context(), ids)
+	states := h.presence.BulkState(c.Request.Context(), ids)
 	items := make([]gin.H, 0, len(devs))
 	for i := range devs {
 		d := &devs[i]
-		items = append(items, deviceAdminJSON(d, online[d.DeviceID]))
+		items = append(items, deviceAdminJSON(d, states[d.DeviceID]))
 	}
 	c.JSON(http.StatusOK, NewCursorPage(items, next, total))
 }
@@ -87,22 +87,30 @@ func (h *AdminDevicesHandler) List(c *gin.Context) {
 // deviceAdminJSON adds the cross-cutting derived fields admin views care
 // about. `logged_in` is the *derived* value (intent AND online), matching
 // the shape used elsewhere in the v1 API (§2.2).
-func deviceAdminJSON(d *models.Device, online bool) gin.H {
+func deviceAdminJSON(d *models.Device, state service.PresenceState) gin.H {
 	out := gin.H{
-		"id":           d.ID,
-		"device_id":    d.DeviceID,
-		"device_uuid":  d.DeviceUUID,
-		"device_name":  d.DeviceName,
-		"os":           d.OS,
-		"os_version":   d.OSVersion,
-		"app_version":  d.AppVersion,
-		"user_id":      d.UserID,
-		"access_code":  d.AccessCode,
-		"online":       online,
-		"logged_in":    d.LoggedIn && online,
+		"id":               d.ID,
+		"device_id":        d.DeviceID,
+		"device_uuid":      d.DeviceUUID,
+		"device_name":      d.DeviceName,
+		"os":               d.OS,
+		"os_version":       d.OSVersion,
+		"app_version":      d.AppVersion,
+		"user_id":          d.UserID,
+		"access_code":      d.AccessCode,
+		"online":           state.Online,
+		"logged_in":        d.LoggedIn && state.Online,
+		"logged_in_intent": d.LoggedIn,
+		"presence": gin.H{
+			"heartbeat": state.Heartbeat,
+			"ws_count":  state.WSCount,
+		},
 		"last_seen_at": d.LastSeenAt,
 		"created_at":   d.CreatedAt,
 		"updated_at":   d.UpdatedAt,
+	}
+	if !state.Online {
+		out["offline_reason"] = state.OfflineReason()
 	}
 	if d.UserID != nil {
 		out["user"] = d.User
@@ -121,8 +129,8 @@ func (h *AdminDevicesHandler) Get(c *gin.Context) {
 		ProblemInternal(c, err.Error())
 		return
 	}
-	online := h.presence.IsOnline(c.Request.Context(), deviceID)
-	out := deviceAdminJSON(d, online)
+	state := h.presence.State(c.Request.Context(), deviceID)
+	out := deviceAdminJSON(d, state)
 	var history []models.ConnectionHistory
 	h.db.WithContext(c.Request.Context()).
 		Where("device_id = ?", deviceID).
@@ -324,7 +332,7 @@ func (h *AdminDevicesHandler) ListBindings(c *gin.Context) {
 	for i := range devs {
 		deviceByID[devs[i].DeviceID] = &devs[i]
 	}
-	online := h.presence.BulkOnline(c.Request.Context(), deviceIDs)
+	states := h.presence.BulkState(c.Request.Context(), deviceIDs)
 
 	items := make([]gin.H, 0, len(rows))
 	for _, r := range rows {
@@ -342,14 +350,23 @@ func (h *AdminDevicesHandler) ListBindings(c *gin.Context) {
 			"updated_at":      r.UpdatedAt,
 		}
 		if d != nil {
+			state := states[d.DeviceID]
 			entry["device"] = gin.H{
-				"device_name":  d.DeviceName,
-				"os":           d.OS,
-				"os_version":   d.OSVersion,
-				"app_version":  d.AppVersion,
-				"online":       online[d.DeviceID],
-				"logged_in":    d.LoggedIn && online[d.DeviceID],
+				"device_name":      d.DeviceName,
+				"os":               d.OS,
+				"os_version":       d.OSVersion,
+				"app_version":      d.AppVersion,
+				"online":           state.Online,
+				"logged_in":        d.LoggedIn && state.Online,
+				"logged_in_intent": d.LoggedIn,
+				"presence": gin.H{
+					"heartbeat": state.Heartbeat,
+					"ws_count":  state.WSCount,
+				},
 				"last_seen_at": d.LastSeenAt,
+			}
+			if !state.Online {
+				entry["device"].(gin.H)["offline_reason"] = state.OfflineReason()
 			}
 		}
 		items = append(items, entry)

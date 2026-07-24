@@ -2,7 +2,20 @@
   <div class="audit-page" v-loading="loading">
     <div class="page-header">
       <h2>{{ t('auditLog.title') }}</h2>
-      <el-button type="primary" :icon="Refresh" size="small" @click="loadLogs">{{ t('common.refresh') }}</el-button>
+      <div class="header-actions">
+        <el-dropdown @command="exportLogs">
+          <el-button :icon="Download" size="small" :loading="exporting">
+            {{ t('common.export') }}<el-icon class="el-icon--right"><ArrowDown /></el-icon>
+          </el-button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="csv">{{ t('auditLog.exportCsv') }}</el-dropdown-item>
+              <el-dropdown-item command="json">{{ t('auditLog.exportJson') }}</el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
+        <el-button type="primary" :icon="Refresh" size="small" @click="loadLogs">{{ t('common.refresh') }}</el-button>
+      </div>
     </div>
 
     <el-card shadow="never" class="filter-card">
@@ -76,12 +89,13 @@
 import { ref, reactive, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
-import { Refresh, Search } from '@element-plus/icons-vue'
-import { getAuditLogs } from '../api/audit.js'
+import { ArrowDown, Download, Refresh, Search } from '@element-plus/icons-vue'
+import { exportAuditLogs, getAuditLogs } from '../api/audit.js'
 import CursorPagination from '../components/CursorPagination.vue'
 
 const { t } = useI18n()
 const loading = ref(false)
+const exporting = ref(false)
 const logs = ref([])
 const dateRange = ref(null)
 
@@ -158,6 +172,23 @@ function handleDateChange(val) {
   handleFilter()
 }
 
+async function exportLogs(format) {
+  exporting.value = true
+  try {
+    const { blob, filename } = await exportAuditLogs(format)
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = filename || `audit-logs.${format}`
+    link.click()
+    URL.revokeObjectURL(url)
+  } catch (error) {
+    ElMessage.error(`${t('auditLog.exportFailed')}: ${error.message}`)
+  } finally {
+    exporting.value = false
+  }
+}
+
 onMounted(loadLogs)
 </script>
 
@@ -165,6 +196,7 @@ onMounted(loadLogs)
 .audit-page { width: 100%; padding: 20px; box-sizing: border-box; }
 .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
 .page-header h2 { margin: 0; font-size: 24px; font-weight: 600; color: #303133; }
+.header-actions { display: flex; gap: 8px; }
 .filter-card { border-radius: 8px; }
 .filter-bar { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
 .pagination-bar { display: flex; justify-content: flex-end; margin-top: 16px; }

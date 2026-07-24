@@ -42,6 +42,7 @@ export default {
     adminUsers: '管理员账户',
     deviceGroups: '设备分组',
     auditLogs: '审计日志',
+    systemLogs: '系统日志',
     webhooks: 'Webhooks',
     settings: '系统设置',
     logout: '退出登录'
@@ -117,7 +118,11 @@ export default {
     rotateSecret: '吊销 device_secret',
     rotateSecretConfirm: '吊销后当前 device_secret 立即失效，host 将在下次心跳时收到 401 并自动重新 provision。继续吗？',
     rotateSecretSuccess: 'device_secret 已吊销，host 下次调用会自动重新 provision',
-    deleteConfirm: '彻底删除此设备？此操作不可撤销。'
+    deleteConfirm: '彻底删除此设备？此操作不可撤销。',
+    heartbeat: '心跳',
+    wsCount: 'WebSocket 数',
+    loggedInIntent: '登录意图',
+    offlineReason: '离线原因'
   },
   deviceList: {
     title: '设备列表',
@@ -313,7 +318,20 @@ export default {
     filterAction: '操作类型',
     filterAdmin: '管理员',
     startDate: '开始日期',
-    endDate: '结束日期'
+    endDate: '结束日期',
+    exportCsv: '导出 CSV',
+    exportJson: '导出 JSON',
+    exportFailed: '导出审计日志失败'
+  },
+  systemLogs: {
+    title: '系统日志',
+    name: '文件名',
+    size: '大小',
+    modifiedAt: '修改时间',
+    download: '下载',
+    empty: '暂无日志文件',
+    loadFailed: '加载系统日志失败',
+    downloadFailed: '下载日志文件失败'
   },
   deviceGroups: {
     title: '设备分组',

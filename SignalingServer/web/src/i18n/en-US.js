@@ -42,6 +42,7 @@ export default {
     adminUsers: 'Admin Users',
     deviceGroups: 'Device Groups',
     auditLogs: 'Audit Logs',
+    systemLogs: 'System Logs',
     webhooks: 'Webhooks',
     settings: 'Settings',
     logout: 'Logout'
@@ -116,7 +117,11 @@ export default {
     rotateSecret: 'Revoke device_secret',
     rotateSecretConfirm: 'Rotating the device_secret invalidates it immediately; the host will re-provision on the next request. Continue?',
     rotateSecretSuccess: 'device_secret revoked; host will re-provision automatically on its next call',
-    deleteConfirm: 'Permanently delete this device? This cannot be undone.'
+    deleteConfirm: 'Permanently delete this device? This cannot be undone.',
+    heartbeat: 'Heartbeat',
+    wsCount: 'WebSocket Count',
+    loggedInIntent: 'Login Intent',
+    offlineReason: 'Offline Reason'
   },
   deviceList: {
     title: 'Devices',
@@ -310,7 +315,20 @@ export default {
     filterAction: 'Action Type',
     filterAdmin: 'Admin',
     startDate: 'Start Date',
-    endDate: 'End Date'
+    endDate: 'End Date',
+    exportCsv: 'Export CSV',
+    exportJson: 'Export JSON',
+    exportFailed: 'Failed to export audit logs'
+  },
+  systemLogs: {
+    title: 'System Logs',
+    name: 'File Name',
+    size: 'Size',
+    modifiedAt: 'Modified',
+    download: 'Download',
+    empty: 'No log files',
+    loadFailed: 'Failed to load system logs',
+    downloadFailed: 'Failed to download log file'
   },
   deviceGroups: {
     title: 'Device Groups',

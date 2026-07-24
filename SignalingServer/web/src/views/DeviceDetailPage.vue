@@ -25,8 +25,8 @@
         <div class="card-header">
           <el-icon><Monitor /></el-icon>
           <span>{{ t('devices.basicInfo') }}</span>
-          <el-tag :type="device.online ? 'success' : 'info'" size="small" style="margin-left: auto">
-            {{ device.online ? t('devices.online') : t('devices.offline') }}
+          <el-tag :type="isOnline(device) ? 'success' : 'info'" size="small" style="margin-left: auto">
+            {{ isOnline(device) ? t('devices.online') : t('devices.offline') }}
           </el-tag>
         </div>
       </template>
@@ -37,6 +37,20 @@
         <el-descriptions-item :label="t('devices.appVersion')">{{ device.app_version || '-' }}</el-descriptions-item>
         <el-descriptions-item :label="t('devices.lastSeen')">{{ formatDate(device.last_seen_at || device.last_seen) }}</el-descriptions-item>
         <el-descriptions-item :label="t('devices.createdAt')">{{ formatDate(device.created_at) }}</el-descriptions-item>
+        <el-descriptions-item :label="t('devices.heartbeat')">
+          <el-tag :type="device.presence?.heartbeat ? 'success' : 'info'" size="small">
+            {{ device.presence?.heartbeat ? t('common.on') : t('common.off') }}
+          </el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item :label="t('devices.wsCount')">{{ device.presence?.ws_count ?? 0 }}</el-descriptions-item>
+        <el-descriptions-item :label="t('devices.loggedInIntent')">
+          <el-tag :type="device.logged_in_intent ? 'success' : 'info'" size="small">
+            {{ device.logged_in_intent ? t('common.on') : t('common.off') }}
+          </el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item :label="t('devices.offlineReason')" :span="2">
+          {{ isOnline(device) ? '-' : device.offline_reason || '-' }}
+        </el-descriptions-item>
       </el-descriptions>
     </el-card>
 
@@ -94,7 +108,7 @@ import {
   rotateDeviceSecret,
 } from '../api/admin_device.js'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const router = useRouter()
 const route = useRoute()
 const loading = ref(false)
@@ -105,7 +119,11 @@ const connectionHistory = ref([])
 
 function formatDate(dateStr) {
   if (!dateStr) return '-'
-  return new Date(dateStr).toLocaleString('zh-CN')
+  return new Date(dateStr).toLocaleString(locale.value)
+}
+
+function isOnline(value) {
+  return Boolean(value.online)
 }
 
 async function loadDetail() {

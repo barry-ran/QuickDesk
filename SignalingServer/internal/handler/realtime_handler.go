@@ -819,6 +819,12 @@ func (sc *signalConn) writer() {
 				sc.close()
 				return
 			}
+			if sc.role == service.SignalRoleHost {
+				if err := sc.h.presence.RefreshWSPresence(context.Background(), sc.deviceID); err != nil {
+					log.Printf("[realtime/signal] failed to refresh host WS presence device=%s: %v",
+						sc.deviceID, err)
+				}
+			}
 		}
 	}
 }
