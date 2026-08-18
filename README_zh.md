@@ -513,4 +513,4 @@ QuickDesk 自身代码基于 [MIT License](LICENSE) 开源，商用无忧。
 
 ## Star 历史
 
-[![Star History Chart](https://api.star-history.com/svg?repos=barry-ran/QuickDesk&type=Date)](https://star-history.com/#barry-ran/QuickDesk&Date)
+[![Star History Chart](https://star-history.dera.page/svg?repos=barry-ran/QuickDesk&type=Date)](https://star-history.dera.page/#barry-ran/QuickDesk&type=Date)
