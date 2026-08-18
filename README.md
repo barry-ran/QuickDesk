@@ -507,4 +507,4 @@ For complete third-party license information, see [THIRD_PARTY_LICENSES](THIRD_P
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=barry-ran/QuickDesk&type=Date)](https://star-history.com/#barry-ran/QuickDesk&Date)
+[![Star History Chart](https://star-history.dera.page/svg?repos=barry-ran/QuickDesk&type=Date)](https://star-history.dera.page/#barry-ran/QuickDesk&type=Date)
