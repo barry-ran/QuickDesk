@@ -666,6 +666,7 @@ request shapes; this section documents only the route table.
 | `GET` | `/v1/admin/activity` |
 | `GET` | `/v1/admin/trends?range=24h\|7d\|30d` |
 | `GET` | `/v1/admin/audit-logs` (filters `date_from` / `date_to` / `q`) |
+| `GET` `DELETE` | `/v1/admin/recordings[/:id]` (list filters `user_id` / `device_id` / `status` / `q`; delete writes audit action `recording.delete`) |
 | `GET` `PUT` | `/v1/admin/preset` |
 | `GET` `PUT` | `/v1/admin/settings` |
 | `GET` `POST` `PATCH` `DELETE` | `/v1/admin/webhooks[/:id]` |
