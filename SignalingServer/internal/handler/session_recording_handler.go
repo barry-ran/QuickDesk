@@ -40,6 +40,17 @@ type createSessionRecordingReq struct {
 	EndedAt         *time.Time `json:"ended_at"`
 }
 
+type updateSessionRecordingReq struct {
+	Status          *string    `json:"status"`
+	Format          *string    `json:"format"`
+	ArtifactPath    *string    `json:"artifact_path"`
+	ArtifactURL     *string    `json:"artifact_url"`
+	ThumbnailPath   *string    `json:"thumbnail_path"`
+	DurationSeconds *int       `json:"duration_seconds"`
+	SizeBytes       *int64     `json:"size_bytes"`
+	EndedAt         *time.Time `json:"ended_at"`
+}
+
 func (h *SessionRecordingHandler) Create(c *gin.Context) {
 	uid := middleware.MustUserID(c)
 	var req createSessionRecordingReq
@@ -128,6 +139,54 @@ func (h *SessionRecordingHandler) Get(c *gin.Context) {
 		}
 		ProblemInternal(c, err.Error())
 		return
+	}
+	c.JSON(http.StatusOK, row)
+}
+
+func (h *SessionRecordingHandler) Update(c *gin.Context) {
+	uid := middleware.MustUserID(c)
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		ProblemBadRequest(c, ProblemCodeInvalidRequest, "invalid recording id")
+		return
+	}
+	var req updateSessionRecordingReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		ProblemBadRequest(c, ProblemCodeInvalidRequest, err.Error())
+		return
+	}
+	row, err := h.recordings.Update(c.Request.Context(), uid, uint(id), service.UpdateSessionRecordingInput{
+		Status:          req.Status,
+		Format:          req.Format,
+		ArtifactPath:    req.ArtifactPath,
+		ArtifactURL:     req.ArtifactURL,
+		ThumbnailPath:   req.ThumbnailPath,
+		DurationSeconds: req.DurationSeconds,
+		SizeBytes:       req.SizeBytes,
+		EndedAt:         req.EndedAt,
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, gorm.ErrRecordNotFound):
+			ProblemNotFound(c, ProblemCodeNotFound, "Recording not found")
+		case errors.Is(err, service.ErrInvalidRecordingStatus):
+			ProblemBadRequest(c, ProblemCodeInvalidRequest, err.Error())
+		default:
+			ProblemBadRequest(c, ProblemCodeInvalidRequest, err.Error())
+		}
+		return
+	}
+	if h.bus != nil {
+		h.bus.Publish(c.Request.Context(), service.Event{
+			Type:     service.EventRecordingUpdated,
+			UserID:   uid,
+			DeviceID: row.DeviceID,
+			Data: map[string]interface{}{
+				"recording_id": row.ID,
+				"session_id":   row.SessionID,
+				"status":       row.Status,
+			},
+		})
 	}
 	c.JSON(http.StatusOK, row)
 }
