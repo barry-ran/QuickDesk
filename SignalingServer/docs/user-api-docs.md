@@ -756,6 +756,8 @@ include access-code plaintext, `device_secret`, or `refresh_token`.
 | `device.unbound` | unbound by user or admin | `{device_id}` |
 | `device.remark.changed` / `device.display_name.changed` | `PATCH /v1/me/devices/:id` | `{device_id, remark?, device_name?}` |
 | `favorite.added` / `favorite.updated` / `favorite.removed` | favorites mutated | `{device_id, ...}` |
+| `recording.created` | `POST /v1/me/recordings` | `{recording_id, device_id, session_id, status, format}` |
+| `recording.deleted` | `DELETE /v1/me/recordings/:id` | `{recording_id}` |
 | `session.revoked` | this user's session was killed | `{}` |
 | `device.secret.rotated` | admin rotated `device_secret` (sent to host owner) | `{device_id}` (host should re-provision on next 401) |
 

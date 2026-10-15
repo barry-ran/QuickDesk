@@ -18,10 +18,11 @@ import (
 // surface owns discovery, ownership, and lifecycle metadata.
 type SessionRecordingHandler struct {
 	recordings *service.SessionRecordingService
+	bus        *service.EventBus
 }
 
-func NewSessionRecordingHandler(recordings *service.SessionRecordingService) *SessionRecordingHandler {
-	return &SessionRecordingHandler{recordings: recordings}
+func NewSessionRecordingHandler(recordings *service.SessionRecordingService, bus *service.EventBus) *SessionRecordingHandler {
+	return &SessionRecordingHandler{recordings: recordings, bus: bus}
 }
 
 type createSessionRecordingReq struct {
@@ -71,6 +72,19 @@ func (h *SessionRecordingHandler) Create(c *gin.Context) {
 		}
 		ProblemBadRequest(c, ProblemCodeInvalidRequest, err.Error())
 		return
+	}
+	if h.bus != nil {
+		h.bus.Publish(c.Request.Context(), service.Event{
+			Type:     service.EventRecordingCreated,
+			UserID:   uid,
+			DeviceID: row.DeviceID,
+			Data: map[string]interface{}{
+				"recording_id": row.ID,
+				"session_id":   row.SessionID,
+				"status":       row.Status,
+				"format":       row.Format,
+			},
+		})
 	}
 	c.JSON(http.StatusCreated, row)
 }
@@ -132,6 +146,13 @@ func (h *SessionRecordingHandler) Delete(c *gin.Context) {
 		}
 		ProblemInternal(c, err.Error())
 		return
+	}
+	if h.bus != nil {
+		h.bus.Publish(c.Request.Context(), service.Event{
+			Type:   service.EventRecordingDeleted,
+			UserID: uid,
+			Data:   map[string]interface{}{"recording_id": uint(id)},
+		})
 	}
 	c.Status(http.StatusNoContent)
 }
