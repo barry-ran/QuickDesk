@@ -393,6 +393,26 @@ class UserApi {
     })
   }
 
+  // ========================================================================
+  // Session recordings — user-owned index of recorded remote sessions.
+  // The control plane owns discovery/ownership/lifecycle metadata; media
+  // bytes are produced by the recording engine, so playback/download use
+  // the row's artifact_url (see resolveMediaUrl in RecordingsPage.vue).
+  // ========================================================================
+
+  fetchRecordings(cursor) {
+    const q = cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''
+    return this._req('GET', `/v1/me/recordings${q}`)
+  }
+
+  fetchRecording(id) {
+    return this._req('GET', `/v1/me/recordings/${encodeURIComponent(id)}`)
+  }
+
+  deleteRecording(id) {
+    return this._req('DELETE', `/v1/me/recordings/${encodeURIComponent(id)}`)
+  }
+
   fetchFavorites() { return this._req('GET', '/v1/me/favorites') }
 
   addFavorite(deviceId, name, password) {
