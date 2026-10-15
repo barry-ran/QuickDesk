@@ -81,6 +81,7 @@ const navItems = computed(() => {
   const items = [
     { path: '/remote', icon: '🖥️', label: 'nav.remote' },
     { path: '/devices', icon: '📱', label: 'nav.devices' },
+    { path: '/recordings', icon: '🎬', label: 'nav.recordings' },
   ]
   if (authState.isLoggedIn) {
     items.push({ path: '/account', icon: '👤', label: 'nav.account' })
