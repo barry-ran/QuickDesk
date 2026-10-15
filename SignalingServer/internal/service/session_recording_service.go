@@ -108,6 +108,77 @@ type SessionRecordingListParams struct {
 	Limit    int
 }
 
+type UpdateSessionRecordingInput struct {
+	Status          *string
+	Format          *string
+	ArtifactPath    *string
+	ArtifactURL     *string
+	ThumbnailPath   *string
+	DurationSeconds *int
+	SizeBytes       *int64
+	EndedAt         *time.Time
+}
+
+func (s *SessionRecordingService) Update(
+	ctx context.Context,
+	userID uint,
+	id uint,
+	in UpdateSessionRecordingInput,
+) (*models.SessionRecording, error) {
+	updates := map[string]interface{}{}
+	if in.Status != nil {
+		status := strings.TrimSpace(*in.Status)
+		switch status {
+		case "recording", "completed", "failed":
+			updates["status"] = status
+		default:
+			return nil, ErrInvalidRecordingStatus
+		}
+	}
+	if in.Format != nil {
+		updates["format"] = strings.TrimSpace(*in.Format)
+	}
+	if in.ArtifactPath != nil {
+		updates["artifact_path"] = strings.TrimSpace(*in.ArtifactPath)
+	}
+	if in.ArtifactURL != nil {
+		updates["artifact_url"] = strings.TrimSpace(*in.ArtifactURL)
+	}
+	if in.ThumbnailPath != nil {
+		updates["thumbnail_path"] = strings.TrimSpace(*in.ThumbnailPath)
+	}
+	if in.DurationSeconds != nil {
+		if *in.DurationSeconds < 0 {
+			return nil, errors.New("duration_seconds must be >= 0")
+		}
+		updates["duration_seconds"] = *in.DurationSeconds
+	}
+	if in.SizeBytes != nil {
+		if *in.SizeBytes < 0 {
+			return nil, errors.New("size_bytes must be >= 0")
+		}
+		updates["size_bytes"] = *in.SizeBytes
+	}
+	if in.EndedAt != nil {
+		updates["ended_at"] = in.EndedAt.UTC()
+	}
+	if len(updates) == 0 {
+		return s.Get(ctx, userID, id)
+	}
+	updates["updated_at"] = time.Now().UTC()
+	result := s.db.WithContext(ctx).
+		Model(&models.SessionRecording{}).
+		Where("id = ? AND user_id = ?", id, userID).
+		Updates(updates)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	if result.RowsAffected == 0 {
+		return nil, gorm.ErrRecordNotFound
+	}
+	return s.Get(ctx, userID, id)
+}
+
 func (s *SessionRecordingService) List(
 	ctx context.Context,
 	userID uint,
