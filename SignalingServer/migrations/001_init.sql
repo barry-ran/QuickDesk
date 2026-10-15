@@ -105,6 +105,7 @@ CREATE TABLE IF NOT EXISTS session_recordings (
     artifact_path    VARCHAR(500),
     artifact_url     VARCHAR(1000),
     thumbnail_path   VARCHAR(500),
+    thumbnail_url    VARCHAR(1000),
     duration_seconds INTEGER      NOT NULL DEFAULT 0,
     size_bytes       BIGINT       NOT NULL DEFAULT 0,
     started_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
@@ -115,6 +116,9 @@ CREATE TABLE IF NOT EXISTS session_recordings (
 CREATE INDEX IF NOT EXISTS idx_session_recordings_user_created ON session_recordings(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_session_recordings_device ON session_recordings(device_id);
 CREATE INDEX IF NOT EXISTS idx_session_recordings_session ON session_recordings(session_id);
+-- Added after the table shipped: keep existing installs in step with the
+-- CREATE TABLE above without a separate migration file.
+ALTER TABLE session_recordings ADD COLUMN IF NOT EXISTS thumbnail_url VARCHAR(1000);
 
 -- ---------------------------------------------------------------
 -- Favorites
