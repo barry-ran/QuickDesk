@@ -1397,6 +1397,269 @@ class RemoteDesktopApp {
         if (needShift) this.dcHandler.sendKeyEvent({ pressed: false, usbKeycode: SHIFT_USB });
     }
 
+    // ==================== Session recording ====================
+    //
+    // Phase 1 records on the controller: the decoded remote stream is already
+    // attached to #remoteVideo, so MediaRecorder can capture exactly what the
+    // operator sees without touching the remoting engine. Uploading the result
+    // creates a `session_recordings` row and then posts the bytes, which is the
+    // same pair of calls a native recorder would make.
+
+    _recordingApiBase() {
+        let base = (localStorage.getItem('quickdesk_signaling_url') || '').replace(/\/+$/, '');
+        if (base.startsWith('wss://')) base = base.replace(/^wss:\/\//, 'https://');
+        else if (base.startsWith('ws://')) base = base.replace(/^ws:\/\//, 'http://');
+        return base;
+    }
+
+    _recordingAccessToken() {
+        return localStorage.getItem('quickdesk_user_access_token') || '';
+    }
+
+    _pickRecordingMime() {
+        // Chrome 126+ can mux MP4 (H.264) directly; WebM is the fallback.
+        const candidates = [
+            'video/mp4;codecs=avc1.42E01E',
+            'video/mp4',
+            'video/webm;codecs=vp9',
+            'video/webm;codecs=vp8',
+            'video/webm',
+        ];
+        for (const type of candidates) {
+            if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(type)) return type;
+        }
+        return '';
+    }
+
+    startRecording() {
+        if (this._recorder) return true;
+        const video = document.getElementById('remoteVideo');
+        const stream = video && video.srcObject;
+        if (!stream) {
+            this._log(t('log.recordNoStream'), 'error');
+            return false;
+        }
+        const mimeType = this._pickRecordingMime();
+        if (!mimeType) {
+            this._log(t('log.recordUnsupported'), 'error');
+            return false;
+        }
+        this._recordChunks = [];
+        try {
+            this._recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 4_000_000 });
+        } catch (err) {
+            this._log(`record: ${err.message}`, 'error');
+            this._recorder = null;
+            return false;
+        }
+        this._recorder.ondataavailable = (e) => {
+            if (e.data && e.data.size > 0) this._recordChunks.push(e.data);
+        };
+        // Grab the poster now, while the element still holds a live frame.
+        // Capturing at stop time would be unreliable: the decoder may have been
+        // torn down and the canvas would come back blank.
+        this._recordPoster = this._captureRecordingPoster();
+        this._recorder.start(1000);
+        this._recordStartedAt = Date.now();
+        this._setRecordButtonState(true);
+        this._log(t('log.recordStarted'));
+        return true;
+    }
+
+    // A preview is a thumbnail, not a screenshot: cap the long edge so a 4K
+    // session does not produce a 4K preview that must be re-encoded on every
+    // recordings-list render.
+    _captureRecordingPoster() {
+        const video = document.getElementById('remoteVideo');
+        if (!video || !video.videoWidth || !video.videoHeight) return Promise.resolve(null);
+        const scale = Math.min(1, 640 / Math.max(video.videoWidth, video.videoHeight));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
+        canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return Promise.resolve(null);
+        try {
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        } catch (err) {
+            console.warn('[RemoteDesktop] poster capture failed', err);
+            return Promise.resolve(null);
+        }
+        return new Promise((resolve) => {
+            try {
+                canvas.toBlob((blob) => resolve(blob), 'image/jpeg', 0.82);
+            } catch (err) {
+                console.warn('[RemoteDesktop] poster encode failed', err);
+                resolve(null);
+            }
+        });
+    }
+
+    async stopRecording() {
+        const recorder = this._recorder;
+        if (!recorder) return null;
+        const stopped = new Promise((resolve) => { recorder.onstop = resolve; });
+        recorder.stop();
+        await stopped;
+        const mimeType = recorder.mimeType || 'video/webm';
+        const blob = new Blob(this._recordChunks, { type: mimeType });
+        const durationMs = Date.now() - this._recordStartedAt;
+        const poster = this._recordPoster;
+        this._recorder = null;
+        this._recordChunks = [];
+        this._recordPoster = null;
+        this._setRecordButtonState(false);
+        this._log(t('log.recordStopped', { seconds: Math.round(durationMs / 1000), kb: Math.round(blob.size / 1024) }));
+        return { blob, mimeType, durationMs, poster };
+    }
+
+    async toggleRecording() {
+        if (this._recorder) {
+            const result = await this.stopRecording();
+            if (result && result.blob.size > 0) {
+                await this._uploadRecording(result);
+            } else if (result) {
+                this._log(t('log.recordEmpty'), 'error');
+            }
+            return;
+        }
+        this.startRecording();
+    }
+
+    async _uploadRecording({ blob, mimeType, durationMs, poster }) {
+        const token = this._recordingAccessToken();
+        const base = this._recordingApiBase();
+        if (!token || !base) {
+            this._log(t('log.recordNoSession'), 'error');
+            return null;
+        }
+        const deviceId = new URLSearchParams(window.location.search).get('device') || '';
+        const startedAt = new Date(Date.now() - durationMs).toISOString();
+        const endedAt = new Date().toISOString();
+        const ext = mimeType.includes('mp4') ? 'mp4' : 'webm';
+        const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
+        // Tracked outside the try so the catch can repair the index when the
+        // upload dies at the transport layer (an aborted fetch throws instead
+        // of resolving with a non-2xx status).
+        let rowId = null;
+        try {
+            const created = await fetch(`${base}/v1/me/recordings`, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({
+                    device_id: deviceId,
+                    device_name: '',
+                    session_id: `web-${Date.now()}`,
+                    // Starts as "recording": the upload below decides whether it
+                    // becomes "completed" (server flips it) or "failed".
+                    status: 'recording',
+                    format: ext,
+                    duration_seconds: Math.max(1, Math.round(durationMs / 1000)),
+                    started_at: startedAt,
+                    ended_at: endedAt,
+                }),
+            });
+            if (!created.ok) throw new Error(`create failed: HTTP ${created.status}`);
+            const row = await created.json();
+            rowId = row.id;
+
+            const uploaded = await this._postWithRetry(
+                `${base}/v1/me/recordings/${row.id}/artifact`,
+                token,
+                () => {
+                    const form = new FormData();
+                    form.append('file', blob, `recording.${ext}`);
+                    return form;
+                },
+                'artifact',
+            );
+            const saved = await uploaded.json();
+            this._log(t('log.recordUploaded', { id: saved.id, kb: Math.round((saved.size_bytes || 0) / 1024) }));
+            // Best effort from here down: the recording is already stored, so a
+            // missing preview is a cosmetic loss, not a failed capture.
+            await this._uploadThumbnail(row.id, token, base, poster);
+            return saved;
+        } catch (err) {
+            if (rowId) await this._markRecordingFailed(rowId, token, base);
+            this._log(t('log.recordUploadFailed', { error: err.message }), 'error');
+            return null;
+        }
+    }
+
+    // POST a multipart body, retrying only what a retry can fix: transport
+    // failures and 5xx/429. A 4xx is the server rejecting this payload, so the
+    // loop stops immediately instead of hammering it.
+    async _postWithRetry(url, token, makeBody, label) {
+        const backoffMs = [0, 800, 2000, 5000];
+        let lastError = null;
+        for (let attempt = 0; attempt < backoffMs.length; attempt++) {
+            if (backoffMs[attempt] > 0) {
+                await new Promise((resolve) => setTimeout(resolve, backoffMs[attempt]));
+                this._log(t('log.recordRetry', { label, attempt: attempt + 1 }));
+            }
+            let response;
+            try {
+                response = await fetch(url, {
+                    method: 'POST',
+                    headers: { Authorization: `Bearer ${token}` },
+                    body: makeBody(),
+                });
+            } catch (err) {
+                lastError = err;
+                continue;
+            }
+            if (response.ok) return response;
+            lastError = new Error(`${label} upload failed: HTTP ${response.status}`);
+            if (response.status < 500 && response.status !== 429) throw lastError;
+        }
+        throw lastError || new Error(`${label} upload failed`);
+    }
+
+    async _uploadThumbnail(recordingId, token, base, posterPromise) {
+        try {
+            let poster = null;
+            try {
+                poster = await posterPromise;
+            } catch {
+                poster = null;
+            }
+            if (!poster || poster.size === 0) return false;
+            await this._postWithRetry(
+                `${base}/v1/me/recordings/${recordingId}/thumbnail`,
+                token,
+                () => {
+                    const form = new FormData();
+                    form.append('file', poster, 'thumb.jpg');
+                    return form;
+                },
+                'thumbnail',
+            );
+            return true;
+        } catch (err) {
+            this._log(t('log.recordThumbFailed', { error: err.message }), 'error');
+            return false;
+        }
+    }
+
+    // Keep the index honest when the bytes never landed: a row that claims
+    // "recording" forever is worse than an explicit failure.
+    async _markRecordingFailed(recordingId, token, base) {
+        try {
+            await fetch(`${base}/v1/me/recordings/${recordingId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body: JSON.stringify({ status: 'failed' }),
+            });
+        } catch { /* the failure is already reported to the user */ }
+    }
+
+    _setRecordButtonState(recording) {
+        const button = document.getElementById('btnRecord');
+        if (!button) return;
+        button.classList.toggle('recording', !!recording);
+        button.textContent = recording ? '■' : '●';
+        button.title = recording ? t('remote.stopRecording') : t('remote.startRecording');
+    }
+
     _log(message, level = 'info') {
         const container = document.getElementById('logContainer');
         if (container) {
@@ -1443,4 +1706,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const app = new RemoteDesktopApp();
     app.init();
     window.remoteDesktopApp = app;
+
+    const recordButton = document.getElementById('btnRecord');
+    if (recordButton) {
+        recordButton.addEventListener('click', () => {
+            app.toggleRecording();
+        });
+        app._setRecordButtonState(false);
+    }
 });

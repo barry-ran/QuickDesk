@@ -55,6 +55,19 @@ Window {
     //   packetRate, codec, frameQuality, encodedRectWidth, encodedRectHeight }
     property var performanceStatsMap: ({})
     property int statsVersion: 0  // Increment to notify changes
+
+    // Toggle control-side session recording for the active connection.
+    function toggleSessionRecording() {
+        var devId = currentTabIndex >= 0 && currentTabIndex < connectionModel.count
+            ? connectionModel.deviceIdAt(currentTabIndex)
+            : ""
+        if (!devId) return
+        if (mainController.deviceRecorder.recording) {
+            mainController.deviceRecorder.stopRecording()
+        } else {
+            mainController.deviceRecorder.startRecording(devId)
+        }
+    }
     
     // Get performance stats for a connection
     function getPerformanceStats(deviceId) {
@@ -568,6 +581,58 @@ Window {
     Item {
         anchors.fill: parent
         
+        // Control-side session recording. Records the decoded remote frames the
+        // view is showing (not the local screen), then uploads the MP4 and files
+        // it under the user's recordings.
+        Rectangle {
+            id: recordButton
+            x: Theme.spacingXLarge
+            y: Theme.spacingXLarge + (remoteWindow.tabBarShown ? tabBar.height : 0)
+            z: 1000
+            width: 34
+            height: 34
+            radius: 17
+            visible: connectionModel.count > 0
+            color: mainController.deviceRecorder.recording
+                ? "#e5484d" : Qt.rgba(1, 1, 1, 0.12)
+            border.width: 1
+            border.color: Qt.rgba(1, 1, 1, 0.22)
+
+            Text {
+                anchors.centerIn: parent
+                text: mainController.deviceRecorder.recording ? "■" : "●"
+                color: mainController.deviceRecorder.recording ? "white" : "#e5484d"
+                font.pixelSize: 15
+            }
+
+            MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                onClicked: {
+                    remoteWindow.toggleSessionRecording()
+                }
+            }
+
+            // Expose the control to accessibility tooling and automation.
+            Accessible.role: Accessible.Button
+            Accessible.name: qsTr("Record this session")
+            Accessible.onPressAction: remoteWindow.toggleSessionRecording()
+
+            ToolTip.visible: hoverHandler.hovered
+            ToolTip.text: mainController.deviceRecorder.recording
+                ? qsTr("Stop recording and upload")
+                : qsTr("Record this session")
+
+            HoverHandler { id: hoverHandler }
+        }
+
+        // Keyboard equivalent of the record button.
+        Shortcut {
+            sequence: "Ctrl+Shift+R"
+            enabled: connectionModel.count > 0
+            onActivated: remoteWindow.toggleSessionRecording()
+        }
+
         // Single floating button bound to current active connection
         FloatingToolButton {
             x: parent.width - width - Theme.spacingXLarge

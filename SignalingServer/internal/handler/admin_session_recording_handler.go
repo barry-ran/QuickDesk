@@ -2,6 +2,7 @@ package handler
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -16,15 +17,70 @@ import (
 // /v1/admin/recordings. It exposes read + delete only; recording metadata is
 // still produced by the user API and the control engine.
 type AdminSessionRecordingHandler struct {
-	recordings *service.SessionRecordingService
-	audit      *service.AuditService
+	recordings    *service.SessionRecordingService
+	audit         *service.AuditService
+	lifecycle     *service.RecordingLifecycle
+	retentionDays int
+	staleMinutes  int
 }
 
 func NewAdminSessionRecordingHandler(
 	recordings *service.SessionRecordingService,
 	audit *service.AuditService,
+	lifecycle *service.RecordingLifecycle,
+	retentionDays int,
+	staleMinutes int,
 ) *AdminSessionRecordingHandler {
-	return &AdminSessionRecordingHandler{recordings: recordings, audit: audit}
+	return &AdminSessionRecordingHandler{
+		recordings:    recordings,
+		audit:         audit,
+		lifecycle:     lifecycle,
+		retentionDays: retentionDays,
+		staleMinutes:  staleMinutes,
+	}
+}
+
+// Storage reports how much recording media is retained.
+func (h *AdminSessionRecordingHandler) Storage(c *gin.Context) {
+	usage, err := h.recordings.ArtifactUsage(c.Request.Context())
+	if err != nil {
+		ProblemInternal(c, err.Error())
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"artifact_count":      usage.Count,
+		"total_bytes":         usage.TotalBytes,
+		"retention_days":      h.retentionDays,
+		"stale_after_minutes": h.staleMinutes,
+	})
+}
+
+// Sweep runs the retention/stale pass on demand. The periodic runner calls the
+// same code path, so an admin can verify behaviour without waiting for a tick.
+func (h *AdminSessionRecordingHandler) Sweep(c *gin.Context) {
+	if h.lifecycle == nil {
+		ProblemBadRequest(c, ProblemCodeInvalidRequest, "recording lifecycle is not configured")
+		return
+	}
+	result, err := h.lifecycle.SweepOnce(c.Request.Context())
+	if err != nil {
+		ProblemInternal(c, err.Error())
+		return
+	}
+	if h.audit != nil {
+		h.audit.Log(c.Request.Context(), middleware.MustAdminID(c), "", "recording.sweep",
+			"session_recording", "",
+			fmt.Sprintf("stale=%d purged=%d freed_bytes=%d orphans=%d",
+				result.StaleMarkedFailed, result.ArtifactsPurged, result.BytesFreed,
+				result.OrphansRemoved),
+			c.ClientIP())
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"stale_marked_failed": result.StaleMarkedFailed,
+		"artifacts_purged":    result.ArtifactsPurged,
+		"bytes_freed":         result.BytesFreed,
+		"orphans_removed":     result.OrphansRemoved,
+	})
 }
 
 func (h *AdminSessionRecordingHandler) List(c *gin.Context) {

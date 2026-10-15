@@ -3,6 +3,9 @@ package service
 import (
 	"context"
 	"errors"
+	"log"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -15,10 +18,12 @@ import (
 // Media production remains the responsibility of the remote-control engine.
 type SessionRecordingService struct {
 	db *gorm.DB
+	// removeFile is a seam for tests; production deletes through os.Remove.
+	removeFile func(string) error
 }
 
 func NewSessionRecordingService(db *gorm.DB) *SessionRecordingService {
-	return &SessionRecordingService{db: db}
+	return &SessionRecordingService{db: db, removeFile: os.Remove}
 }
 
 type CreateSessionRecordingInput struct {
@@ -217,6 +222,12 @@ func (s *SessionRecordingService) Get(
 }
 
 func (s *SessionRecordingService) Delete(ctx context.Context, userID uint, id uint) error {
+	var row models.SessionRecording
+	if err := s.db.WithContext(ctx).
+		Where("id = ? AND user_id = ?", id, userID).
+		First(&row).Error; err != nil {
+		return err
+	}
 	result := s.db.WithContext(ctx).
 		Where("id = ? AND user_id = ?", id, userID).
 		Delete(&models.SessionRecording{})
@@ -226,7 +237,36 @@ func (s *SessionRecordingService) Delete(ctx context.Context, userID uint, id ui
 	if result.RowsAffected == 0 {
 		return gorm.ErrRecordNotFound
 	}
+	// The row is the only record of where the bytes live, so the files have to
+	// go with it - otherwise every delete leaks a video nothing can ever
+	// reclaim (the retention sweep works from rows).
+	s.removeStoredMedia(row)
 	return nil
+}
+
+// removeStoredMedia drops the media files a row pointed at. A failure is
+// reported but not fatal: the row is already gone, and the lifecycle's orphan
+// pass will retry the deletion later.
+func (s *SessionRecordingService) removeStoredMedia(row models.SessionRecording) {
+	for _, path := range []string{row.ArtifactPath, row.ThumbnailPath} {
+		path = strings.TrimSpace(path)
+		if path == "" {
+			continue
+		}
+		if err := s.removeFile(path); err != nil && !os.IsNotExist(err) {
+			log.Printf("[Recording] could not delete stored media %s: %v", path, err)
+		}
+	}
+}
+
+// Exists reports whether a recording id is still indexed.
+func (s *SessionRecordingService) Exists(ctx context.Context, id uint) (bool, error) {
+	var count int64
+	err := s.db.WithContext(ctx).
+		Model(&models.SessionRecording{}).
+		Where("id = ?", id).
+		Count(&count).Error
+	return count > 0, err
 }
 
 // SessionRecordingAdminListParams filters the cross-user recording index used
@@ -288,6 +328,10 @@ func (s *SessionRecordingService) GetAdmin(ctx context.Context, id uint) (*model
 
 // DeleteAdmin removes a recording regardless of owner.
 func (s *SessionRecordingService) DeleteAdmin(ctx context.Context, id uint) error {
+	var row models.SessionRecording
+	if err := s.db.WithContext(ctx).Where("id = ?", id).First(&row).Error; err != nil {
+		return err
+	}
 	result := s.db.WithContext(ctx).
 		Where("id = ?", id).
 		Delete(&models.SessionRecording{})
@@ -297,5 +341,279 @@ func (s *SessionRecordingService) DeleteAdmin(ctx context.Context, id uint) erro
 	if result.RowsAffected == 0 {
 		return gorm.ErrRecordNotFound
 	}
+	s.removeStoredMedia(row)
 	return nil
+}
+
+// ---------------------------------------------------------------------
+// Media artifacts
+//
+// The control plane never inspects media bytes; it accepts an uploaded
+// artifact, stores it outside any statically served directory, and hands it
+// back through an ownership-checked route.
+// ---------------------------------------------------------------------
+
+var (
+	ErrArtifactTooLarge   = errors.New("artifact exceeds the configured upload limit")
+	ErrArtifactEmpty      = errors.New("artifact is empty")
+	ErrArtifactTypeDenied = errors.New("unsupported artifact extension")
+)
+
+// artifactExtensions is an allow-list. Recordings are media files, never
+// executables, so anything unrecognised is rejected instead of being stored
+// under a guessed name.
+var artifactExtensions = map[string]string{
+	".mp4":  "mp4",
+	".m4v":  "mp4",
+	".mkv":  "mkv",
+	".webm": "webm",
+	".h264": "h264",
+	".grf":  "grf",
+}
+
+// NormalizeArtifactExtension returns the lower-cased extension when it is on
+// the allow-list, including the leading dot.
+func NormalizeArtifactExtension(filename string) (string, error) {
+	ext := strings.ToLower(filepath.Ext(strings.TrimSpace(filename)))
+	if _, ok := artifactExtensions[ext]; !ok {
+		return "", ErrArtifactTypeDenied
+	}
+	return ext, nil
+}
+
+// ArtifactFormat maps a stored extension back to the value persisted in the
+// `format` column.
+func ArtifactFormat(ext string) string {
+	return artifactExtensions[strings.ToLower(ext)]
+}
+
+// ArtifactPath builds the on-disk location for one recording. Each user gets
+// its own directory and the file name is derived from the recording id, so a
+// hostile upload filename can never influence the resulting path.
+func ArtifactPath(baseDir string, userID uint, recordingID uint, ext string) string {
+	name := "rec-" + formatUintID(recordingID) + ext
+	return filepath.Join(baseDir, formatUintID(userID), name)
+}
+
+// ArtifactURL is the relative route the clients resolve against the server
+// base URL. Storing the route (rather than an absolute URL) keeps the value
+// valid no matter which host name the deployment is reached by.
+func ArtifactURL(recordingID uint) string {
+	return "/v1/me/recordings/" + formatUintID(recordingID) + "/artifact"
+}
+
+func formatUintID(v uint) string {
+	if v == 0 {
+		return "0"
+	}
+	var buf [20]byte
+	i := len(buf)
+	for v > 0 {
+		i--
+		buf[i] = byte('0' + v%10)
+		v /= 10
+	}
+	return string(buf[i:])
+}
+
+// AttachArtifact records the stored media file on an existing row. The caller
+// has already written the bytes to disk; this only updates the index.
+func (s *SessionRecordingService) AttachArtifact(
+	ctx context.Context,
+	userID uint,
+	id uint,
+	storedPath string,
+	ext string,
+	sizeBytes int64,
+) (*models.SessionRecording, error) {
+	if sizeBytes <= 0 {
+		return nil, ErrArtifactEmpty
+	}
+	format := ArtifactFormat(ext)
+	if format == "" {
+		return nil, ErrArtifactTypeDenied
+	}
+	updates := map[string]interface{}{
+		"artifact_path": storedPath,
+		"artifact_url":  ArtifactURL(id),
+		"size_bytes":    sizeBytes,
+		"format":        format,
+		"updated_at":    time.Now().UTC(),
+	}
+	result := s.db.WithContext(ctx).
+		Model(&models.SessionRecording{}).
+		Where("id = ? AND user_id = ?", id, userID).
+		Updates(updates)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	if result.RowsAffected == 0 {
+		return nil, gorm.ErrRecordNotFound
+	}
+	row, err := s.Get(ctx, userID, id)
+	if err != nil {
+		return nil, err
+	}
+	// Once the bytes are on the server "completed" is the truth, whatever the row
+	// said before: without this, re-uploading a capture that failed earlier would
+	// store the file and still leave the row reading "failed". A client that
+	// reports failure after this point still wins, because its PATCH lands later.
+	if row.Status != "completed" {
+		row, err = s.Update(ctx, userID, id, UpdateSessionRecordingInput{Status: strPtr("completed")})
+		if err != nil {
+			return nil, err
+		}
+	}
+	return row, nil
+}
+
+// ArtifactFor loads a recording and asserts ownership before the handler
+// streams bytes. Returning the row keeps the handler free of ownership logic.
+func (s *SessionRecordingService) ArtifactFor(ctx context.Context, userID uint, id uint) (*models.SessionRecording, error) {
+	row, err := s.Get(ctx, userID, id)
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(row.ArtifactPath) == "" {
+		return nil, gorm.ErrRecordNotFound
+	}
+	return row, nil
+}
+
+// ArtifactForAdmin is the cross-user variant used by the admin download route.
+func (s *SessionRecordingService) ArtifactForAdmin(ctx context.Context, id uint) (*models.SessionRecording, error) {
+	row, err := s.GetAdmin(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(row.ArtifactPath) == "" {
+		return nil, gorm.ErrRecordNotFound
+	}
+	return row, nil
+}
+
+func strPtr(v string) *string { return &v }
+
+// ---------------------------------------------------------------------
+// Thumbnails
+//
+// A thumbnail is a small still image used by the recordings list. It shares the
+// artifact storage rules (allow-list, derived file name, no static mount) but is
+// validated by content, not just by extension: an image route is a much more
+// attractive place to smuggle something than a video one.
+// ---------------------------------------------------------------------
+
+var thumbnailExtensions = map[string]string{
+	".jpg":  "image/jpeg",
+	".jpeg": "image/jpeg",
+	".png":  "image/png",
+}
+
+// ErrInvalidThumbnailContent means the bytes do not look like the declared type.
+var ErrInvalidThumbnailContent = errors.New("thumbnail bytes do not match an allowed image type")
+
+// NormalizeThumbnailExtension accepts jpg/jpeg/png.
+func NormalizeThumbnailExtension(filename string) (string, error) {
+	ext := strings.ToLower(filepath.Ext(strings.TrimSpace(filename)))
+	if _, ok := thumbnailExtensions[ext]; !ok {
+		return "", ErrArtifactTypeDenied
+	}
+	return ext, nil
+}
+
+// ThumbnailContentType maps a stored extension to the response content type.
+func ThumbnailContentType(ext string) string {
+	return thumbnailExtensions[strings.ToLower(ext)]
+}
+
+// ThumbnailExtensionForType returns the canonical on-disk extension for a
+// sniffed image content type, or "" when the type is not allowed.
+func ThumbnailExtensionForType(contentType string) string {
+	switch strings.ToLower(strings.TrimSpace(contentType)) {
+	case "image/jpeg":
+		return ".jpg"
+	case "image/png":
+		return ".png"
+	}
+	return ""
+}
+
+// SniffThumbnailType verifies the leading bytes of an upload.
+func SniffThumbnailType(head []byte) (string, error) {
+	if len(head) >= 3 && head[0] == 0xFF && head[1] == 0xD8 && head[2] == 0xFF {
+		return "image/jpeg", nil
+	}
+	if len(head) >= 8 && head[0] == 0x89 && head[1] == 'P' && head[2] == 'N' && head[3] == 'G' &&
+		head[4] == 0x0D && head[5] == 0x0A && head[6] == 0x1A && head[7] == 0x0A {
+		return "image/png", nil
+	}
+	return "", ErrInvalidThumbnailContent
+}
+
+// ThumbnailPath mirrors ArtifactPath: the name comes from the ids, never from
+// the uploaded file name.
+func ThumbnailPath(baseDir string, userID uint, recordingID uint, ext string) string {
+	name := "thumb-" + formatUintID(recordingID) + ext
+	return filepath.Join(baseDir, formatUintID(userID), name)
+}
+
+// ThumbnailURL is the relative route clients resolve against the server base.
+func ThumbnailURL(recordingID uint) string {
+	return "/v1/me/recordings/" + formatUintID(recordingID) + "/thumbnail"
+}
+
+// AttachThumbnail records the stored preview image on an existing row.
+func (s *SessionRecordingService) AttachThumbnail(
+	ctx context.Context,
+	userID uint,
+	id uint,
+	storedPath string,
+	ext string,
+	sizeBytes int64,
+) (*models.SessionRecording, error) {
+	if sizeBytes <= 0 {
+		return nil, ErrArtifactEmpty
+	}
+	if ThumbnailContentType(ext) == "" {
+		return nil, ErrArtifactTypeDenied
+	}
+	result := s.db.WithContext(ctx).
+		Model(&models.SessionRecording{}).
+		Where("id = ? AND user_id = ?", id, userID).
+		Updates(map[string]interface{}{
+			"thumbnail_path": storedPath,
+			"thumbnail_url":  ThumbnailURL(id),
+			"updated_at":     time.Now().UTC(),
+		})
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	if result.RowsAffected == 0 {
+		return nil, gorm.ErrRecordNotFound
+	}
+	return s.Get(ctx, userID, id)
+}
+
+// ThumbnailFor returns the row when it owns a preview image.
+func (s *SessionRecordingService) ThumbnailFor(ctx context.Context, userID uint, id uint) (*models.SessionRecording, error) {
+	row, err := s.Get(ctx, userID, id)
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(row.ThumbnailPath) == "" {
+		return nil, gorm.ErrRecordNotFound
+	}
+	return row, nil
+}
+
+// ThumbnailForAdmin is the cross-user variant.
+func (s *SessionRecordingService) ThumbnailForAdmin(ctx context.Context, id uint) (*models.SessionRecording, error) {
+	row, err := s.GetAdmin(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(row.ThumbnailPath) == "" {
+		return nil, gorm.ErrRecordNotFound
+	}
+	return row, nil
 }
