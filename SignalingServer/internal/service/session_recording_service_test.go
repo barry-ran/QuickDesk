@@ -1,6 +1,9 @@
 package service
 
-import "testing"
+import (
+	"context"
+	"testing"
+)
 
 func TestValidateSessionRecordingInput(t *testing.T) {
 	tests := []struct {
@@ -46,6 +49,39 @@ func TestValidateSessionRecordingInput(t *testing.T) {
 			err := ValidateSessionRecordingInput(tt.in)
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("wantErr=%v got %v", tt.wantErr, err)
+			}
+		})
+	}
+}
+
+func TestSessionRecordingUpdateValidation(t *testing.T) {
+	badStatus := "paused"
+	negativeDuration := -1
+	negativeSize := int64(-1)
+
+	service := &SessionRecordingService{}
+	tests := []struct {
+		name string
+		in   UpdateSessionRecordingInput
+	}{
+		{
+			name: "invalid status",
+			in:   UpdateSessionRecordingInput{Status: &badStatus},
+		},
+		{
+			name: "negative duration",
+			in:   UpdateSessionRecordingInput{DurationSeconds: &negativeDuration},
+		},
+		{
+			name: "negative size",
+			in:   UpdateSessionRecordingInput{SizeBytes: &negativeSize},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, err := service.Update(context.Background(), 1, 1, tt.in); err == nil {
+				t.Fatal("expected validation error")
 			}
 		})
 	}
