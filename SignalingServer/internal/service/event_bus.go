@@ -51,6 +51,10 @@ const (
 	EventFavoriteUpdated = "favorite.updated"
 	EventFavoriteRemoved = "favorite.removed"
 
+	EventRecordingCreated = "recording.created"
+	EventRecordingUpdated = "recording.updated"
+	EventRecordingDeleted = "recording.deleted"
+
 	EventSessionRevoked  = "session.revoked"
 	EventTurnConfigChang = "turn.config.changed"
 )
