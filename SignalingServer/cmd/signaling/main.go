@@ -72,6 +72,7 @@ func main() {
 			&models.UserDevice{},
 			&models.ConnectionHistory{},
 			&models.UserFavorite{},
+			&models.SessionRecording{},
 			&models.AdminUser{},
 			&models.AuditLog{},
 			&models.Settings{},
@@ -115,6 +116,7 @@ func main() {
 	userService := service.NewUserService(db, service.UserServiceDeps{DeviceUnbinder: deviceRepo})
 	favoriteService := service.NewFavoriteService(db)
 	connectionService := service.NewConnectionService(db)
+	sessionRecordingService := service.NewSessionRecordingService(db)
 	tokenService := service.NewTokenService(redisClient)
 	rateLimitService := service.NewRateLimitService(redisClient)
 	metricsService := service.NewMetricsService()
@@ -169,6 +171,7 @@ func main() {
 	authHandler := handler.NewAuthHandler(userService, tokenService, smsService, bus)
 	meHandler := handler.NewMeHandler(userService, tokenService, smsService, bus)
 	deviceHandler := handler.NewDeviceHandler(deviceService, favoriteService, connectionService, presenceService, bus, db)
+	sessionRecordingHandler := handler.NewSessionRecordingHandler(sessionRecordingService)
 	hostHandler := handler.NewHostHandler(deviceService, tokenService, presenceService, settingsService, rateLimitService, bus, cfg)
 	realtimeHandler := handler.NewRealtimeHandler(tokenService, bus, presenceService, db, deviceService, favoriteService, metricsService, redisClient)
 
@@ -266,6 +269,10 @@ func main() {
 
 			me.GET("/connections", deviceHandler.ListConnections)
 			me.POST("/connections", deviceHandler.RecordConnection)
+			me.GET("/recordings", sessionRecordingHandler.List)
+			me.POST("/recordings", sessionRecordingHandler.Create)
+			me.GET("/recordings/:id", sessionRecordingHandler.Get)
+			me.DELETE("/recordings/:id", sessionRecordingHandler.Delete)
 
 			me.GET("/favorites", deviceHandler.ListFavorites)
 			me.POST("/favorites", deviceHandler.AddFavorite)
