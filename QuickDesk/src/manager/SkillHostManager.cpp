@@ -7,6 +7,8 @@
 
 #include <QJsonDocument>
 #include <QProcess>
+#include <QRegularExpression>
+#include <QStringList>
 #include <QTimer>
 
 namespace quickdesk {
@@ -74,6 +76,23 @@ void SkillHostManager::startSkillHost(const QString& skillHostPath, const QStrin
 
     connect(m_skillHostProcess, &QProcess::readyReadStandardOutput,
             this, &SkillHostManager::onSkillHostStdout);
+    // The skill host writes skill load failures (and everything else tracing
+    // produces) to stderr. Without this the app only ever saw "0 tool(s)" and
+    // had no way to say why, so keep those lines in the app log.
+    connect(m_skillHostProcess, &QProcess::readyReadStandardError, this, [this]() {
+        if (!m_skillHostProcess) {
+            return;
+        }
+        QString text = QString::fromUtf8(m_skillHostProcess->readAllStandardError());
+        // tracing_subscriber colours its output; the log file should not carry
+        // the escape sequences.
+        static const QRegularExpression ansi(QStringLiteral("\u001b\\[[0-9;]*m"));
+        text.remove(ansi);
+        const QStringList lines = text.split(QLatin1Char('\n'), Qt::SkipEmptyParts);
+        for (const QString& line : lines) {
+            LOG_WARN("SkillHost: {}", line.trimmed().toStdString());
+        }
+    });
     connect(m_skillHostProcess,
             QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
             this, &SkillHostManager::onSkillHostFinished);

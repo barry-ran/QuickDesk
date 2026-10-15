@@ -48,6 +48,30 @@ impl McpClient {
         command.stdout(Stdio::piped());
         command.stderr(Stdio::inherit());
 
+        // Skills live in their own directory (skills/<name>/), but the MSVC
+        // runtime they are linked against ships next to the skill host in the
+        // application directory. Windows only searches a process' own directory
+        // and PATH for dependencies, so without this the child dies with
+        // STATUS_DLL_NOT_FOUND (0xC0000135) before it can answer the handshake -
+        // which is exactly what made every skill register zero tools.
+        if let Ok(current) = std::env::current_exe() {
+            if let Some(app_dir) = current.parent() {
+                let mut search = vec![app_dir.to_path_buf()];
+                if let Some(existing) = std::env::var_os("PATH") {
+                    search.extend(std::env::split_paths(&existing));
+                }
+                match std::env::join_paths(search) {
+                    Ok(joined) => {
+                        command.env("PATH", joined);
+                    }
+                    Err(e) => warn!(
+                        "McpClient[{}]: could not extend PATH for the skill: {}",
+                        self.skill_name, e
+                    ),
+                }
+            }
+        }
+
         let mut child = command.spawn()?;
         let stdin = child.stdin.take().unwrap();
         let stdout = child.stdout.take().unwrap();
