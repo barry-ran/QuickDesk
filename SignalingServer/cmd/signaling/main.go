@@ -272,6 +272,7 @@ func main() {
 			me.GET("/recordings", sessionRecordingHandler.List)
 			me.POST("/recordings", sessionRecordingHandler.Create)
 			me.GET("/recordings/:id", sessionRecordingHandler.Get)
+			me.PATCH("/recordings/:id", sessionRecordingHandler.Update)
 			me.DELETE("/recordings/:id", sessionRecordingHandler.Delete)
 
 			me.GET("/favorites", deviceHandler.ListFavorites)
