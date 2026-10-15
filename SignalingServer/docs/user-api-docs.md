@@ -344,6 +344,14 @@ The unified envelope is `{items: [DeviceItem], next_cursor}`. Every
 |---|---|---|
 | `GET` | `/v1/me/connections?cursor=&limit=&since=` | — |
 | `POST` | `/v1/me/connections` | `{device_id, duration, status: "success"\|"failed", error_msg?}` |
+| `GET` | `/v1/me/recordings?cursor=&limit=` | — |
+| `POST` | `/v1/me/recordings` | `{device_id, device_name?, session_id?, status, format?, artifact_path?, artifact_url?, thumbnail_path?, duration_seconds?, size_bytes?, started_at?, ended_at?}` |
+| `GET` | `/v1/me/recordings/:id` | — |
+| `DELETE` | `/v1/me/recordings/:id` | — |
+
+`session_recordings` is the control-plane index for remote-session media. The
+recording engine owns the artifact and reports its metadata through
+`POST /v1/me/recordings`; the API does not stream media bytes itself.
 
 ### 5.5 Favorites
 
