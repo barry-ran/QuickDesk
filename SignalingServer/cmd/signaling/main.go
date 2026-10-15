@@ -183,6 +183,7 @@ func main() {
 	adminSettingsHandler := handler.NewAdminSettingsHandler(settingsService, bus, auditService)
 	adminPresetHandler := handler.NewAdminPresetHandler(presetService, auditService)
 	adminAuditHandler := handler.NewAdminAuditHandler(auditService)
+	adminSessionRecordingHandler := handler.NewAdminSessionRecordingHandler(sessionRecordingService, auditService)
 	adminLogsHandler := handler.NewAdminLogsHandler(
 		auditService,
 		db,
@@ -385,6 +386,11 @@ func main() {
 		// Audit logs.
 		adminGuarded.GET("/audit-logs", adminAuditHandler.List)
 		adminGuarded.GET("/audit-logs:export", adminLogsHandler.ExportAudit)
+
+		// Session recordings (cross-user index).
+		adminGuarded.GET("/recordings", adminSessionRecordingHandler.List)
+		adminGuarded.GET("/recordings/:id", adminSessionRecordingHandler.Get)
+		adminGuarded.DELETE("/recordings/:id", adminSessionRecordingHandler.Delete)
 
 		// Raw operational log downloads are intentionally restricted to
 		// super administrators and a fixed server-side file allow-list.
