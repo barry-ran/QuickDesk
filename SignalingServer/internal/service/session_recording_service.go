@@ -228,3 +228,74 @@ func (s *SessionRecordingService) Delete(ctx context.Context, userID uint, id ui
 	}
 	return nil
 }
+
+// SessionRecordingAdminListParams filters the cross-user recording index used
+// by the admin console.
+type SessionRecordingAdminListParams struct {
+	AfterID  uint
+	Limit    int
+	UserID   uint
+	DeviceID string
+	Status   string
+	Search   string
+}
+
+// ListAdmin returns recordings across all users plus the total match count.
+func (s *SessionRecordingService) ListAdmin(
+	ctx context.Context,
+	p SessionRecordingAdminListParams,
+) ([]models.SessionRecording, int64, error) {
+	q := s.db.WithContext(ctx).Model(&models.SessionRecording{})
+	if p.UserID > 0 {
+		q = q.Where("user_id = ?", p.UserID)
+	}
+	if p.DeviceID != "" {
+		q = q.Where("device_id = ?", strings.TrimSpace(p.DeviceID))
+	}
+	if p.Status != "" {
+		q = q.Where("status = ?", strings.TrimSpace(p.Status))
+	}
+	if p.Search != "" {
+		like := "%" + strings.TrimSpace(p.Search) + "%"
+		q = q.Where("device_name LIKE ? OR session_id LIKE ?", like, like)
+	}
+	var total int64
+	if err := q.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	if p.AfterID > 0 {
+		q = q.Where("id > ?", p.AfterID)
+	}
+	limit := p.Limit
+	if limit <= 0 {
+		limit = 50
+	}
+	var rows []models.SessionRecording
+	if err := q.Order("id ASC").Limit(limit).Find(&rows).Error; err != nil {
+		return nil, 0, err
+	}
+	return rows, total, nil
+}
+
+// GetAdmin loads a single recording regardless of owner.
+func (s *SessionRecordingService) GetAdmin(ctx context.Context, id uint) (*models.SessionRecording, error) {
+	var row models.SessionRecording
+	if err := s.db.WithContext(ctx).Where("id = ?", id).First(&row).Error; err != nil {
+		return nil, err
+	}
+	return &row, nil
+}
+
+// DeleteAdmin removes a recording regardless of owner.
+func (s *SessionRecordingService) DeleteAdmin(ctx context.Context, id uint) error {
+	result := s.db.WithContext(ctx).
+		Where("id = ?", id).
+		Delete(&models.SessionRecording{})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
+}
