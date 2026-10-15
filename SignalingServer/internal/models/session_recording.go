@@ -16,6 +16,7 @@ type SessionRecording struct {
 	ArtifactPath    string     `gorm:"size:500" json:"artifact_path"`
 	ArtifactURL     string     `gorm:"size:1000" json:"artifact_url"`
 	ThumbnailPath   string     `gorm:"size:500" json:"thumbnail_path"`
+	ThumbnailURL    string     `gorm:"size:1000" json:"thumbnail_url"`
 	DurationSeconds int        `json:"duration_seconds"`
 	SizeBytes       int64      `json:"size_bytes"`
 	StartedAt       time.Time  `json:"started_at"`

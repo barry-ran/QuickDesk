@@ -45,6 +45,15 @@
         <!-- List -->
         <div v-else>
           <div v-for="r in recordings" :key="r.id" class="recording-item">
+            <div class="recording-thumb" :class="{ empty: !thumbs[r.id] }">
+              <img
+                v-if="thumbs[r.id]"
+                :src="thumbs[r.id]"
+                :alt="$t('recordings.preview')"
+                loading="lazy"
+              />
+              <span v-else aria-hidden="true">🎞️</span>
+            </div>
             <div :class="['status-dot', statusClass(r.status)]"></div>
             <div class="recording-info">
               <div class="recording-name">
@@ -102,7 +111,7 @@
 </template>
 
 <script setup>
-import { computed, ref, inject, onMounted } from 'vue'
+import { computed, reactive, ref, inject, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { userApi } from '../api/userApi'
 
@@ -118,6 +127,8 @@ const error = ref('')
 const busy = ref(null)          // id currently being mutated
 const detailFor = ref(null)     // id expanded
 const detail = ref(null)        // fetched GET /v1/me/recordings/:id payload
+const thumbs = reactive({})     // id → displayable preview URL
+const thumbsPending = new Set() // ids with a preview request in flight
 const hasMore = computed(() => !!nextCursor.value)
 
 function statusClass(status) {
@@ -191,6 +202,7 @@ async function loadPage(cursor) {
     const items = Array.isArray(r.data?.items) ? r.data.items : []
     recordings.value = cursor ? recordings.value.concat(items) : items
     nextCursor.value = r.data?.next_cursor || ''
+    ensureThumbnails(items)
   } finally {
     loading.value = false
   }
@@ -199,7 +211,57 @@ async function loadPage(cursor) {
 function refresh() {
   detailFor.value = null
   detail.value = null
+  clearThumbs()
   return loadPage('')
+}
+
+// A preview is never worth blocking the list for: kick off the request and let
+// the placeholder hold its place until the image arrives (or never does).
+function ensureThumbnails(rows) {
+  for (const row of rows) {
+    if (!row || !row.id || !row.thumbnail_url) continue
+    if (thumbs[row.id] || thumbsPending.has(row.id)) continue
+    thumbsPending.add(row.id)
+    loadThumbnail(row)
+      .then((url) => { if (url) thumbs[row.id] = url })
+      .finally(() => thumbsPending.delete(row.id))
+  }
+}
+
+function clearThumbs() {
+  for (const key of Object.keys(thumbs)) {
+    const url = thumbs[key]
+    // Blob URLs are owned by this page; the signed URLs are not.
+    if (typeof url === 'string' && url.startsWith('blob:')) URL.revokeObjectURL(url)
+    delete thumbs[key]
+  }
+}
+
+async function loadThumbnail(row) {
+  // Prefer a signed URL, because an <img> cannot carry the Bearer token.
+  try {
+    const r = await userApi.createRecordingThumbnailTicket(row.id)
+    if (r.ok && r.data && r.data.url) {
+      return resolveMediaUrl({ ...row, artifact_url: r.data.url })
+    }
+  } catch { /* fall through to the authenticated fetch */ }
+  // Deployments that disable tickets still work: fetch the bytes ourselves and
+  // hand the tag a blob URL, which needs no headers of its own.
+  return fetchThumbnailBlob(row)
+}
+
+async function fetchThumbnailBlob(row) {
+  const direct = resolveMediaUrl({ ...row, artifact_url: row.thumbnail_url })
+  const token = userApi.getToken()
+  if (!direct || !token) return null
+  try {
+    const res = await fetch(direct, { headers: { Authorization: `Bearer ${token}` } })
+    if (!res.ok) return null
+    const blob = await res.blob()
+    return blob.size > 0 ? URL.createObjectURL(blob) : null
+  } catch {
+    return null
+  }
 }
 
 function loadMore() {
@@ -211,14 +273,14 @@ function loadMore() {
 // may have been finalized after the session ended (GET /v1/me/recordings/:id).
 async function playRecording(row) {
   const fresh = await loadDetail(row.id)
-  const url = resolveMediaUrl(fresh || row)
+  const url = await playbackUrl(fresh || row)
   if (!url) { showToast(t('recordings.noMediaHint'), 'info'); return }
   window.open(url, `quickdesk_recording_${row.id}`)
 }
 
 async function downloadRecording(row) {
   const fresh = await loadDetail(row.id)
-  const url = resolveMediaUrl(fresh || row)
+  const url = await playbackUrl(fresh || row)
   if (!url) { showToast(t('recordings.noMediaHint'), 'info'); return }
   const a = document.createElement('a')
   a.href = url
@@ -227,6 +289,20 @@ async function downloadRecording(row) {
   document.body.appendChild(a)
   a.click()
   a.remove()
+}
+
+// Browsers cannot attach the Bearer token to <video src>, window.open or
+// <a download>, so ask the server for a short-lived signed URL first. If tickets
+// are unavailable on this deployment we fall back to the plain artifact URL,
+// which still works when the server is reached without the API-key gate.
+async function playbackUrl(row) {
+  const direct = resolveMediaUrl(row)
+  if (!direct) return null
+  try {
+    const r = await userApi.createRecordingTicket(row.id)
+    if (r.ok && r.data && r.data.url) return resolveMediaUrl({ ...row, artifact_url: r.data.url })
+  } catch { /* fall through to the direct URL */ }
+  return direct
 }
 
 function suggestedFilename(row) {
@@ -273,6 +349,10 @@ async function removeRecording(row) {
     }
     recordings.value = recordings.value.filter(x => x.id !== row.id)
     if (detailFor.value === row.id) { detailFor.value = null; detail.value = null }
+    if (thumbs[row.id]) {
+      if (String(thumbs[row.id]).startsWith('blob:')) URL.revokeObjectURL(thumbs[row.id])
+      delete thumbs[row.id]
+    }
     showToast(t('recordings.deleted'), 'success')
   } finally {
     busy.value = null
@@ -291,6 +371,15 @@ onMounted(() => {
   transition: background 0.15s;
 }
 .recording-item:hover { background: rgba(255,255,255,0.05); }
+.recording-thumb {
+  width: 96px; height: 54px; flex-shrink: 0;
+  border-radius: 6px; overflow: hidden;
+  background: rgba(255,255,255,0.06);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; opacity: 0.9;
+}
+.recording-thumb.empty { color: var(--text-disabled); }
+.recording-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .status-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
 .status-dot.completed { background: var(--success); }
 .status-dot.recording { background: var(--accent); }
