@@ -92,6 +92,31 @@ CREATE TABLE IF NOT EXISTS connection_histories (
 CREATE INDEX IF NOT EXISTS idx_connhist_user_created ON connection_histories(user_id, created_at DESC);
 
 -- ---------------------------------------------------------------
+-- Session recording index (media artifact owned by engine)
+-- ---------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS session_recordings (
+    id               BIGSERIAL PRIMARY KEY,
+    user_id          BIGINT       NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    device_id        VARCHAR(9)   NOT NULL,
+    device_name      VARCHAR(128),
+    session_id       VARCHAR(64),
+    status           VARCHAR(20)  NOT NULL,
+    format           VARCHAR(20),
+    artifact_path    VARCHAR(500),
+    artifact_url     VARCHAR(1000),
+    thumbnail_path   VARCHAR(500),
+    duration_seconds INTEGER      NOT NULL DEFAULT 0,
+    size_bytes       BIGINT       NOT NULL DEFAULT 0,
+    started_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    ended_at         TIMESTAMPTZ,
+    created_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    updated_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_session_recordings_user_created ON session_recordings(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_session_recordings_device ON session_recordings(device_id);
+CREATE INDEX IF NOT EXISTS idx_session_recordings_session ON session_recordings(session_id);
+
+-- ---------------------------------------------------------------
 -- Favorites
 -- ---------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS user_favorites (
