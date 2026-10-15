@@ -126,6 +126,7 @@ export const zh = {
     deleteFailed: '删除录像失败',
     play: '播放',
     download: '下载',
+    preview: '录像预览图',
     noMedia: '暂无可用媒体',
     noMediaHint: '录制引擎尚未为该会话发布可播放的文件。',
     status: {

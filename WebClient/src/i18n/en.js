@@ -123,6 +123,7 @@ export const en = {
     deleteFailed: 'Failed to delete recording',
     play: 'Play',
     download: 'Download',
+    preview: 'Recording preview',
     noMedia: 'Media not available',
     noMediaHint: 'The recording engine has not published a playable artifact for this session.',
     status: {

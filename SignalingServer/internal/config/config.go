@@ -34,6 +34,19 @@ type SecurityConfig struct {
 	AllowedOrigins []string // Allowed Origin domains for WebClient; empty means disabled
 }
 
+// RecordingConfig controls where uploaded session-recording artifacts land and
+// how large a single upload may be. The directory is deliberately separate from
+// the log directory and is never mounted as a static site.
+type RecordingConfig struct {
+	Dir              string
+	MaxUploadMB      int
+	URLSecret        string
+	TicketTTLSeconds int
+	StaleMinutes     int
+	RetentionDays    int
+	SweepIntervalMin int
+}
+
 type SmsConfig struct {
 	AccessKeyID     string
 	AccessKeySecret string
@@ -43,14 +56,15 @@ type SmsConfig struct {
 }
 
 type Config struct {
-	Server   ServerConfig   `mapstructure:"server"`
-	Database DatabaseConfig `mapstructure:"database"`
-	Redis    RedisConfig    `mapstructure:"redis"`
-	Ice      IceConfig
-	Admin    AdminConfig
-	Security SecurityConfig
-	Sms      SmsConfig
-	Runtime  RuntimeConfig
+	Server    ServerConfig   `mapstructure:"server"`
+	Database  DatabaseConfig `mapstructure:"database"`
+	Redis     RedisConfig    `mapstructure:"redis"`
+	Ice       IceConfig
+	Admin     AdminConfig
+	Security  SecurityConfig
+	Recording RecordingConfig
+	Sms       SmsConfig
+	Runtime   RuntimeConfig
 }
 
 type RuntimeConfig struct {
@@ -122,6 +136,17 @@ func Load() *Config {
 	viper.SetDefault("API_KEY", "")
 	viper.SetDefault("ALLOWED_ORIGINS", "")
 
+	viper.SetDefault("RECORDING_DIR", "data/recordings")
+	viper.SetDefault("RECORDING_MAX_UPLOAD_MB", 2048)
+	viper.SetDefault("RECORDING_URL_SECRET", "")
+	viper.SetDefault("RECORDING_TICKET_TTL_SECONDS", 600)
+	// Recordings stuck in "recording" longer than this are marked failed.
+	viper.SetDefault("RECORDING_STALE_MINUTES", 240)
+	// 0 keeps media forever; any positive value deletes files past the window
+	// while keeping their index rows.
+	viper.SetDefault("RECORDING_RETENTION_DAYS", 0)
+	viper.SetDefault("RECORDING_SWEEP_INTERVAL_MINUTES", 30)
+
 	// Aliyun SMS (optional – leave empty to disable phone features)
 	viper.SetDefault("ALIYUN_SMS_ACCESS_KEY_ID", "")
 	viper.SetDefault("ALIYUN_SMS_ACCESS_KEY_SECRET", "")
@@ -178,6 +203,22 @@ func Load() *Config {
 	cfg.Security = SecurityConfig{
 		APIKey:         viper.GetString("API_KEY"),
 		AllowedOrigins: allowedOrigins,
+	}
+	// Playback tickets reuse the API key when no dedicated secret is set, so a
+	// self-hosted deployment that already gates its API gets working playback
+	// without extra configuration.
+	recordingSecret := viper.GetString("RECORDING_URL_SECRET")
+	if recordingSecret == "" {
+		recordingSecret = cfg.Security.APIKey
+	}
+	cfg.Recording = RecordingConfig{
+		Dir:              viper.GetString("RECORDING_DIR"),
+		MaxUploadMB:      viper.GetInt("RECORDING_MAX_UPLOAD_MB"),
+		URLSecret:        recordingSecret,
+		TicketTTLSeconds: viper.GetInt("RECORDING_TICKET_TTL_SECONDS"),
+		StaleMinutes:     viper.GetInt("RECORDING_STALE_MINUTES"),
+		RetentionDays:    viper.GetInt("RECORDING_RETENTION_DAYS"),
+		SweepIntervalMin: viper.GetInt("RECORDING_SWEEP_INTERVAL_MINUTES"),
 	}
 
 	// Aliyun SMS – enabled only when all four fields are set
