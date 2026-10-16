@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"testing"
@@ -263,5 +264,41 @@ func TestRemoteSessionListIsOwnerScoped(t *testing.T) {
 	}
 	if len(after) != 1 || after[0].Active || after[0].DurationSeconds < 0 {
 		t.Fatalf("after close = %+v, want one finished row with a real duration", after)
+	}
+}
+
+// The detail read is owner-scoped, and it reports "not found" rather than
+// "forbidden" for somebody else's session: a caller must not be able to probe
+// which session ids exist by comparing the two answers.
+func TestRemoteSessionGetForUserIsOwnerScoped(t *testing.T) {
+	db := newRemoteSessionTestDB(t)
+	svc := NewRemoteSessionService(db)
+	ctx := context.Background()
+	seedRemoteSessionDevice(t, db, "700000005", 990205)
+
+	if _, err := svc.Open(ctx, OpenRemoteSessionInput{
+		SessionID: "sig_owned",
+		DeviceID:  "700000005",
+		ClientID:  "controller-owner",
+	}); err != nil {
+		t.Fatalf("open: %v", err)
+	}
+
+	own, err := svc.GetForUser(ctx, 990205, "sig_owned")
+	if err != nil {
+		t.Fatalf("owner lookup: %v", err)
+	}
+	if own.SessionID != "sig_owned" || !own.Active {
+		t.Fatalf("owner lookup = %+v, want the open session", own)
+	}
+
+	if _, err := svc.GetForUser(ctx, 990206, "sig_owned"); !errors.Is(err, gorm.ErrRecordNotFound) {
+		t.Fatalf("another account's lookup error = %v, want record not found", err)
+	}
+	if _, err := svc.GetForUser(ctx, 0, "sig_owned"); !errors.Is(err, gorm.ErrRecordNotFound) {
+		t.Fatalf("ownerless lookup error = %v, want record not found", err)
+	}
+	if _, err := svc.GetForUser(ctx, 990205, "sig_missing"); !errors.Is(err, gorm.ErrRecordNotFound) {
+		t.Fatalf("unknown session error = %v, want record not found", err)
 	}
 }

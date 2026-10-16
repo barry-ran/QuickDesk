@@ -16,14 +16,21 @@
 import * as runtime from '../runtime';
 import type {
   Problem,
+  RemoteSessionDetail,
   RemoteSessionList,
 } from '../models/index';
 import {
     ProblemFromJSON,
     ProblemToJSON,
+    RemoteSessionDetailFromJSON,
+    RemoteSessionDetailToJSON,
     RemoteSessionListFromJSON,
     RemoteSessionListToJSON,
 } from '../models/index';
+
+export interface GetRemoteSessionRequest {
+    sessionId: string;
+}
 
 export interface ListRemoteSessionsRequest {
     status?: ListRemoteSessionsStatusEnum;
@@ -36,6 +43,57 @@ export interface ListRemoteSessionsRequest {
  * 
  */
 export class RemoteSessionsApi extends runtime.BaseAPI {
+
+    /**
+     * What happened in one session: the session row itself, the recordings produced during it, and the device access-log entries that carry its `session_id` (in practice the `session_started` row written when the controller authenticated). The three tables always existed - this is the read that puts them back together.  Owner only. A session belonging to another account is reported as `404` rather than `403`, so a caller cannot probe which session ids exist. Both lists are capped at 100 entries and are empty arrays rather than absent when there is nothing to show. 
+     * One control session with the records that share its id
+     */
+    async getRemoteSessionRaw(requestParameters: GetRemoteSessionRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<RemoteSessionDetail>> {
+        if (requestParameters['sessionId'] == null) {
+            throw new runtime.RequiredError(
+                'sessionId',
+                'Required parameter "sessionId" was null or undefined when calling getRemoteSession().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        if (this.configuration && this.configuration.apiKey) {
+            headerParameters["X-API-Key"] = await this.configuration.apiKey("X-API-Key"); // ApiKeyAuth authentication
+        }
+
+        if (this.configuration && this.configuration.accessToken) {
+            const token = this.configuration.accessToken;
+            const tokenString = await token("BearerAuth", []);
+
+            if (tokenString) {
+                headerParameters["Authorization"] = `Bearer ${tokenString}`;
+            }
+        }
+
+        let urlPath = `/v1/me/remote-sessions/{session_id}`;
+        urlPath = urlPath.replace(`{${"session_id"}}`, encodeURIComponent(String(requestParameters['sessionId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'GET',
+            headers: headerParameters,
+            query: queryParameters,
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => RemoteSessionDetailFromJSON(jsonValue));
+    }
+
+    /**
+     * What happened in one session: the session row itself, the recordings produced during it, and the device access-log entries that carry its `session_id` (in practice the `session_started` row written when the controller authenticated). The three tables always existed - this is the read that puts them back together.  Owner only. A session belonging to another account is reported as `404` rather than `403`, so a caller cannot probe which session ids exist. Both lists are capped at 100 entries and are empty arrays rather than absent when there is nothing to show. 
+     * One control session with the records that share its id
+     */
+    async getRemoteSession(requestParameters: GetRemoteSessionRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<RemoteSessionDetail> {
+        const response = await this.getRemoteSessionRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
 
     /**
      * Who is in the caller\'s machines right now, and who has been.  A remote session is one controller holding a signaling session against a device. It is opened when that controller\'s signaling socket completes authentication and closed when that socket ends, which is the whole lifetime this server can observe: the media path is peer to peer, so a session whose signaling channel is gone is over as far as the control plane is concerned.  `status=active` answers \"who is in right now\", `ended` is history, and the default lists both. `device_id` narrows to one machine. Cursor-paginated, newest first, `next_cursor` absent on the last page. 

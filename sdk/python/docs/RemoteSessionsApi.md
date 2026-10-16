@@ -4,8 +4,107 @@ All URIs are relative to *https://your-signaling-host*
 
 Method | HTTP request | Description
 ------------- | ------------- | -------------
+[**get_remote_session**](RemoteSessionsApi.md#get_remote_session) | **GET** /v1/me/remote-sessions/{session_id} | One control session with the records that share its id
 [**list_remote_sessions**](RemoteSessionsApi.md#list_remote_sessions) | **GET** /v1/me/remote-sessions | The caller&#39;s control sessions, open and finished
 
+
+# **get_remote_session**
+> RemoteSessionDetail get_remote_session(session_id)
+
+One control session with the records that share its id
+
+What happened in one session: the session row itself, the recordings
+produced during it, and the device access-log entries that carry its
+`session_id` (in practice the `session_started` row written when the
+controller authenticated). The three tables always existed - this is the
+read that puts them back together.
+
+Owner only. A session belonging to another account is reported as `404`
+rather than `403`, so a caller cannot probe which session ids exist.
+Both lists are capped at 100 entries and are empty arrays rather than
+absent when there is nothing to show.
+
+
+### Example
+
+* Api Key Authentication (ApiKeyAuth):
+* Bearer (opaque) Authentication (BearerAuth):
+
+```python
+import quickdesk_signaling
+from quickdesk_signaling.models.remote_session_detail import RemoteSessionDetail
+from quickdesk_signaling.rest import ApiException
+from pprint import pprint
+
+# Defining the host is optional and defaults to https://your-signaling-host
+# See configuration.py for a list of all supported configuration parameters.
+configuration = quickdesk_signaling.Configuration(
+    host = "https://your-signaling-host"
+)
+
+# The client must configure the authentication and authorization parameters
+# in accordance with the API server security policy.
+# Examples for each auth method are provided below, use the example that
+# satisfies your auth use case.
+
+# Configure API key authorization: ApiKeyAuth
+configuration.api_key['ApiKeyAuth'] = os.environ["API_KEY"]
+
+# Uncomment below to setup prefix (e.g. Bearer) for API key, if needed
+# configuration.api_key_prefix['ApiKeyAuth'] = 'Bearer'
+
+# Configure Bearer authorization (opaque): BearerAuth
+configuration = quickdesk_signaling.Configuration(
+    access_token = os.environ["BEARER_TOKEN"]
+)
+
+# Enter a context with an instance of the API client
+with quickdesk_signaling.ApiClient(configuration) as api_client:
+    # Create an instance of the API class
+    api_instance = quickdesk_signaling.RemoteSessionsApi(api_client)
+    session_id = 'session_id_example' # str | The signaling session id from the list.
+
+    try:
+        # One control session with the records that share its id
+        api_response = api_instance.get_remote_session(session_id)
+        print("The response of RemoteSessionsApi->get_remote_session:\n")
+        pprint(api_response)
+    except Exception as e:
+        print("Exception when calling RemoteSessionsApi->get_remote_session: %s\n" % e)
+```
+
+
+
+### Parameters
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **session_id** | **str**| The signaling session id from the list. | 
+
+### Return type
+
+[**RemoteSessionDetail**](RemoteSessionDetail.md)
+
+### Authorization
+
+[ApiKeyAuth](../README.md#ApiKeyAuth), [BearerAuth](../README.md#BearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json, application/problem+json
+
+### HTTP response details
+
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+**200** | The session and its related records. |  -  |
+**400** | The request was malformed or failed validation. |  -  |
+**401** | Missing or expired credentials. |  -  |
+**404** | The addressed resource does not exist. |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 
 # **list_remote_sessions**
 > RemoteSessionList list_remote_sessions(status=status, device_id=device_id, cursor=cursor, limit=limit)

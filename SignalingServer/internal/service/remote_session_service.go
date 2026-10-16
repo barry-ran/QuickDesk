@@ -221,3 +221,25 @@ func (s *RemoteSessionService) Get(ctx context.Context, sessionID string) (*mode
 	row.Decorate()
 	return &row, nil
 }
+
+// GetForUser loads one session the caller owns.
+//
+// A session belonging to somebody else reports "not found" rather than
+// "forbidden": the caller learns nothing about whether that session id exists,
+// which is the same choice the device-scoped routes make.
+func (s *RemoteSessionService) GetForUser(ctx context.Context, userID uint, sessionID string) (*models.RemoteSession, error) {
+	if s == nil || s.db == nil {
+		return nil, errors.New("remote session service is not configured")
+	}
+	if userID == 0 {
+		return nil, gorm.ErrRecordNotFound
+	}
+	var row models.RemoteSession
+	if err := s.db.WithContext(ctx).
+		Where("session_id = ? AND user_id = ?", strings.TrimSpace(sessionID), userID).
+		First(&row).Error; err != nil {
+		return nil, err
+	}
+	row.Decorate()
+	return &row, nil
+}

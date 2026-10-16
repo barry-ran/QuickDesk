@@ -162,3 +162,39 @@ const (
 	defaultDeviceAccessLimit = 50
 	maxDeviceAccessLimit     = 200
 )
+
+// ListForSession returns the access-log rows that carry one signaling session
+// id, newest first.
+//
+// In practice that is the `session_started` row the realtime handler wrote when
+// the controller authenticated: it is the one entry in the device's timeline
+// that names the session, and pairing it with the session row is what turns "an
+// attempt" into "the attempt that became this session".
+func (s *DeviceAccessService) ListForSession(
+	ctx context.Context,
+	deviceID string,
+	sessionID string,
+	limit int,
+) ([]models.DeviceAccessLog, error) {
+	if strings.TrimSpace(deviceID) == "" || strings.TrimSpace(sessionID) == "" {
+		return []models.DeviceAccessLog{}, nil
+	}
+	if limit <= 0 {
+		limit = defaultDeviceAccessLimit
+	}
+	if limit > maxDeviceAccessLimit {
+		limit = maxDeviceAccessLimit
+	}
+	var out []models.DeviceAccessLog
+	if err := s.db.WithContext(ctx).
+		Where("device_id = ? AND session_id = ?", strings.TrimSpace(deviceID), strings.TrimSpace(sessionID)).
+		Order("id DESC").
+		Limit(limit).
+		Find(&out).Error; err != nil {
+		return nil, err
+	}
+	if out == nil {
+		out = []models.DeviceAccessLog{}
+	}
+	return out, nil
+}

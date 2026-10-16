@@ -44,6 +44,9 @@ src/models/OfflineAlertRule.ts
 src/models/PlaybackTicket.ts
 src/models/Problem.ts
 src/models/RemoteSession.ts
+src/models/RemoteSessionAccessLog.ts
+src/models/RemoteSessionDetail.ts
+src/models/RemoteSessionDetailCounts.ts
 src/models/RemoteSessionList.ts
 src/models/RevokeAccessGrant200Response.ts
 src/models/SessionRecording.ts

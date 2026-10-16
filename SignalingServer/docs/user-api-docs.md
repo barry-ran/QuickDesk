@@ -1215,6 +1215,15 @@ could not be answered from it.
 | Method | Path | Notes |
 |---|---|---|
 | `GET` | `/v1/me/remote-sessions?status=&device_id=&cursor=&limit=` | Owner only. `status` is `active` (who is in right now), `ended` (history) or omitted/`all` for both; anything else is a `400`. Cursor-paginated, newest first, `next_cursor` absent on the last page. |
+| `GET` | `/v1/me/remote-sessions/:session_id` | Owner only. One session with the records that share its id: `{session, recordings, access_log, counts}`. Both lists are capped at 100 entries and are present-but-empty rather than absent. A session belonging to another account answers `404`, not `403`, so a caller cannot probe which session ids exist. |
+
+The detail read is what makes this a session model rather than three logs that
+happen to carry the same string: `recordings` are the caller's recording rows
+whose `session_id` is this session (the value the capturing client already
+reported when it indexed the capture), and `access_log` is the device's
+access-log rows for the same id - in practice the single `session_started` entry
+the server wrote when the controller authenticated, which is what pairs "an
+attempt" with "the session it became".
 
 Each row carries `session_id` (the signaling id the server assigned),
 `device_id`, `client_id` (the controller-declared identifier, the same value the

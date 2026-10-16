@@ -66,6 +66,9 @@ __all__ = [
     "PlaybackTicket",
     "Problem",
     "RemoteSession",
+    "RemoteSessionAccessLog",
+    "RemoteSessionDetail",
+    "RemoteSessionDetailCounts",
     "RemoteSessionList",
     "RevokeAccessGrant200Response",
     "SessionRecording",
@@ -130,6 +133,9 @@ from quickdesk_signaling.models.offline_alert_rule import OfflineAlertRule as Of
 from quickdesk_signaling.models.playback_ticket import PlaybackTicket as PlaybackTicket
 from quickdesk_signaling.models.problem import Problem as Problem
 from quickdesk_signaling.models.remote_session import RemoteSession as RemoteSession
+from quickdesk_signaling.models.remote_session_access_log import RemoteSessionAccessLog as RemoteSessionAccessLog
+from quickdesk_signaling.models.remote_session_detail import RemoteSessionDetail as RemoteSessionDetail
+from quickdesk_signaling.models.remote_session_detail_counts import RemoteSessionDetailCounts as RemoteSessionDetailCounts
 from quickdesk_signaling.models.remote_session_list import RemoteSessionList as RemoteSessionList
 from quickdesk_signaling.models.revoke_access_grant200_response import RevokeAccessGrant200Response as RevokeAccessGrant200Response
 from quickdesk_signaling.models.session_recording import SessionRecording as SessionRecording

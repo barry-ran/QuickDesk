@@ -457,6 +457,38 @@ check((remoteSessionsActive.json?.items ?? []).every((row) => row.active === tru
 const remoteSessionsBadStatus = await call('GET', '/v1/me/remote-sessions?status=soon', { token, expect: 400 });
 problemShape(remoteSessionsBadStatus.json, 'GET remote-sessions (unknown status)');
 
+// The detail read is what puts a session back together with the records that
+// share its id. A read-only run cannot open a controller socket, so the failure
+// shape is pinned; when the database already holds a session, the joined shape is
+// checked against the real row.
+const ghostSession = await call('GET', '/v1/me/remote-sessions/sig_does_not_exist', { token, expect: 404 });
+problemShape(ghostSession.json, 'GET remote-sessions/{id} (unknown session)', 'NOT_FOUND');
+
+if ((remoteSessions.json?.items ?? []).length > 0) {
+  const first = remoteSessions.json.items[0];
+  const detail = await call('GET', `/v1/me/remote-sessions/${encodeURIComponent(first.session_id)}`,
+    { token, expect: 200 });
+  field(detail.json, 'session', 'object', 'GET remote-sessions/{id}');
+  for (const name of ['recordings', 'access_log']) {
+    check(Array.isArray(detail.json?.[name]),
+      `GET remote-sessions/{id}: ${name} is not an array`);
+  }
+  const counts = field(detail.json, 'counts', 'object', 'GET remote-sessions/{id}');
+  field(counts, 'recordings', 'number', 'GET remote-sessions/{id} (counts)');
+  field(counts, 'access_log', 'number', 'GET remote-sessions/{id} (counts)');
+  check(counts.recordings === (detail.json.recordings ?? []).length,
+    'GET remote-sessions/{id}: the recording count does not match the list');
+  check(counts.access_log === (detail.json.access_log ?? []).length,
+    'GET remote-sessions/{id}: the access-log count does not match the list');
+  for (const row of detail.json.access_log ?? []) {
+    for (const name of ['id', 'device_id', 'owner_id', 'client_id', 'session_id', 'ip', 'result', 'reason', 'created_at']) {
+      field(row, name, undefined, 'GET remote-sessions/{id} (access_log row)');
+    }
+  }
+  check(detail.json.session?.session_id === first.session_id,
+    'GET remote-sessions/{id}: the detail read returned a different session');
+}
+
 if (smokeDevice) {
   // 6. PUT the rule back unchanged, then restore the prior state exactly.
   const putBody = {

@@ -1287,6 +1287,45 @@ paths:
       summary: "The caller's control sessions, open and finished"
       tags:
       - remoteSessions
+  /v1/me/remote-sessions/{session_id}:
+    get:
+      description: |
+        What happened in one session: the session row itself, the recordings
+        produced during it, and the device access-log entries that carry its
+        `session_id` (in practice the `session_started` row written when the
+        controller authenticated). The three tables always existed - this is the
+        read that puts them back together.
+
+        Owner only. A session belonging to another account is reported as `404`
+        rather than `403`, so a caller cannot probe which session ids exist.
+        Both lists are capped at 100 entries and are empty arrays rather than
+        absent when there is nothing to show.
+      operationId: getRemoteSession
+      parameters:
+      - description: The signaling session id from the list.
+        explode: false
+        in: path
+        name: session_id
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RemoteSessionDetail"
+          description: The session and its related records.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+      summary: One control session with the records that share its id
+      tags:
+      - remoteSessions
   /v1/update:check:
     get:
       description: |
@@ -2488,6 +2527,155 @@ components:
       - started_at
       - updated_at
       - user_id
+    RemoteSessionAccessLog:
+      description: |
+        One device access-log row that carries a session id - in practice the
+        `session_started` entry the server wrote when the controller
+        authenticated, which is what pairs "an attempt" with "the session it
+        became". The full timeline is documented separately in
+        `docs/user-api-docs.md` (§5.3.1); this is the part a session owns.
+      example:
+        result: result
+        reason: reason
+        device_id: device_id
+        owner_id: 6
+        ip: ip
+        session_id: session_id
+        created_at: 2000-01-23T04:56:07.000+00:00
+        id: 0
+        client_id: client_id
+      properties:
+        id:
+          format: int64
+          type: integer
+        device_id:
+          type: string
+        owner_id:
+          description: The device's owner at the time of the attempt; 0 when unbound.
+          format: int64
+          type: integer
+        client_id:
+          type: string
+        session_id:
+          type: string
+        ip:
+          type: string
+        result:
+          description: "The canonical access result, e.g. `session_started`."
+          type: string
+        reason:
+          type: string
+        created_at:
+          format: date-time
+          type: string
+      required:
+      - client_id
+      - created_at
+      - device_id
+      - id
+      - ip
+      - owner_id
+      - reason
+      - result
+      - session_id
+    RemoteSessionDetail:
+      description: |
+        One control session with the records that share its `session_id`. Both
+        lists are capped at 100 entries and present-but-empty when there is
+        nothing to show, so a client never has to distinguish "no recordings"
+        from "field missing".
+      example:
+        recordings:
+        - duration_seconds: 1
+          size_bytes: 5
+          device_id: device_id
+          format: format
+          session_id: session_id
+          created_at: 2000-01-23T04:56:07.000+00:00
+          thumbnail_url: thumbnail_url
+          artifact_url: artifact_url
+          device_name: device_name
+          thumbnail_path: thumbnail_path
+          artifact_path: artifact_path
+          updated_at: 2000-01-23T04:56:07.000+00:00
+          user_id: 6
+          started_at: 2000-01-23T04:56:07.000+00:00
+          id: 0
+          user: "{}"
+          ended_at: 2000-01-23T04:56:07.000+00:00
+          status: recording
+        - duration_seconds: 1
+          size_bytes: 5
+          device_id: device_id
+          format: format
+          session_id: session_id
+          created_at: 2000-01-23T04:56:07.000+00:00
+          thumbnail_url: thumbnail_url
+          artifact_url: artifact_url
+          device_name: device_name
+          thumbnail_path: thumbnail_path
+          artifact_path: artifact_path
+          updated_at: 2000-01-23T04:56:07.000+00:00
+          user_id: 6
+          started_at: 2000-01-23T04:56:07.000+00:00
+          id: 0
+          user: "{}"
+          ended_at: 2000-01-23T04:56:07.000+00:00
+          status: recording
+        session:
+          duration_seconds: 1
+          device_id: device_id
+          end_reason: end_reason
+          session_id: session_id
+          active: true
+          created_at: 2000-01-23T04:56:07.000+00:00
+          client_id: client_id
+          updated_at: 2000-01-23T04:56:07.000+00:00
+          user_id: 6
+          started_at: 2000-01-23T04:56:07.000+00:00
+          client_ip: client_ip
+          id: 0
+          ended_at: 2000-01-23T04:56:07.000+00:00
+        counts:
+          recordings: 1
+          access_log: 5
+        access_log:
+        - result: result
+          reason: reason
+          device_id: device_id
+          owner_id: 6
+          ip: ip
+          session_id: session_id
+          created_at: 2000-01-23T04:56:07.000+00:00
+          id: 0
+          client_id: client_id
+        - result: result
+          reason: reason
+          device_id: device_id
+          owner_id: 6
+          ip: ip
+          session_id: session_id
+          created_at: 2000-01-23T04:56:07.000+00:00
+          id: 0
+          client_id: client_id
+      properties:
+        session:
+          $ref: "#/components/schemas/RemoteSession"
+        recordings:
+          items:
+            $ref: "#/components/schemas/SessionRecording"
+          type: array
+        access_log:
+          items:
+            $ref: "#/components/schemas/RemoteSessionAccessLog"
+          type: array
+        counts:
+          $ref: "#/components/schemas/RemoteSessionDetail_counts"
+      required:
+      - access_log
+      - counts
+      - recordings
+      - session
     RemoteSessionList:
       description: |
         Cursor page of control sessions. `next_cursor` is absent on the last page
@@ -3198,6 +3386,18 @@ components:
       required:
       - client_ip
       - denials
+    RemoteSessionDetail_counts:
+      example:
+        recordings: 1
+        access_log: 5
+      properties:
+        recordings:
+          type: integer
+        access_log:
+          type: integer
+      required:
+      - access_log
+      - recordings
   securitySchemes:
     ApiKeyAuth:
       in: header

@@ -1170,6 +1170,42 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
+  /v1/me/remote-sessions/{session_id}:
+    get:
+      tags: [remoteSessions]
+      summary: One control session with the records that share its id
+      operationId: getRemoteSession
+      description: |
+        What happened in one session: the session row itself, the recordings
+        produced during it, and the device access-log entries that carry its
+        `session_id` (in practice the `session_started` row written when the
+        controller authenticated). The three tables always existed - this is the
+        read that puts them back together.
+
+        Owner only. A session belonging to another account is reported as `404`
+        rather than `403`, so a caller cannot probe which session ids exist.
+        Both lists are capped at 100 entries and are empty arrays rather than
+        absent when there is nothing to show.
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          description: The signaling session id from the list.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The session and its related records.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteSessionDetail'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /v1/update:check:
     get:
       tags: [update]
@@ -1943,6 +1979,66 @@ components:
         updated_at:
           type: string
           format: date-time
+    RemoteSessionAccessLog:
+      type: object
+      description: |
+        One device access-log row that carries a session id - in practice the
+        `session_started` entry the server wrote when the controller
+        authenticated, which is what pairs "an attempt" with "the session it
+        became". The full timeline is documented separately in
+        `docs/user-api-docs.md` (§5.3.1); this is the part a session owns.
+      required: [id, device_id, owner_id, client_id, session_id, ip, result, reason, created_at]
+      properties:
+        id:
+          type: integer
+          format: int64
+        device_id:
+          type: string
+        owner_id:
+          type: integer
+          format: int64
+          description: The device's owner at the time of the attempt; 0 when unbound.
+        client_id:
+          type: string
+        session_id:
+          type: string
+        ip:
+          type: string
+        result:
+          type: string
+          description: The canonical access result, e.g. `session_started`.
+        reason:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+    RemoteSessionDetail:
+      type: object
+      description: |
+        One control session with the records that share its `session_id`. Both
+        lists are capped at 100 entries and present-but-empty when there is
+        nothing to show, so a client never has to distinguish "no recordings"
+        from "field missing".
+      required: [session, recordings, access_log, counts]
+      properties:
+        session:
+          $ref: '#/components/schemas/RemoteSession'
+        recordings:
+          type: array
+          items:
+            $ref: '#/components/schemas/SessionRecording'
+        access_log:
+          type: array
+          items:
+            $ref: '#/components/schemas/RemoteSessionAccessLog'
+        counts:
+          type: object
+          required: [recordings, access_log]
+          properties:
+            recordings:
+              type: integer
+            access_log:
+              type: integer
     RemoteSessionList:
       type: object
       description: |

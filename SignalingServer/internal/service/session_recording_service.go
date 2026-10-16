@@ -206,6 +206,42 @@ func (s *SessionRecordingService) List(
 	return rows, nil
 }
 
+// ListForSession returns the caller's recordings that belong to one control
+// session, newest first.
+//
+// `session_id` is the link the recording producer already carried - it is the
+// signaling session id - so the join is the column, not a new relationship. The
+// caller filter stays on: recordings belong to the account that produced them,
+// and a session's owner must not be handed a row they cannot otherwise read.
+func (s *SessionRecordingService) ListForSession(
+	ctx context.Context,
+	userID uint,
+	sessionID string,
+	limit int,
+) ([]models.SessionRecording, error) {
+	if userID == 0 || strings.TrimSpace(sessionID) == "" {
+		return []models.SessionRecording{}, nil
+	}
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 200 {
+		limit = 200
+	}
+	var rows []models.SessionRecording
+	if err := s.db.WithContext(ctx).
+		Where("user_id = ? AND session_id = ?", userID, strings.TrimSpace(sessionID)).
+		Order("id DESC").
+		Limit(limit).
+		Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	if rows == nil {
+		rows = []models.SessionRecording{}
+	}
+	return rows, nil
+}
+
 func (s *SessionRecordingService) Get(
 	ctx context.Context,
 	userID uint,
