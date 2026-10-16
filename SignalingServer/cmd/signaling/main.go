@@ -475,6 +475,8 @@ func main() {
 	adminSessionRecordingHandler := handler.NewAdminSessionRecordingHandler(
 		sessionRecordingService, auditService, recordingLifecycle,
 		cfg.Recording.RetentionDays, cfg.Recording.StaleMinutes)
+	adminRemoteSessionHandler := handler.NewAdminRemoteSessionHandler(
+		remoteSessionService, sessionRecordingService, deviceAccessService)
 	adminNotificationDeliveryHandler := handler.NewAdminNotificationDeliveryHandler(
 		notificationDeliveryService, auditService,
 		cfg.Notification.RetentionDays, cfg.Notification.ArchiveRetentionDays)
@@ -803,6 +805,11 @@ func main() {
 		// literal segment against the ":id" wildcard above.
 		adminGuarded.GET("/recordings:storage", adminSessionRecordingHandler.Storage)
 		adminGuarded.POST("/recordings:sweep", adminSessionRecordingHandler.Sweep)
+
+		// Cross-user control-session console: the admin counterpart of
+		// /v1/me/remote-sessions, with the same joined shape as the device list.
+		adminGuarded.GET("/remote-sessions", adminRemoteSessionHandler.List)
+		adminGuarded.GET("/remote-sessions/:session_id", adminRemoteSessionHandler.Get)
 
 		// User-notification outbox (delivery states + on-demand retention).
 		adminGuarded.GET("/notification-deliveries:stats", adminNotificationDeliveryHandler.Stats)

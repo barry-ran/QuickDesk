@@ -199,6 +199,46 @@ func (s *DeviceAccessService) ListForSession(
 	return out, nil
 }
 
+// ListForSessionIDs is ListForSessions without the device filter, for the
+// cross-user admin console whose page spans many devices.
+//
+// device_id is not needed to disambiguate: a session id is unique, so the
+// page's ids already name the rows. The rows still carry their own device_id,
+// so the caller can see which machine each entry belongs to.
+func (s *DeviceAccessService) ListForSessionIDs(
+	ctx context.Context,
+	sessionIDs []string,
+	limit int,
+) ([]models.DeviceAccessLog, error) {
+	ids := make([]string, 0, len(sessionIDs))
+	for _, id := range sessionIDs {
+		if trimmed := strings.TrimSpace(id); trimmed != "" {
+			ids = append(ids, trimmed)
+		}
+	}
+	if len(ids) == 0 {
+		return []models.DeviceAccessLog{}, nil
+	}
+	if limit <= 0 {
+		limit = maxDeviceAccessLimit
+	}
+	if limit > maxDeviceAccessLimit {
+		limit = maxDeviceAccessLimit
+	}
+	var out []models.DeviceAccessLog
+	if err := s.db.WithContext(ctx).
+		Where("session_id IN ?", ids).
+		Order("id DESC").
+		Limit(limit).
+		Find(&out).Error; err != nil {
+		return nil, err
+	}
+	if out == nil {
+		out = []models.DeviceAccessLog{}
+	}
+	return out, nil
+}
+
 // ListForSessions is ListForSession for a whole page of sessions, for the same
 // reason the recording batch exists: one query per page instead of one per row.
 func (s *DeviceAccessService) ListForSessions(

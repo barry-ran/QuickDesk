@@ -1254,6 +1254,13 @@ deliberately not the `session.*` namespace, which is the caller's own login
 sessions (`GET /v1/me/sessions`, `session.revoked`); those are a different
 resource with a different lifetime.
 
+Administrators get the same data without the owner filter: §8.5's
+`GET /v1/admin/remote-sessions` returns every account's sessions, each joined
+with its records exactly as the device-scoped list above does, and
+`.../:session_id` reads one by id. It is read-only - a session still ends when
+the signaling socket that owns it ends; there is no "kick" here (see the
+capability matrix for that gap).
+
 ### 5.4 Connections (history)
 
 | Method | Path | Body |
@@ -1846,6 +1853,8 @@ request shapes; this section documents only the route table.
 | `GET` | `/v1/admin/recordings/:id/thumbnail` (cross-user preview; audit action `recording.thumbnail.download`) |
 | `GET` | `/v1/admin/recordings:storage` — `{artifact_count, total_bytes, retention_days, stale_after_minutes}` |
 | `POST` | `/v1/admin/recordings:sweep` — runs the stale + retention + orphan pass now; returns `{stale_marked_failed, artifacts_purged, bytes_freed, orphans_removed, uploads_reaped}` (`uploads_reaped` counts abandoned resumable-upload staging files older than six hours) and audits `recording.sweep` |
+| `GET` | `/v1/admin/remote-sessions?status=&device_id=&user_id=&cursor=&limit=` — the cross-user control-session console: every account's sessions in one cursor-paginated list, **each item already joined** as `{session, recordings, access_log, counts}` (the same shape §5.3.8 returns for one device, so an operator console and a device page render identical data). `status` is `active`/`ended`/omitted `all`; `device_id` and `user_id` narrow it, and a non-numeric `user_id` is a `400`. Read-only |
+| `GET` | `/v1/admin/remote-sessions/:session_id` — one session by id with its recordings and access log, joined the same way. An unknown id is a `404` problem detail; there is no "somebody else's session" case to hide because the caller is authorised to see every one |
 | `GET` | `/v1/admin/notification-deliveries:stats` — `{total, by_status, acked, unacked, retention_days, archive_retention_days, archive_dir}`; `by_status` always carries all four states (`pending`/`delivering`/`delivered`/`failed`), zeroes included; `acked` counts rows with `acked_at`, `unacked` counts rows that were delivered but never confirmed |
 | `POST` | `/v1/admin/notification-deliveries:sweep` — runs the outbox retention pass now. Optional body `{older_than_days: N}` overrides the configured window and `{archive_retention_days: N}` overrides how long the daily archive files are kept; either or both may be passed. Returns `{purged, older_than_days, cutoff, archive_retention_days, archive_removed, archive_moved, archive_deleted, archive_dir, archive_cold_dir}` and audits `notification_delivery.sweep`. `400` when none of the config or body supplies a bound (`NOTIFICATION_RETENTION_DAYS` / `NOTIFICATION_ARCHIVE_RETENTION_DAYS` or the matching body fields) and `400` when archive retention is asked for with `NOTIFICATION_ARCHIVE_DIR` unset; on an archive write failure nothing is deleted and the response is an error |
 | `GET` `PUT` | `/v1/admin/preset` |

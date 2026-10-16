@@ -287,6 +287,48 @@ func (s *SessionRecordingService) ListForSessions(
 	return rows, nil
 }
 
+// ListForSessionIDs is ListForSessions without the owner filter: the cross-user
+// admin console has already been authorised to read the fleet, and its page
+// mixes accounts, so there is no single user_id to pin the query to.
+//
+// The join key is still the session id, not a new relationship. A session id is
+// unique, so "the recordings whose session_id is in this page" is exactly the
+// set those sessions advertise, with no risk of one account reading another's
+// rows - the page's ids were chosen by the admin query, not by the caller.
+func (s *SessionRecordingService) ListForSessionIDs(
+	ctx context.Context,
+	sessionIDs []string,
+	limit int,
+) ([]models.SessionRecording, error) {
+	ids := make([]string, 0, len(sessionIDs))
+	for _, id := range sessionIDs {
+		if trimmed := strings.TrimSpace(id); trimmed != "" {
+			ids = append(ids, trimmed)
+		}
+	}
+	if len(ids) == 0 {
+		return []models.SessionRecording{}, nil
+	}
+	if limit <= 0 {
+		limit = 200
+	}
+	if limit > 500 {
+		limit = 500
+	}
+	var rows []models.SessionRecording
+	if err := s.db.WithContext(ctx).
+		Where("session_id IN ?", ids).
+		Order("id DESC").
+		Limit(limit).
+		Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	if rows == nil {
+		rows = []models.SessionRecording{}
+	}
+	return rows, nil
+}
+
 func (s *SessionRecordingService) Get(
 	ctx context.Context,
 	userID uint,

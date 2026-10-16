@@ -100,3 +100,91 @@ func TestRemoteSessionRelatedRecordsBatchFilters(t *testing.T) {
 		t.Fatalf("empty access batch = %d rows (err=%v), want none", len(rows), err)
 	}
 }
+
+// The admin console's batch reads are the same join the device page uses, minus
+// the owner/device filter, because an admin page spans accounts. Dropping that
+// filter must widen the result to exactly the named session ids and nothing
+// else: the session id is the boundary that keeps a cross-user page honest.
+func TestRemoteSessionRelatedRecordsAdminBatchSpansOwners(t *testing.T) {
+	db := newRemoteSessionTestDB(t)
+	if err := db.AutoMigrate(&models.SessionRecording{}, &models.DeviceAccessLog{}); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	ctx := context.Background()
+	const (
+		deviceA = "700000016"
+		deviceB = "700000017"
+		ownerA  = 990401
+		ownerB  = 990402
+	)
+	for _, table := range []string{"session_recordings", "device_access_logs"} {
+		if err := db.Exec("DELETE FROM "+table+" WHERE device_id IN ?", []string{deviceA, deviceB}).Error; err != nil {
+			t.Fatalf("clear %s: %v", table, err)
+		}
+	}
+	seedRemoteSessionDevice(t, db, deviceA, ownerA)
+	seedRemoteSessionDevice(t, db, deviceB, ownerB)
+
+	recordings := []models.SessionRecording{
+		{UserID: ownerA, DeviceID: deviceA, SessionID: "adm_a", Status: "completed"},
+		{UserID: ownerB, DeviceID: deviceB, SessionID: "adm_b", Status: "completed"},
+		{UserID: ownerA, DeviceID: deviceA, SessionID: "adm_c", Status: "completed"},
+	}
+	if err := db.Create(&recordings).Error; err != nil {
+		t.Fatalf("seed recordings: %v", err)
+	}
+	logs := []models.DeviceAccessLog{
+		{DeviceID: deviceA, OwnerID: ownerA, SessionID: "adm_a", Result: DeviceAccessSessionStarted},
+		{DeviceID: deviceB, OwnerID: ownerB, SessionID: "adm_b", Result: DeviceAccessSessionStarted},
+		{DeviceID: deviceA, OwnerID: ownerA, SessionID: "adm_c", Result: DeviceAccessSessionStarted},
+	}
+	if err := db.Create(&logs).Error; err != nil {
+		t.Fatalf("seed access log: %v", err)
+	}
+
+	recSvc := NewSessionRecordingService(db)
+	recs, err := recSvc.ListForSessionIDs(ctx, []string{"adm_a", "adm_b"}, 100)
+	if err != nil {
+		t.Fatalf("admin batch recordings: %v", err)
+	}
+	if len(recs) != 2 {
+		t.Fatalf("admin recording batch returned %d rows, want the 2 named sessions", len(recs))
+	}
+	owners := map[uint]bool{}
+	for _, row := range recs {
+		owners[row.UserID] = true
+		if row.SessionID == "adm_c" {
+			t.Fatalf("admin recording batch returned a session that was not asked for: %+v", row)
+		}
+	}
+	if !owners[ownerA] || !owners[ownerB] {
+		t.Fatalf("admin recording batch must span both owners, got %v", owners)
+	}
+
+	accessSvc := NewDeviceAccessService(db)
+	entries, err := accessSvc.ListForSessionIDs(ctx, []string{"adm_a", "adm_b"}, 100)
+	if err != nil {
+		t.Fatalf("admin batch access log: %v", err)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("admin access batch returned %d rows, want the 2 named sessions", len(entries))
+	}
+	devices := map[string]bool{}
+	for _, row := range entries {
+		devices[row.DeviceID] = true
+		if row.SessionID == "adm_c" {
+			t.Fatalf("admin access batch returned a session that was not asked for: %+v", row)
+		}
+	}
+	if !devices[deviceA] || !devices[deviceB] {
+		t.Fatalf("admin access batch must span both devices, got %v", devices)
+	}
+
+	// An empty page is not a query, and must not be an error.
+	if rows, err := recSvc.ListForSessionIDs(ctx, nil, 100); err != nil || len(rows) != 0 {
+		t.Fatalf("empty admin recording batch = %d rows (err=%v), want none", len(rows), err)
+	}
+	if rows, err := accessSvc.ListForSessionIDs(ctx, nil, 100); err != nil || len(rows) != 0 {
+		t.Fatalf("empty admin access batch = %d rows (err=%v), want none", len(rows), err)
+	}
+}
