@@ -33,7 +33,7 @@ type RemoteSession struct {
 	ClientIp string `json:"client_ip"`
 	StartedAt time.Time `json:"started_at"`
 	EndedAt NullableTime `json:"ended_at"`
-	// Empty while the session is open; `disconnected` when the signaling socket went away, `server_restart` for rows a restart found still open.
+	// Empty while the session is open; `disconnected` when the signaling socket went away on its own, `revoked` when the owner or an administrator closed it on purpose, `server_restart` for rows a restart found still open.
 	EndReason string `json:"end_reason"`
 	Active bool `json:"active"`
 	DurationSeconds int64 `json:"duration_seconds"`

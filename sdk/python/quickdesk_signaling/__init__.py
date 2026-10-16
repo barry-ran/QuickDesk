@@ -71,6 +71,7 @@ __all__ = [
     "RemoteSessionDetailCounts",
     "RemoteSessionDetailList",
     "RemoteSessionList",
+    "RemoteSessionRevocation",
     "RevokeAccessGrant200Response",
     "SessionRecording",
     "SessionRecordingInput",
@@ -139,6 +140,7 @@ from quickdesk_signaling.models.remote_session_detail import RemoteSessionDetail
 from quickdesk_signaling.models.remote_session_detail_counts import RemoteSessionDetailCounts as RemoteSessionDetailCounts
 from quickdesk_signaling.models.remote_session_detail_list import RemoteSessionDetailList as RemoteSessionDetailList
 from quickdesk_signaling.models.remote_session_list import RemoteSessionList as RemoteSessionList
+from quickdesk_signaling.models.remote_session_revocation import RemoteSessionRevocation as RemoteSessionRevocation
 from quickdesk_signaling.models.revoke_access_grant200_response import RevokeAccessGrant200Response as RevokeAccessGrant200Response
 from quickdesk_signaling.models.session_recording import SessionRecording as SessionRecording
 from quickdesk_signaling.models.session_recording_input import SessionRecordingInput as SessionRecordingInput

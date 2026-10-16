@@ -14,7 +14,7 @@ Name | Type | Description | Notes
 **client_ip** | **str** |  | 
 **started_at** | **datetime** |  | 
 **ended_at** | **datetime** |  | 
-**end_reason** | **str** | Empty while the session is open; &#x60;disconnected&#x60; when the signaling socket went away, &#x60;server_restart&#x60; for rows a restart found still open. | 
+**end_reason** | **str** | Empty while the session is open; &#x60;disconnected&#x60; when the signaling socket went away on its own, &#x60;revoked&#x60; when the owner or an administrator closed it on purpose, &#x60;server_restart&#x60; for rows a restart found still open. | 
 **active** | **bool** |  | 
 **duration_seconds** | **int** |  | 
 **created_at** | **datetime** |  | 

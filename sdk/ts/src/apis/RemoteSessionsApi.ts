@@ -19,6 +19,7 @@ import type {
   RemoteSessionDetail,
   RemoteSessionDetailList,
   RemoteSessionList,
+  RemoteSessionRevocation,
 } from '../models/index';
 import {
     ProblemFromJSON,
@@ -29,6 +30,8 @@ import {
     RemoteSessionDetailListToJSON,
     RemoteSessionListFromJSON,
     RemoteSessionListToJSON,
+    RemoteSessionRevocationFromJSON,
+    RemoteSessionRevocationToJSON,
 } from '../models/index';
 
 export interface GetRemoteSessionRequest {
@@ -47,6 +50,10 @@ export interface ListRemoteSessionsRequest {
     deviceId?: string;
     cursor?: string;
     limit?: number;
+}
+
+export interface RevokeRemoteSessionRequest {
+    sessionId: string;
 }
 
 /**
@@ -224,6 +231,57 @@ export class RemoteSessionsApi extends runtime.BaseAPI {
      */
     async listRemoteSessions(requestParameters: ListRemoteSessionsRequest = {}, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<RemoteSessionList> {
         const response = await this.listRemoteSessionsRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * The owner\'s \"throw them out\". A remote session lives exactly as long as the controller\'s signaling socket, so ending the session means closing that socket; the session row is stamped `end_reason: revoked` and the owner\'s realtime stream carries `remote_session.ended` with that reason. Closing the socket also frees the device\'s controller slot, so a revoked session stops counting against the access policy\'s `max_sessions`.  Owner only, with the same concealment as the detail read: a session that belongs to another account is a `404`, not a `403`. A session that exists but is already over - or is live on a different server instance - is a `409`, because the one thing worse than refusing a revoke is reporting a success that did not happen. 
+     * End one of the caller\'s control sessions
+     */
+    async revokeRemoteSessionRaw(requestParameters: RevokeRemoteSessionRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<RemoteSessionRevocation>> {
+        if (requestParameters['sessionId'] == null) {
+            throw new runtime.RequiredError(
+                'sessionId',
+                'Required parameter "sessionId" was null or undefined when calling revokeRemoteSession().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        if (this.configuration && this.configuration.apiKey) {
+            headerParameters["X-API-Key"] = await this.configuration.apiKey("X-API-Key"); // ApiKeyAuth authentication
+        }
+
+        if (this.configuration && this.configuration.accessToken) {
+            const token = this.configuration.accessToken;
+            const tokenString = await token("BearerAuth", []);
+
+            if (tokenString) {
+                headerParameters["Authorization"] = `Bearer ${tokenString}`;
+            }
+        }
+
+        let urlPath = `/v1/me/remote-sessions/{session_id}/revoke`;
+        urlPath = urlPath.replace(`{${"session_id"}}`, encodeURIComponent(String(requestParameters['sessionId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'POST',
+            headers: headerParameters,
+            query: queryParameters,
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => RemoteSessionRevocationFromJSON(jsonValue));
+    }
+
+    /**
+     * The owner\'s \"throw them out\". A remote session lives exactly as long as the controller\'s signaling socket, so ending the session means closing that socket; the session row is stamped `end_reason: revoked` and the owner\'s realtime stream carries `remote_session.ended` with that reason. Closing the socket also frees the device\'s controller slot, so a revoked session stops counting against the access policy\'s `max_sessions`.  Owner only, with the same concealment as the detail read: a session that belongs to another account is a `404`, not a `403`. A session that exists but is already over - or is live on a different server instance - is a `409`, because the one thing worse than refusing a revoke is reporting a success that did not happen. 
+     * End one of the caller\'s control sessions
+     */
+    async revokeRemoteSession(requestParameters: RevokeRemoteSessionRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<RemoteSessionRevocation> {
+        const response = await this.revokeRemoteSessionRaw(requestParameters, initOverrides);
         return await response.value();
     }
 

@@ -72,7 +72,7 @@ export interface RemoteSession {
      */
     endedAt: Date | null;
     /**
-     * Empty while the session is open; `disconnected` when the signaling socket went away, `server_restart` for rows a restart found still open.
+     * Empty while the session is open; `disconnected` when the signaling socket went away on its own, `revoked` when the owner or an administrator closed it on purpose, `server_restart` for rows a restart found still open.
      * @type {string}
      * @memberof RemoteSession
      */

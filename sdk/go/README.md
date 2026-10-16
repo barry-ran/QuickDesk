@@ -162,6 +162,7 @@ Class | Method | HTTP request | Description
 *RemoteSessionsAPI* | [**GetRemoteSession**](docs/RemoteSessionsAPI.md#getremotesession) | **Get** /v1/me/remote-sessions/{session_id} | One control session with the records that share its id
 *RemoteSessionsAPI* | [**ListDeviceRemoteSessions**](docs/RemoteSessionsAPI.md#listdeviceremotesessions) | **Get** /v1/me/devices/{device_id}/sessions | One device&#39;s control sessions, each with its related records
 *RemoteSessionsAPI* | [**ListRemoteSessions**](docs/RemoteSessionsAPI.md#listremotesessions) | **Get** /v1/me/remote-sessions | The caller&#39;s control sessions, open and finished
+*RemoteSessionsAPI* | [**RevokeRemoteSession**](docs/RemoteSessionsAPI.md#revokeremotesession) | **Post** /v1/me/remote-sessions/{session_id}/revoke | End one of the caller&#39;s control sessions
 *UpdateAPI* | [**CheckForUpdate**](docs/UpdateAPI.md#checkforupdate) | **Get** /v1/update:check | Check the self-hosted update channel for a newer build
 *UpdateAPI* | [**DownloadUpdateArtifact**](docs/UpdateAPI.md#downloadupdateartifact) | **Get** /v1/update-releases/{release_id}/artifact | Download an installer this server hosts itself
 
@@ -205,6 +206,7 @@ Class | Method | HTTP request | Description
  - [RemoteSessionDetailCounts](docs/RemoteSessionDetailCounts.md)
  - [RemoteSessionDetailList](docs/RemoteSessionDetailList.md)
  - [RemoteSessionList](docs/RemoteSessionList.md)
+ - [RemoteSessionRevocation](docs/RemoteSessionRevocation.md)
  - [RevokeAccessGrant200Response](docs/RevokeAccessGrant200Response.md)
  - [SessionRecording](docs/SessionRecording.md)
  - [SessionRecordingInput](docs/SessionRecordingInput.md)

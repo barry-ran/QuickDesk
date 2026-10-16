@@ -1390,6 +1390,55 @@ paths:
       summary: One control session with the records that share its id
       tags:
       - remoteSessions
+  /v1/me/remote-sessions/{session_id}/revoke:
+    post:
+      description: |
+        The owner's "throw them out". A remote session lives exactly as long as
+        the controller's signaling socket, so ending the session means closing
+        that socket; the session row is stamped `end_reason: revoked` and the
+        owner's realtime stream carries `remote_session.ended` with that reason.
+        Closing the socket also frees the device's controller slot, so a revoked
+        session stops counting against the access policy's `max_sessions`.
+
+        Owner only, with the same concealment as the detail read: a session that
+        belongs to another account is a `404`, not a `403`. A session that exists
+        but is already over - or is live on a different server instance - is a
+        `409`, because the one thing worse than refusing a revoke is reporting a
+        success that did not happen.
+      operationId: revokeRemoteSession
+      parameters:
+      - description: The signaling session id from the list.
+        explode: false
+        in: path
+        name: session_id
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RemoteSessionRevocation"
+          description: The session was live here and its socket has been closed.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: |
+            The session exists but cannot be revoked from here - it is already
+            over, or it is live on another instance.
+      summary: End one of the caller's control sessions
+      tags:
+      - remoteSessions
   /v1/update:check:
     get:
       description: |
@@ -2564,7 +2613,9 @@ components:
           type: string
         end_reason:
           description: "Empty while the session is open; `disconnected` when the signaling\
-            \ socket went away, `server_restart` for rows a restart found still open."
+            \ socket went away on its own, `revoked` when the owner or an administrator\
+            \ closed it on purpose, `server_restart` for rows a restart found still\
+            \ open."
           type: string
         active:
           type: boolean
@@ -2945,6 +2996,26 @@ components:
           type: string
       required:
       - items
+    RemoteSessionRevocation:
+      description: |
+        The result of ending one live control session. `revoked` is always
+        `true` - the endpoint answers `409` rather than returning a false here,
+        so a caller never has to interpret a success response as "maybe".
+      example:
+        device_id: device_id
+        session_id: session_id
+        revoked: true
+      properties:
+        session_id:
+          type: string
+        device_id:
+          type: string
+        revoked:
+          type: boolean
+      required:
+      - device_id
+      - revoked
+      - session_id
     UpdateRelease:
       description: |
         One build published to the self-hosted update channel. The artifact

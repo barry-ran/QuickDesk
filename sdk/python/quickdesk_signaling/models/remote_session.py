@@ -35,7 +35,7 @@ class RemoteSession(BaseModel):
     client_ip: StrictStr
     started_at: datetime
     ended_at: Optional[datetime]
-    end_reason: StrictStr = Field(description="Empty while the session is open; `disconnected` when the signaling socket went away, `server_restart` for rows a restart found still open.")
+    end_reason: StrictStr = Field(description="Empty while the session is open; `disconnected` when the signaling socket went away on its own, `revoked` when the owner or an administrator closed it on purpose, `server_restart` for rows a restart found still open.")
     active: StrictBool
     duration_seconds: StrictInt
     created_at: datetime

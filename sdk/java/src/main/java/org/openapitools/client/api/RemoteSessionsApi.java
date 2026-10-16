@@ -31,6 +31,7 @@ import org.openapitools.client.model.Problem;
 import org.openapitools.client.model.RemoteSessionDetail;
 import org.openapitools.client.model.RemoteSessionDetailList;
 import org.openapitools.client.model.RemoteSessionList;
+import org.openapitools.client.model.RemoteSessionRevocation;
 
 import java.lang.reflect.Type;
 import java.util.ArrayList;
@@ -538,6 +539,150 @@ public class RemoteSessionsApi {
 
         okhttp3.Call localVarCall = listRemoteSessionsValidateBeforeCall(status, deviceId, cursor, limit, _callback);
         Type localVarReturnType = new TypeToken<RemoteSessionList>(){}.getType();
+        localVarApiClient.executeAsync(localVarCall, localVarReturnType, _callback);
+        return localVarCall;
+    }
+    /**
+     * Build call for revokeRemoteSession
+     * @param sessionId The signaling session id from the list. (required)
+     * @param _callback Callback for upload/download progress
+     * @return Call to execute
+     * @throws ApiException If fail to serialize the request body object
+     * @http.response.details
+     <table border="1">
+       <caption>Response Details</caption>
+        <tr><td> Status Code </td><td> Description </td><td> Response Headers </td></tr>
+        <tr><td> 200 </td><td> The session was live here and its socket has been closed. </td><td>  -  </td></tr>
+        <tr><td> 400 </td><td> The request was malformed or failed validation. </td><td>  -  </td></tr>
+        <tr><td> 401 </td><td> Missing or expired credentials. </td><td>  -  </td></tr>
+        <tr><td> 404 </td><td> The addressed resource does not exist. </td><td>  -  </td></tr>
+        <tr><td> 409 </td><td> The session exists but cannot be revoked from here - it is already over, or it is live on another instance.  </td><td>  -  </td></tr>
+     </table>
+     */
+    public okhttp3.Call revokeRemoteSessionCall(@javax.annotation.Nonnull String sessionId, final ApiCallback _callback) throws ApiException {
+        String basePath = null;
+        // Operation Servers
+        String[] localBasePaths = new String[] {  };
+
+        // Determine Base Path to Use
+        if (localCustomBaseUrl != null){
+            basePath = localCustomBaseUrl;
+        } else if ( localBasePaths.length > 0 ) {
+            basePath = localBasePaths[localHostIndex];
+        } else {
+            basePath = null;
+        }
+
+        Object localVarPostBody = null;
+
+        // create path and map variables
+        String localVarPath = "/v1/me/remote-sessions/{session_id}/revoke"
+            .replace("{" + "session_id" + "}", localVarApiClient.escapeString(sessionId.toString()));
+
+        List<Pair> localVarQueryParams = new ArrayList<Pair>();
+        List<Pair> localVarCollectionQueryParams = new ArrayList<Pair>();
+        Map<String, String> localVarHeaderParams = new HashMap<String, String>();
+        Map<String, String> localVarCookieParams = new HashMap<String, String>();
+        Map<String, Object> localVarFormParams = new HashMap<String, Object>();
+
+        final String[] localVarAccepts = {
+            "application/json",
+            "application/problem+json"
+        };
+        final String localVarAccept = localVarApiClient.selectHeaderAccept(localVarAccepts);
+        if (localVarAccept != null) {
+            localVarHeaderParams.put("Accept", localVarAccept);
+        }
+
+        final String[] localVarContentTypes = {
+        };
+        final String localVarContentType = localVarApiClient.selectHeaderContentType(localVarContentTypes);
+        if (localVarContentType != null) {
+            localVarHeaderParams.put("Content-Type", localVarContentType);
+        }
+
+        String[] localVarAuthNames = new String[] { "ApiKeyAuth", "BearerAuth" };
+        return localVarApiClient.buildCall(basePath, localVarPath, "POST", localVarQueryParams, localVarCollectionQueryParams, localVarPostBody, localVarHeaderParams, localVarCookieParams, localVarFormParams, localVarAuthNames, _callback);
+    }
+
+    @SuppressWarnings("rawtypes")
+    private okhttp3.Call revokeRemoteSessionValidateBeforeCall(@javax.annotation.Nonnull String sessionId, final ApiCallback _callback) throws ApiException {
+        // verify the required parameter 'sessionId' is set
+        if (sessionId == null) {
+            throw new ApiException("Missing the required parameter 'sessionId' when calling revokeRemoteSession(Async)");
+        }
+
+        return revokeRemoteSessionCall(sessionId, _callback);
+
+    }
+
+    /**
+     * End one of the caller&#39;s control sessions
+     * The owner&#39;s \&quot;throw them out\&quot;. A remote session lives exactly as long as the controller&#39;s signaling socket, so ending the session means closing that socket; the session row is stamped &#x60;end_reason: revoked&#x60; and the owner&#39;s realtime stream carries &#x60;remote_session.ended&#x60; with that reason. Closing the socket also frees the device&#39;s controller slot, so a revoked session stops counting against the access policy&#39;s &#x60;max_sessions&#x60;.  Owner only, with the same concealment as the detail read: a session that belongs to another account is a &#x60;404&#x60;, not a &#x60;403&#x60;. A session that exists but is already over - or is live on a different server instance - is a &#x60;409&#x60;, because the one thing worse than refusing a revoke is reporting a success that did not happen. 
+     * @param sessionId The signaling session id from the list. (required)
+     * @return RemoteSessionRevocation
+     * @throws ApiException If fail to call the API, e.g. server error or cannot deserialize the response body
+     * @http.response.details
+     <table border="1">
+       <caption>Response Details</caption>
+        <tr><td> Status Code </td><td> Description </td><td> Response Headers </td></tr>
+        <tr><td> 200 </td><td> The session was live here and its socket has been closed. </td><td>  -  </td></tr>
+        <tr><td> 400 </td><td> The request was malformed or failed validation. </td><td>  -  </td></tr>
+        <tr><td> 401 </td><td> Missing or expired credentials. </td><td>  -  </td></tr>
+        <tr><td> 404 </td><td> The addressed resource does not exist. </td><td>  -  </td></tr>
+        <tr><td> 409 </td><td> The session exists but cannot be revoked from here - it is already over, or it is live on another instance.  </td><td>  -  </td></tr>
+     </table>
+     */
+    public RemoteSessionRevocation revokeRemoteSession(@javax.annotation.Nonnull String sessionId) throws ApiException {
+        ApiResponse<RemoteSessionRevocation> localVarResp = revokeRemoteSessionWithHttpInfo(sessionId);
+        return localVarResp.getData();
+    }
+
+    /**
+     * End one of the caller&#39;s control sessions
+     * The owner&#39;s \&quot;throw them out\&quot;. A remote session lives exactly as long as the controller&#39;s signaling socket, so ending the session means closing that socket; the session row is stamped &#x60;end_reason: revoked&#x60; and the owner&#39;s realtime stream carries &#x60;remote_session.ended&#x60; with that reason. Closing the socket also frees the device&#39;s controller slot, so a revoked session stops counting against the access policy&#39;s &#x60;max_sessions&#x60;.  Owner only, with the same concealment as the detail read: a session that belongs to another account is a &#x60;404&#x60;, not a &#x60;403&#x60;. A session that exists but is already over - or is live on a different server instance - is a &#x60;409&#x60;, because the one thing worse than refusing a revoke is reporting a success that did not happen. 
+     * @param sessionId The signaling session id from the list. (required)
+     * @return ApiResponse&lt;RemoteSessionRevocation&gt;
+     * @throws ApiException If fail to call the API, e.g. server error or cannot deserialize the response body
+     * @http.response.details
+     <table border="1">
+       <caption>Response Details</caption>
+        <tr><td> Status Code </td><td> Description </td><td> Response Headers </td></tr>
+        <tr><td> 200 </td><td> The session was live here and its socket has been closed. </td><td>  -  </td></tr>
+        <tr><td> 400 </td><td> The request was malformed or failed validation. </td><td>  -  </td></tr>
+        <tr><td> 401 </td><td> Missing or expired credentials. </td><td>  -  </td></tr>
+        <tr><td> 404 </td><td> The addressed resource does not exist. </td><td>  -  </td></tr>
+        <tr><td> 409 </td><td> The session exists but cannot be revoked from here - it is already over, or it is live on another instance.  </td><td>  -  </td></tr>
+     </table>
+     */
+    public ApiResponse<RemoteSessionRevocation> revokeRemoteSessionWithHttpInfo(@javax.annotation.Nonnull String sessionId) throws ApiException {
+        okhttp3.Call localVarCall = revokeRemoteSessionValidateBeforeCall(sessionId, null);
+        Type localVarReturnType = new TypeToken<RemoteSessionRevocation>(){}.getType();
+        return localVarApiClient.execute(localVarCall, localVarReturnType);
+    }
+
+    /**
+     * End one of the caller&#39;s control sessions (asynchronously)
+     * The owner&#39;s \&quot;throw them out\&quot;. A remote session lives exactly as long as the controller&#39;s signaling socket, so ending the session means closing that socket; the session row is stamped &#x60;end_reason: revoked&#x60; and the owner&#39;s realtime stream carries &#x60;remote_session.ended&#x60; with that reason. Closing the socket also frees the device&#39;s controller slot, so a revoked session stops counting against the access policy&#39;s &#x60;max_sessions&#x60;.  Owner only, with the same concealment as the detail read: a session that belongs to another account is a &#x60;404&#x60;, not a &#x60;403&#x60;. A session that exists but is already over - or is live on a different server instance - is a &#x60;409&#x60;, because the one thing worse than refusing a revoke is reporting a success that did not happen. 
+     * @param sessionId The signaling session id from the list. (required)
+     * @param _callback The callback to be executed when the API call finishes
+     * @return The request call
+     * @throws ApiException If fail to process the API call, e.g. serializing the request body object
+     * @http.response.details
+     <table border="1">
+       <caption>Response Details</caption>
+        <tr><td> Status Code </td><td> Description </td><td> Response Headers </td></tr>
+        <tr><td> 200 </td><td> The session was live here and its socket has been closed. </td><td>  -  </td></tr>
+        <tr><td> 400 </td><td> The request was malformed or failed validation. </td><td>  -  </td></tr>
+        <tr><td> 401 </td><td> Missing or expired credentials. </td><td>  -  </td></tr>
+        <tr><td> 404 </td><td> The addressed resource does not exist. </td><td>  -  </td></tr>
+        <tr><td> 409 </td><td> The session exists but cannot be revoked from here - it is already over, or it is live on another instance.  </td><td>  -  </td></tr>
+     </table>
+     */
+    public okhttp3.Call revokeRemoteSessionAsync(@javax.annotation.Nonnull String sessionId, final ApiCallback<RemoteSessionRevocation> _callback) throws ApiException {
+
+        okhttp3.Call localVarCall = revokeRemoteSessionValidateBeforeCall(sessionId, _callback);
+        Type localVarReturnType = new TypeToken<RemoteSessionRevocation>(){}.getType();
         localVarApiClient.executeAsync(localVarCall, localVarReturnType, _callback);
         return localVarCall;
     }

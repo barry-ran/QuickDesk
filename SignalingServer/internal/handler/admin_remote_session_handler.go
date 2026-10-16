@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"quickdesk/signaling/internal/middleware"
 	"quickdesk/signaling/internal/models"
 	"quickdesk/signaling/internal/service"
 
@@ -27,14 +28,21 @@ type AdminRemoteSessionHandler struct {
 	sessions   *service.RemoteSessionService
 	recordings *service.SessionRecordingService
 	access     *service.DeviceAccessService
+	revoker    SessionRevoker
+	audit      *service.AuditService
 }
 
 func NewAdminRemoteSessionHandler(
 	sessions *service.RemoteSessionService,
 	recordings *service.SessionRecordingService,
 	access *service.DeviceAccessService,
+	revoker SessionRevoker,
+	audit *service.AuditService,
 ) *AdminRemoteSessionHandler {
-	return &AdminRemoteSessionHandler{sessions: sessions, recordings: recordings, access: access}
+	return &AdminRemoteSessionHandler{
+		sessions: sessions, recordings: recordings, access: access,
+		revoker: revoker, audit: audit,
+	}
 }
 
 // List handles GET /v1/admin/remote-sessions.
@@ -128,6 +136,44 @@ func (h *AdminRemoteSessionHandler) Get(c *gin.Context) {
 		}
 	}
 	c.JSON(http.StatusOK, detailEnvelope(row, recordings, accessLog))
+}
+
+// Revoke handles POST /v1/admin/remote-sessions/:session_id/revoke: an
+// administrator ends one live control session on any account's machine.
+//
+// Unlike the owner read there is no ownership to hide: the caller may act on
+// every session, so an unknown id is simply a 404 and a session that is over or
+// not connected here is a 409. The audit row is written only after the socket
+// actually closed, so "revoked" in the trail always means it happened.
+func (h *AdminRemoteSessionHandler) Revoke(c *gin.Context) {
+	sessionID := strings.TrimSpace(c.Param("session_id"))
+	if sessionID == "" {
+		ProblemBadRequest(c, ProblemCodeInvalidRequest, "session_id is required")
+		return
+	}
+	row, err := h.sessions.Get(c.Request.Context(), sessionID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			ProblemNotFound(c, ProblemCodeNotFound, "Session not found")
+			return
+		}
+		ProblemInternal(c, err.Error())
+		return
+	}
+	if !revokeSessionSocket(c, h.revoker, row) {
+		return
+	}
+	if h.audit != nil {
+		h.audit.Log(c.Request.Context(), middleware.MustAdminID(c), "", "session.revoke", "remote_session", row.SessionID,
+			"device="+row.DeviceID+" user="+strconv.FormatUint(uint64(row.UserID), 10)+" client="+row.ClientID,
+			c.ClientIP())
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"session_id": row.SessionID,
+		"device_id":  row.DeviceID,
+		"user_id":    row.UserID,
+		"revoked":    true,
+	})
 }
 
 // attachRelated is the admin twin of RemoteSessionHandler.attachRelated: it

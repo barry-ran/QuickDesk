@@ -459,8 +459,10 @@ func main() {
 		TicketTTL: time.Duration(cfg.Recording.TicketTTLSeconds) * time.Second,
 	}, auditService)
 	hostHandler := handler.NewHostHandler(deviceService, tokenService, presenceService, settingsService, rateLimitService, deviceAccessService, deviceAccessPolicyService, deviceAccessGrantService, deviceAccessApprovalService, bus, cfg)
-	remoteSessionHandler := handler.NewRemoteSessionHandler(remoteSessionService, sessionRecordingService, deviceAccessService, deviceService)
 	realtimeHandler := handler.NewRealtimeHandler(tokenService, bus, presenceService, db, deviceService, favoriteService, metricsService, deviceAccessService, deviceAccessPolicyService, remoteSessionService, redisClient)
+	// realtimeHandler is built first because the session surfaces use it to close
+	// a live socket: a revoke has to reach the connection, not just the row.
+	remoteSessionHandler := handler.NewRemoteSessionHandler(remoteSessionService, sessionRecordingService, deviceAccessService, deviceService, realtimeHandler, auditService)
 
 	adminAuthHandler := handler.NewAdminAuthHandler(adminUserService, tokenService, auditService)
 	adminTOTPHandler := handler.NewAdminTOTPHandler(adminUserService, db)
@@ -476,7 +478,7 @@ func main() {
 		sessionRecordingService, auditService, recordingLifecycle,
 		cfg.Recording.RetentionDays, cfg.Recording.StaleMinutes)
 	adminRemoteSessionHandler := handler.NewAdminRemoteSessionHandler(
-		remoteSessionService, sessionRecordingService, deviceAccessService)
+		remoteSessionService, sessionRecordingService, deviceAccessService, realtimeHandler, auditService)
 	adminNotificationDeliveryHandler := handler.NewAdminNotificationDeliveryHandler(
 		notificationDeliveryService, auditService,
 		cfg.Notification.RetentionDays, cfg.Notification.ArchiveRetentionDays)
@@ -623,6 +625,9 @@ func main() {
 			// login sessions.
 			me.GET("/remote-sessions", remoteSessionHandler.List)
 			me.GET("/remote-sessions/:session_id", remoteSessionHandler.Get)
+			// The owner's "throw them out": closes the live socket, which is
+			// what ends the session and frees the device's controller slot.
+			me.POST("/remote-sessions/:session_id/revoke", remoteSessionHandler.Revoke)
 
 			me.GET("/notification-channels", notificationChannelHandler.List)
 			me.POST("/notification-channels", notificationChannelHandler.Create)
@@ -810,6 +815,7 @@ func main() {
 		// /v1/me/remote-sessions, with the same joined shape as the device list.
 		adminGuarded.GET("/remote-sessions", adminRemoteSessionHandler.List)
 		adminGuarded.GET("/remote-sessions/:session_id", adminRemoteSessionHandler.Get)
+		adminGuarded.POST("/remote-sessions/:session_id/revoke", adminRemoteSessionHandler.Revoke)
 
 		// User-notification outbox (delivery states + on-demand retention).
 		adminGuarded.GET("/notification-deliveries:stats", adminNotificationDeliveryHandler.Stats)

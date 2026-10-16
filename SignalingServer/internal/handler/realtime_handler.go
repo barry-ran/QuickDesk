@@ -579,9 +579,45 @@ type signalConn struct {
 	role     service.SignalRole
 	deviceID string
 	clientID string // empty for host role
-	out      chan []byte
-	done     chan struct{}
-	once     sync.Once
+	// sessionID is the signaling session id this socket was admitted under. It
+	// is what ties the socket back to the remote_sessions row, so a revoke by
+	// session id can find the connection that owns it.
+	sessionID string
+	out       chan []byte
+	done      chan struct{}
+	once      sync.Once
+	// endReason is why this socket is being closed, when the cause is not the
+	// socket simply going away. It is written once (first writer wins) and read
+	// by the deferred close that stamps the session row.
+	reasonMu  sync.Mutex
+	endReason string
+}
+
+// markEndReason records why a socket is being closed, if nobody raced in first.
+// A deliberate revoke loses to a disconnect that already happened: labelling a
+// session "revoked" when the network dropped it a moment earlier would be a lie
+// in the audit trail.
+func (sc *signalConn) markEndReason(reason string) {
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		return
+	}
+	sc.reasonMu.Lock()
+	if sc.endReason == "" {
+		sc.endReason = reason
+	}
+	sc.reasonMu.Unlock()
+}
+
+// endReasonOrDefault returns the recorded reason, or def when the socket ended
+// without one being set.
+func (sc *signalConn) endReasonOrDefault(def string) string {
+	sc.reasonMu.Lock()
+	defer sc.reasonMu.Unlock()
+	if sc.endReason == "" {
+		return def
+	}
+	return sc.endReason
 }
 
 // HandleSignal serves GET /v1/realtime/signal.
@@ -663,10 +699,11 @@ func (h *RealtimeHandler) HandleSignal(c *gin.Context) {
 	})
 
 	sc := &signalConn{
-		h:        h,
-		conn:     conn,
-		role:     payload.Role,
-		deviceID: payload.DeviceID,
+		h:         h,
+		conn:      conn,
+		role:      payload.Role,
+		deviceID:  payload.DeviceID,
+		sessionID: sessionID,
 		// R7: prefer the client_id declared by the caller in the auth
 		// frame (matches §2.26 "client_id 在首帧 auth 时声明"). Fall
 		// back to whatever the token was minted with (Qt today doesn't
@@ -735,8 +772,9 @@ func (h *RealtimeHandler) HandleSignal(c *gin.Context) {
 		// long as the socket, and this is the function that outlives the
 		// handshake. Deferring inside a helper would close the session as soon as
 		// the helper returned - which is exactly the bug the end-to-end test
-		// caught the first time this was written.
-		defer h.closeRemoteSession(sessionID, sc.deviceID)
+		// caught the first time this was written. Passing the connection (not a
+		// bare id) is what lets a deliberate revoke record its own end_reason.
+		defer h.closeRemoteSession(sc)
 		h.openRemoteSession(c, sc, sessionID)
 	}
 
@@ -815,18 +853,21 @@ func (h *RealtimeHandler) openRemoteSession(c *gin.Context, sc *signalConn, sess
 // The signaling channel is the only lifetime this server can observe (the media
 // path is peer to peer), so "the socket ended" is what "the session ended" means
 // here, whatever the peers do with their RTP afterwards.
-func (h *RealtimeHandler) closeRemoteSession(sessionID, deviceID string) {
-	if h.remoteSessions == nil {
+func (h *RealtimeHandler) closeRemoteSession(sc *signalConn) {
+	if h.remoteSessions == nil || sc == nil {
 		return
 	}
 	// The request context is already cancelled by now - it is the socket's - so
 	// the closing write gets a fresh one with its own deadline.
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	closed, changed, err := h.remoteSessions.Close(ctx, sessionID, models.RemoteSessionEndDisconnected)
+	// A deliberate revoke marks the connection before closing it; an ordinary
+	// disconnect leaves no mark and is stamped as such.
+	reason := sc.endReasonOrDefault(models.RemoteSessionEndDisconnected)
+	closed, changed, err := h.remoteSessions.Close(ctx, sc.sessionID, reason)
 	if err != nil {
 		log.Printf("[realtime/signal] remote session close failed device=%s session=%s: %v",
-			deviceID, sessionID, err)
+			sc.deviceID, sc.sessionID, err)
 		return
 	}
 	if !changed {
@@ -836,6 +877,48 @@ func (h *RealtimeHandler) closeRemoteSession(sessionID, deviceID string) {
 		return
 	}
 	h.publishRemoteSessionEvent(ctx, service.EventRemoteSessionEnded, closed)
+}
+
+// RevokeSession closes the live signaling socket behind one session id, if this
+// instance holds it, and returns whether it found one.
+//
+// The topology map is the one source of truth for "which sockets are live", so
+// the lookup walks it rather than keeping a second index that could drift. A
+// session that is not connected here - already over, or held by another
+// instance - reports false, and the caller answers honestly instead of
+// pretending something was closed.
+func (h *RealtimeHandler) RevokeSession(sessionID string) bool {
+	target := h.findSessionConn(sessionID)
+	if target == nil {
+		return false
+	}
+	// Mark before closing: the reader goroutine's deferred close reads the
+	// reason, and the socket will not be torn down until close() runs.
+	target.markEndReason(models.RemoteSessionEndRevoked)
+	target.close()
+	return true
+}
+
+// findSessionConn returns the live controller connection for a session id, or
+// nil. The topology map is the one source of truth for "which sockets are
+// live", so the lookup walks it rather than keeping a second index that could
+// drift; the walk is per device, not per session, because that is how the map is
+// already shaped.
+func (h *RealtimeHandler) findSessionConn(sessionID string) *signalConn {
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" {
+		return nil
+	}
+	h.signalMu.RLock()
+	defer h.signalMu.RUnlock()
+	for _, clients := range h.signalClient {
+		for _, sc := range clients {
+			if sc.sessionID == sessionID {
+				return sc
+			}
+		}
+	}
+	return nil
 }
 
 // publishRemoteSessionEvent fans one lifecycle transition out to the owner's

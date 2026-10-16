@@ -54,6 +54,11 @@ const (
 	// open. A signaling socket cannot outlive the process that held it, so those
 	// sessions really did end - they just ended without the handler running.
 	RemoteSessionEndServerRestart = "server_restart"
+	// RemoteSessionEndRevoked is stamped when an owner or an administrator closed
+	// the session on purpose. It is distinct from RemoteSessionEndDisconnected
+	// because "somebody ended this" and "the network dropped" are different facts
+	// and an audit trail that cannot tell them apart is not much of one.
+	RemoteSessionEndRevoked = "revoked"
 )
 
 // Decorate fills the derived fields. Every path that returns a row to a caller

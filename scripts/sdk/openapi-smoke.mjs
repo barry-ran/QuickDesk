@@ -489,6 +489,23 @@ if ((remoteSessions.json?.items ?? []).length > 0) {
     'GET remote-sessions/{id}: the detail read returned a different session');
 }
 
+// Revoking a session closes the live signaling socket that owns it. A read-only
+// run holds no socket, so the happy path is not reachable here; what is pinned
+// is that the route is wired and answers with the documented failures - an
+// unknown id is a 404, and a session that is already over is a 409 rather than a
+// success that did nothing.
+const ghostRevoke = await call('POST', '/v1/me/remote-sessions/sig_does_not_exist/revoke',
+  { token, expect: 404 });
+problemShape(ghostRevoke.json, 'POST remote-sessions/{id}/revoke (unknown session)', 'NOT_FOUND');
+
+const endedSession = (remoteSessions.json?.items ?? []).find((row) => row.active === false);
+if (endedSession) {
+  const staleRevoke = await call('POST',
+    `/v1/me/remote-sessions/${encodeURIComponent(endedSession.session_id)}/revoke`,
+    { token, expect: 409 });
+  problemShape(staleRevoke.json, 'POST remote-sessions/{id}/revoke (already over)', 'CONFLICT');
+}
+
 // The device-scoped read: the same history, but every entry arrives already
 // joined with its records, so a device page does not need a session id (or a
 // second request per row) to reach the join.

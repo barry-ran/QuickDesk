@@ -7,6 +7,7 @@ Method | HTTP request | Description
 [**get_remote_session**](RemoteSessionsApi.md#get_remote_session) | **GET** /v1/me/remote-sessions/{session_id} | One control session with the records that share its id
 [**list_device_remote_sessions**](RemoteSessionsApi.md#list_device_remote_sessions) | **GET** /v1/me/devices/{device_id}/sessions | One device&#39;s control sessions, each with its related records
 [**list_remote_sessions**](RemoteSessionsApi.md#list_remote_sessions) | **GET** /v1/me/remote-sessions | The caller&#39;s control sessions, open and finished
+[**revoke_remote_session**](RemoteSessionsApi.md#revoke_remote_session) | **POST** /v1/me/remote-sessions/{session_id}/revoke | End one of the caller&#39;s control sessions
 
 
 # **get_remote_session**
@@ -318,6 +319,107 @@ Name | Type | Description  | Notes
 **200** | One page of the caller&#39;s control sessions, newest first. |  -  |
 **400** | The request was malformed or failed validation. |  -  |
 **401** | Missing or expired credentials. |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **revoke_remote_session**
+> RemoteSessionRevocation revoke_remote_session(session_id)
+
+End one of the caller's control sessions
+
+The owner's "throw them out". A remote session lives exactly as long as
+the controller's signaling socket, so ending the session means closing
+that socket; the session row is stamped `end_reason: revoked` and the
+owner's realtime stream carries `remote_session.ended` with that reason.
+Closing the socket also frees the device's controller slot, so a revoked
+session stops counting against the access policy's `max_sessions`.
+
+Owner only, with the same concealment as the detail read: a session that
+belongs to another account is a `404`, not a `403`. A session that exists
+but is already over - or is live on a different server instance - is a
+`409`, because the one thing worse than refusing a revoke is reporting a
+success that did not happen.
+
+
+### Example
+
+* Api Key Authentication (ApiKeyAuth):
+* Bearer (opaque) Authentication (BearerAuth):
+
+```python
+import quickdesk_signaling
+from quickdesk_signaling.models.remote_session_revocation import RemoteSessionRevocation
+from quickdesk_signaling.rest import ApiException
+from pprint import pprint
+
+# Defining the host is optional and defaults to https://your-signaling-host
+# See configuration.py for a list of all supported configuration parameters.
+configuration = quickdesk_signaling.Configuration(
+    host = "https://your-signaling-host"
+)
+
+# The client must configure the authentication and authorization parameters
+# in accordance with the API server security policy.
+# Examples for each auth method are provided below, use the example that
+# satisfies your auth use case.
+
+# Configure API key authorization: ApiKeyAuth
+configuration.api_key['ApiKeyAuth'] = os.environ["API_KEY"]
+
+# Uncomment below to setup prefix (e.g. Bearer) for API key, if needed
+# configuration.api_key_prefix['ApiKeyAuth'] = 'Bearer'
+
+# Configure Bearer authorization (opaque): BearerAuth
+configuration = quickdesk_signaling.Configuration(
+    access_token = os.environ["BEARER_TOKEN"]
+)
+
+# Enter a context with an instance of the API client
+with quickdesk_signaling.ApiClient(configuration) as api_client:
+    # Create an instance of the API class
+    api_instance = quickdesk_signaling.RemoteSessionsApi(api_client)
+    session_id = 'session_id_example' # str | The signaling session id from the list.
+
+    try:
+        # End one of the caller's control sessions
+        api_response = api_instance.revoke_remote_session(session_id)
+        print("The response of RemoteSessionsApi->revoke_remote_session:\n")
+        pprint(api_response)
+    except Exception as e:
+        print("Exception when calling RemoteSessionsApi->revoke_remote_session: %s\n" % e)
+```
+
+
+
+### Parameters
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **session_id** | **str**| The signaling session id from the list. | 
+
+### Return type
+
+[**RemoteSessionRevocation**](RemoteSessionRevocation.md)
+
+### Authorization
+
+[ApiKeyAuth](../README.md#ApiKeyAuth), [BearerAuth](../README.md#BearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json, application/problem+json
+
+### HTTP response details
+
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+**200** | The session was live here and its socket has been closed. |  -  |
+**400** | The request was malformed or failed validation. |  -  |
+**401** | Missing or expired credentials. |  -  |
+**404** | The addressed resource does not exist. |  -  |
+**409** | The session exists but cannot be revoked from here - it is already over, or it is live on another instance.  |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 

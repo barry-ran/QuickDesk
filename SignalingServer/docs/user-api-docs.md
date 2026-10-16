@@ -1217,6 +1217,7 @@ could not be answered from it.
 | `GET` | `/v1/me/remote-sessions?status=&device_id=&cursor=&limit=` | Owner only. `status` is `active` (who is in right now), `ended` (history) or omitted/`all` for both; anything else is a `400`. Cursor-paginated, newest first, `next_cursor` absent on the last page. |
 | `GET` | `/v1/me/remote-sessions/:session_id` | Owner only. One session with the records that share its id: `{session, recordings, access_log, counts}`. Both lists are capped at 100 entries and are present-but-empty rather than absent. A session belonging to another account answers `404`, not `403`, so a caller cannot probe which session ids exist. |
 | `GET` | `/v1/me/devices/:device_id/sessions?status=&cursor=&limit=` | Owner only. The same history scoped to one machine, but every item is the joined shape above, so a device page never needs a session id (or a second request per row) to reach the records. `403` when the device belongs to another account and `404` when it does not exist, matching `.../access-logs`. |
+| `POST` | `/v1/me/remote-sessions/:session_id/revoke` | Owner only. Ends a live session by closing the controller's signaling socket - the only lifetime this server can observe, so closing the socket *is* ending the session. The row is stamped `end_reason=revoked` and the owner's stream carries `remote_session.ended`. Frees the device's controller slot, so the session stops counting against `max_sessions`. Another account's session is `404` (same concealment as the detail read); a session that is already over, or is live on another instance, is `409` rather than a no-op success. Returns `{session_id, device_id, revoked: true}`. |
 
 The detail read is what makes this a session model rather than three logs that
 happen to carry the same string: `recordings` are the caller's recording rows
@@ -1242,10 +1243,12 @@ that is still counting and the total once it has stopped.
 
 `end_reason` is `disconnected` in the ordinary case (the controller closed, the
 client crashed, or the network dropped - the server cannot tell those apart and
-does not pretend to) and `server_restart` for rows a restart found still open: a
-signaling socket cannot outlive the process that held it, so those sessions
-really did end, they just ended without the handler's close running. Unbound
-devices are recorded with `user_id: 0` and never appear in an owner's list.
+does not pretend to), `revoked` when an owner or an administrator ended it on
+purpose (see the revoke route below and §8.5), and `server_restart` for rows a
+restart found still open: a signaling socket cannot outlive the process that
+held it, so those sessions really did end, they just ended without the handler's
+close running. Unbound devices are recorded with `user_id: 0` and never appear in
+an owner's list.
 
 The owner's realtime stream (`/v1/realtime/events`, §6) carries the transitions
 as `remote_session.started` and `remote_session.ended`, both with the same fields
@@ -1257,9 +1260,9 @@ resource with a different lifetime.
 Administrators get the same data without the owner filter: §8.5's
 `GET /v1/admin/remote-sessions` returns every account's sessions, each joined
 with its records exactly as the device-scoped list above does, and
-`.../:session_id` reads one by id. It is read-only - a session still ends when
-the signaling socket that owns it ends; there is no "kick" here (see the
-capability matrix for that gap).
+`.../:session_id` reads one by id. Administrators can also end a session with
+`POST /v1/admin/remote-sessions/:session_id/revoke`, which closes the same
+socket the owner's revoke does and audits `session.revoke`.
 
 ### 5.4 Connections (history)
 
@@ -1855,6 +1858,7 @@ request shapes; this section documents only the route table.
 | `POST` | `/v1/admin/recordings:sweep` — runs the stale + retention + orphan pass now; returns `{stale_marked_failed, artifacts_purged, bytes_freed, orphans_removed, uploads_reaped}` (`uploads_reaped` counts abandoned resumable-upload staging files older than six hours) and audits `recording.sweep` |
 | `GET` | `/v1/admin/remote-sessions?status=&device_id=&user_id=&cursor=&limit=` — the cross-user control-session console: every account's sessions in one cursor-paginated list, **each item already joined** as `{session, recordings, access_log, counts}` (the same shape §5.3.8 returns for one device, so an operator console and a device page render identical data). `status` is `active`/`ended`/omitted `all`; `device_id` and `user_id` narrow it, and a non-numeric `user_id` is a `400`. Read-only |
 | `GET` | `/v1/admin/remote-sessions/:session_id` — one session by id with its recordings and access log, joined the same way. An unknown id is a `404` problem detail; there is no "somebody else's session" case to hide because the caller is authorised to see every one |
+| `POST` | `/v1/admin/remote-sessions/:session_id/revoke` — end any account's live session by closing its signaling socket; writes `end_reason=revoked`, publishes `remote_session.ended` to the owner and audits `session.revoke` (resource `remote_session`). Unknown id `404`; already over or not connected to this instance `409` |
 | `GET` | `/v1/admin/notification-deliveries:stats` — `{total, by_status, acked, unacked, retention_days, archive_retention_days, archive_dir}`; `by_status` always carries all four states (`pending`/`delivering`/`delivered`/`failed`), zeroes included; `acked` counts rows with `acked_at`, `unacked` counts rows that were delivered but never confirmed |
 | `POST` | `/v1/admin/notification-deliveries:sweep` — runs the outbox retention pass now. Optional body `{older_than_days: N}` overrides the configured window and `{archive_retention_days: N}` overrides how long the daily archive files are kept; either or both may be passed. Returns `{purged, older_than_days, cutoff, archive_retention_days, archive_removed, archive_moved, archive_deleted, archive_dir, archive_cold_dir}` and audits `notification_delivery.sweep`. `400` when none of the config or body supplies a bound (`NOTIFICATION_RETENTION_DAYS` / `NOTIFICATION_ARCHIVE_RETENTION_DAYS` or the matching body fields) and `400` when archive retention is asked for with `NOTIFICATION_ARCHIVE_DIR` unset; on an archive write failure nothing is deleted and the response is an error |
 | `GET` `PUT` | `/v1/admin/preset` |
@@ -2180,7 +2184,7 @@ include access-code plaintext, `device_secret`, or `refresh_token`.
 | `device.access_approval.requested` | a correct code is waiting for the owner's yes/no (§5.3.5) | `{approval_id, client_id, client_ip, source, trigger, expires_at}`, where `trigger` is `always` / `grant` / `untrusted_ip` (never the secret) |
 | `device.access_approval.decided` | owner approved or denied a waiting session | `{approval_id, status: "approved"\|"denied", source, client_id, reason?}` |
 | `remote_session.started` | a controller's signaling socket authenticated against this user's device (§5.3.8) | `{session_id, device_id, client_id, client_ip, started_at, active, duration_seconds}` |
-| `remote_session.ended` | that signaling socket went away | `{session_id, device_id, client_id, client_ip, started_at, ended_at, end_reason, active, duration_seconds}` |
+| `remote_session.ended` | that signaling socket ended - on its own (`disconnected`), by an owner or administrator (`revoked`), or by a restart (`server_restart`) | `{session_id, device_id, client_id, client_ip, started_at, ended_at, end_reason, active, duration_seconds}` |
 
 Event envelope (always present):
 

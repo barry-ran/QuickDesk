@@ -24,6 +24,8 @@ type RemoteSessionHandler struct {
 	recordings *service.SessionRecordingService
 	access     *service.DeviceAccessService
 	devices    *service.DeviceService
+	revoker    SessionRevoker
+	audit      *service.AuditService
 }
 
 func NewRemoteSessionHandler(
@@ -31,8 +33,45 @@ func NewRemoteSessionHandler(
 	recordings *service.SessionRecordingService,
 	access *service.DeviceAccessService,
 	devices *service.DeviceService,
+	revoker SessionRevoker,
+	audit *service.AuditService,
 ) *RemoteSessionHandler {
-	return &RemoteSessionHandler{sessions: sessions, recordings: recordings, access: access, devices: devices}
+	return &RemoteSessionHandler{
+		sessions: sessions, recordings: recordings, access: access, devices: devices,
+		revoker: revoker, audit: audit,
+	}
+}
+
+// SessionRevoker closes the live signaling socket behind a session id. It is
+// implemented by RealtimeHandler, which is the only thing that knows the socket
+// topology; the read paths depend on the narrow interface so they can be built
+// and tested without a live WebSocket.
+type SessionRevoker interface {
+	RevokeSession(sessionID string) bool
+}
+
+// revokeSessionSocket is the shared body of the owner and administrator revoke
+// actions. Both callers have already loaded the row and established that the
+// caller may act on it, so the only work left is closing the socket - and
+// saying plainly when there was nothing to close, rather than reporting a
+// success that did not happen.
+func revokeSessionSocket(c *gin.Context, revoker SessionRevoker, row *models.RemoteSession) bool {
+	if revoker == nil {
+		ProblemInternal(c, "session revocation is not configured")
+		return false
+	}
+	if !row.Active {
+		ProblemConflict(c, ProblemCodeConflict, "Session is already over")
+		return false
+	}
+	// A live row whose socket is not on this instance cannot be closed from
+	// here. This is the single-instance assumption the session model already
+	// documents; say so instead of returning a no-op success.
+	if !revoker.RevokeSession(row.SessionID) {
+		ProblemConflict(c, ProblemCodeConflict, "Session is not connected to this instance")
+		return false
+	}
+	return true
 }
 
 // maxSessionsPerDetailPage bounds how many joined rows one list page may carry.
@@ -287,4 +326,41 @@ func (h *RemoteSessionHandler) attachRelated(
 		details = append(details, detailEnvelope(&row, sessionRecordings, sessionAccess))
 	}
 	return details, nil
+}
+
+// Revoke handles POST /v1/me/remote-sessions/:session_id/revoke: the owner ends
+// a session on their own machine.
+//
+// Ownership is checked with the same read the detail endpoint uses, so a
+// session belonging to somebody else is a 404 for the same reason - the caller
+// learns nothing about which ids exist. The row then has to be live and
+// connected here; an already-finished or not-here session is a 409.
+func (h *RemoteSessionHandler) Revoke(c *gin.Context) {
+	uid := middleware.MustUserID(c)
+	sessionID := strings.TrimSpace(c.Param("session_id"))
+	if sessionID == "" {
+		ProblemBadRequest(c, ProblemCodeInvalidRequest, "session_id is required")
+		return
+	}
+	row, err := h.sessions.GetForUser(c.Request.Context(), uid, sessionID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			ProblemNotFound(c, ProblemCodeNotFound, "Session not found")
+			return
+		}
+		ProblemInternal(c, err.Error())
+		return
+	}
+	if !revokeSessionSocket(c, h.revoker, row) {
+		return
+	}
+	if h.audit != nil {
+		h.audit.LogActor(c.Request.Context(), uid, "session.revoke", "remote_session", row.SessionID,
+			"device="+row.DeviceID+" client="+row.ClientID, c.ClientIP())
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"session_id": row.SessionID,
+		"device_id":  row.DeviceID,
+		"revoked":    true,
+	})
 }
