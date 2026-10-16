@@ -28,6 +28,7 @@ import java.io.IOException;
 
 
 import org.openapitools.client.model.Problem;
+import org.openapitools.client.model.RemoteSessionBatchRevocation;
 import org.openapitools.client.model.RemoteSessionDetail;
 import org.openapitools.client.model.RemoteSessionDetailList;
 import org.openapitools.client.model.RemoteSessionList;
@@ -539,6 +540,150 @@ public class RemoteSessionsApi {
 
         okhttp3.Call localVarCall = listRemoteSessionsValidateBeforeCall(status, deviceId, cursor, limit, _callback);
         Type localVarReturnType = new TypeToken<RemoteSessionList>(){}.getType();
+        localVarApiClient.executeAsync(localVarCall, localVarReturnType, _callback);
+        return localVarCall;
+    }
+    /**
+     * Build call for revokeDeviceSessions
+     * @param deviceId The device id shown on the controlled machine. (required)
+     * @param _callback Callback for upload/download progress
+     * @return Call to execute
+     * @throws ApiException If fail to serialize the request body object
+     * @http.response.details
+     <table border="1">
+       <caption>Response Details</caption>
+        <tr><td> Status Code </td><td> Description </td><td> Response Headers </td></tr>
+        <tr><td> 200 </td><td> One result per live session, newest first. </td><td>  -  </td></tr>
+        <tr><td> 400 </td><td> The request was malformed or failed validation. </td><td>  -  </td></tr>
+        <tr><td> 401 </td><td> Missing or expired credentials. </td><td>  -  </td></tr>
+        <tr><td> 403 </td><td> Authenticated but not allowed (includes a rejected access code). </td><td>  -  </td></tr>
+        <tr><td> 404 </td><td> The addressed resource does not exist. </td><td>  -  </td></tr>
+     </table>
+     */
+    public okhttp3.Call revokeDeviceSessionsCall(@javax.annotation.Nonnull String deviceId, final ApiCallback _callback) throws ApiException {
+        String basePath = null;
+        // Operation Servers
+        String[] localBasePaths = new String[] {  };
+
+        // Determine Base Path to Use
+        if (localCustomBaseUrl != null){
+            basePath = localCustomBaseUrl;
+        } else if ( localBasePaths.length > 0 ) {
+            basePath = localBasePaths[localHostIndex];
+        } else {
+            basePath = null;
+        }
+
+        Object localVarPostBody = null;
+
+        // create path and map variables
+        String localVarPath = "/v1/me/devices/{device_id}/sessions:revoke"
+            .replace("{" + "device_id" + "}", localVarApiClient.escapeString(deviceId.toString()));
+
+        List<Pair> localVarQueryParams = new ArrayList<Pair>();
+        List<Pair> localVarCollectionQueryParams = new ArrayList<Pair>();
+        Map<String, String> localVarHeaderParams = new HashMap<String, String>();
+        Map<String, String> localVarCookieParams = new HashMap<String, String>();
+        Map<String, Object> localVarFormParams = new HashMap<String, Object>();
+
+        final String[] localVarAccepts = {
+            "application/json",
+            "application/problem+json"
+        };
+        final String localVarAccept = localVarApiClient.selectHeaderAccept(localVarAccepts);
+        if (localVarAccept != null) {
+            localVarHeaderParams.put("Accept", localVarAccept);
+        }
+
+        final String[] localVarContentTypes = {
+        };
+        final String localVarContentType = localVarApiClient.selectHeaderContentType(localVarContentTypes);
+        if (localVarContentType != null) {
+            localVarHeaderParams.put("Content-Type", localVarContentType);
+        }
+
+        String[] localVarAuthNames = new String[] { "ApiKeyAuth", "BearerAuth" };
+        return localVarApiClient.buildCall(basePath, localVarPath, "POST", localVarQueryParams, localVarCollectionQueryParams, localVarPostBody, localVarHeaderParams, localVarCookieParams, localVarFormParams, localVarAuthNames, _callback);
+    }
+
+    @SuppressWarnings("rawtypes")
+    private okhttp3.Call revokeDeviceSessionsValidateBeforeCall(@javax.annotation.Nonnull String deviceId, final ApiCallback _callback) throws ApiException {
+        // verify the required parameter 'deviceId' is set
+        if (deviceId == null) {
+            throw new ApiException("Missing the required parameter 'deviceId' when calling revokeDeviceSessions(Async)");
+        }
+
+        return revokeDeviceSessionsCall(deviceId, _callback);
+
+    }
+
+    /**
+     * End every live control session on one device
+     * The owner&#39;s \&quot;throw everyone out of this machine\&quot;: every live controller on the device is ended in one call, whichever server instance happens to hold each socket. Each is closed at its owning instance, and the call confirms the database row before reporting it - the same promise the single-session revoke makes.  A batch does not fail as a whole: one session that cannot be reached must not stop the others, so the response reports each session&#39;s outcome and counts. &#x60;truncated&#x60; says the device had more live controllers than one call handles (the cap is 200), which means the machine is not necessarily empty when the call returns. A machine with nothing live is a &#x60;200&#x60; with &#x60;revoked: 0&#x60;, not an error.  Ownership answers match the sibling routes: &#x60;404&#x60; for a device that does not exist, &#x60;403&#x60; for one that belongs to somebody else. 
+     * @param deviceId The device id shown on the controlled machine. (required)
+     * @return RemoteSessionBatchRevocation
+     * @throws ApiException If fail to call the API, e.g. server error or cannot deserialize the response body
+     * @http.response.details
+     <table border="1">
+       <caption>Response Details</caption>
+        <tr><td> Status Code </td><td> Description </td><td> Response Headers </td></tr>
+        <tr><td> 200 </td><td> One result per live session, newest first. </td><td>  -  </td></tr>
+        <tr><td> 400 </td><td> The request was malformed or failed validation. </td><td>  -  </td></tr>
+        <tr><td> 401 </td><td> Missing or expired credentials. </td><td>  -  </td></tr>
+        <tr><td> 403 </td><td> Authenticated but not allowed (includes a rejected access code). </td><td>  -  </td></tr>
+        <tr><td> 404 </td><td> The addressed resource does not exist. </td><td>  -  </td></tr>
+     </table>
+     */
+    public RemoteSessionBatchRevocation revokeDeviceSessions(@javax.annotation.Nonnull String deviceId) throws ApiException {
+        ApiResponse<RemoteSessionBatchRevocation> localVarResp = revokeDeviceSessionsWithHttpInfo(deviceId);
+        return localVarResp.getData();
+    }
+
+    /**
+     * End every live control session on one device
+     * The owner&#39;s \&quot;throw everyone out of this machine\&quot;: every live controller on the device is ended in one call, whichever server instance happens to hold each socket. Each is closed at its owning instance, and the call confirms the database row before reporting it - the same promise the single-session revoke makes.  A batch does not fail as a whole: one session that cannot be reached must not stop the others, so the response reports each session&#39;s outcome and counts. &#x60;truncated&#x60; says the device had more live controllers than one call handles (the cap is 200), which means the machine is not necessarily empty when the call returns. A machine with nothing live is a &#x60;200&#x60; with &#x60;revoked: 0&#x60;, not an error.  Ownership answers match the sibling routes: &#x60;404&#x60; for a device that does not exist, &#x60;403&#x60; for one that belongs to somebody else. 
+     * @param deviceId The device id shown on the controlled machine. (required)
+     * @return ApiResponse&lt;RemoteSessionBatchRevocation&gt;
+     * @throws ApiException If fail to call the API, e.g. server error or cannot deserialize the response body
+     * @http.response.details
+     <table border="1">
+       <caption>Response Details</caption>
+        <tr><td> Status Code </td><td> Description </td><td> Response Headers </td></tr>
+        <tr><td> 200 </td><td> One result per live session, newest first. </td><td>  -  </td></tr>
+        <tr><td> 400 </td><td> The request was malformed or failed validation. </td><td>  -  </td></tr>
+        <tr><td> 401 </td><td> Missing or expired credentials. </td><td>  -  </td></tr>
+        <tr><td> 403 </td><td> Authenticated but not allowed (includes a rejected access code). </td><td>  -  </td></tr>
+        <tr><td> 404 </td><td> The addressed resource does not exist. </td><td>  -  </td></tr>
+     </table>
+     */
+    public ApiResponse<RemoteSessionBatchRevocation> revokeDeviceSessionsWithHttpInfo(@javax.annotation.Nonnull String deviceId) throws ApiException {
+        okhttp3.Call localVarCall = revokeDeviceSessionsValidateBeforeCall(deviceId, null);
+        Type localVarReturnType = new TypeToken<RemoteSessionBatchRevocation>(){}.getType();
+        return localVarApiClient.execute(localVarCall, localVarReturnType);
+    }
+
+    /**
+     * End every live control session on one device (asynchronously)
+     * The owner&#39;s \&quot;throw everyone out of this machine\&quot;: every live controller on the device is ended in one call, whichever server instance happens to hold each socket. Each is closed at its owning instance, and the call confirms the database row before reporting it - the same promise the single-session revoke makes.  A batch does not fail as a whole: one session that cannot be reached must not stop the others, so the response reports each session&#39;s outcome and counts. &#x60;truncated&#x60; says the device had more live controllers than one call handles (the cap is 200), which means the machine is not necessarily empty when the call returns. A machine with nothing live is a &#x60;200&#x60; with &#x60;revoked: 0&#x60;, not an error.  Ownership answers match the sibling routes: &#x60;404&#x60; for a device that does not exist, &#x60;403&#x60; for one that belongs to somebody else. 
+     * @param deviceId The device id shown on the controlled machine. (required)
+     * @param _callback The callback to be executed when the API call finishes
+     * @return The request call
+     * @throws ApiException If fail to process the API call, e.g. serializing the request body object
+     * @http.response.details
+     <table border="1">
+       <caption>Response Details</caption>
+        <tr><td> Status Code </td><td> Description </td><td> Response Headers </td></tr>
+        <tr><td> 200 </td><td> One result per live session, newest first. </td><td>  -  </td></tr>
+        <tr><td> 400 </td><td> The request was malformed or failed validation. </td><td>  -  </td></tr>
+        <tr><td> 401 </td><td> Missing or expired credentials. </td><td>  -  </td></tr>
+        <tr><td> 403 </td><td> Authenticated but not allowed (includes a rejected access code). </td><td>  -  </td></tr>
+        <tr><td> 404 </td><td> The addressed resource does not exist. </td><td>  -  </td></tr>
+     </table>
+     */
+    public okhttp3.Call revokeDeviceSessionsAsync(@javax.annotation.Nonnull String deviceId, final ApiCallback<RemoteSessionBatchRevocation> _callback) throws ApiException {
+
+        okhttp3.Call localVarCall = revokeDeviceSessionsValidateBeforeCall(deviceId, _callback);
+        Type localVarReturnType = new TypeToken<RemoteSessionBatchRevocation>(){}.getType();
         localVarApiClient.executeAsync(localVarCall, localVarReturnType, _callback);
         return localVarCall;
     }

@@ -2,6 +2,7 @@ package handler
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -28,6 +29,7 @@ type AdminRemoteSessionHandler struct {
 	sessions   *service.RemoteSessionService
 	recordings *service.SessionRecordingService
 	access     *service.DeviceAccessService
+	devices    *service.DeviceService
 	revoker    SessionRevoker
 	audit      *service.AuditService
 }
@@ -36,11 +38,12 @@ func NewAdminRemoteSessionHandler(
 	sessions *service.RemoteSessionService,
 	recordings *service.SessionRecordingService,
 	access *service.DeviceAccessService,
+	devices *service.DeviceService,
 	revoker SessionRevoker,
 	audit *service.AuditService,
 ) *AdminRemoteSessionHandler {
 	return &AdminRemoteSessionHandler{
-		sessions: sessions, recordings: recordings, access: access,
+		sessions: sessions, recordings: recordings, access: access, devices: devices,
 		revoker: revoker, audit: audit,
 	}
 }
@@ -173,6 +176,51 @@ func (h *AdminRemoteSessionHandler) Revoke(c *gin.Context) {
 		"device_id":  row.DeviceID,
 		"user_id":    row.UserID,
 		"revoked":    true,
+	})
+}
+
+// RevokeForDevice handles POST /v1/admin/devices/:device_id/sessions:revoke:
+// clear every live controller off one machine in a single call, whichever
+// instances happen to hold the sockets.
+//
+// An unknown device is a 404 - the operator named it, so a typo should not look
+// like a machine that happened to be empty. The response is per session, the
+// same shape the owner route returns, and one unreachable session never stops
+// the rest from being closed.
+func (h *AdminRemoteSessionHandler) RevokeForDevice(c *gin.Context) {
+	deviceID := strings.TrimSpace(c.Param("device_id"))
+	if deviceID == "" {
+		ProblemBadRequest(c, ProblemCodeInvalidRequest, "device_id is required")
+		return
+	}
+	if h.devices != nil {
+		if _, err := h.devices.GetByDeviceID(c.Request.Context(), deviceID); err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				ProblemNotFound(c, ProblemCodeDeviceNotFound, "Device not found")
+				return
+			}
+			ProblemInternal(c, err.Error())
+			return
+		}
+	}
+	revoked, failed, truncated, results, err := revokeDeviceSessions(
+		c.Request.Context(), h.sessions, h.revoker, deviceID, maxBatchRevokeSessions)
+	if err != nil {
+		ProblemInternal(c, err.Error())
+		return
+	}
+	if h.audit != nil && revoked > 0 {
+		h.audit.Log(c.Request.Context(), middleware.MustAdminID(c), "", "session.revoke_batch",
+			"device", deviceID,
+			fmt.Sprintf("revoked=%d failed=%d truncated=%t", revoked, failed, truncated),
+			c.ClientIP())
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"device_id": deviceID,
+		"revoked":   revoked,
+		"failed":    failed,
+		"truncated": truncated,
+		"sessions":  results,
 	})
 }
 

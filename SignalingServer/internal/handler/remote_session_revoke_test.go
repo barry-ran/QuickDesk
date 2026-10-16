@@ -84,9 +84,15 @@ func TestSessionRevokeBusChannelIsAddressedAtOneInstance(t *testing.T) {
 
 // fakeRevoker records what the shared revoke body asked of the socket layer.
 type fakeRevoker struct {
-	called     bool
-	session    string
-	found      bool
+	called  bool
+	session string
+	found   bool
+	// local, when set, decides per session id whether this instance holds the
+	// socket; otherwise found answers for every id.
+	local map[string]bool
+	// onClose, when set, runs when this instance reports a socket closed - the
+	// test's stand-in for the teardown that stamps the session row.
+	onClose    func(sessionID string)
 	asked      bool
 	askedInst  string
 	askedSess  string
@@ -97,7 +103,14 @@ type fakeRevoker struct {
 func (f *fakeRevoker) RevokeSession(sessionID string) bool {
 	f.called = true
 	f.session = sessionID
-	return f.found
+	held := f.found
+	if f.local != nil {
+		held = f.local[sessionID]
+	}
+	if held && f.onClose != nil {
+		f.onClose(sessionID)
+	}
+	return held
 }
 
 func (f *fakeRevoker) AskInstanceRevoke(_ context.Context, instanceID, sessionID string) error {

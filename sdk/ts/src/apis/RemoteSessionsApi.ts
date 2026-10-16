@@ -16,6 +16,7 @@
 import * as runtime from '../runtime';
 import type {
   Problem,
+  RemoteSessionBatchRevocation,
   RemoteSessionDetail,
   RemoteSessionDetailList,
   RemoteSessionList,
@@ -24,6 +25,8 @@ import type {
 import {
     ProblemFromJSON,
     ProblemToJSON,
+    RemoteSessionBatchRevocationFromJSON,
+    RemoteSessionBatchRevocationToJSON,
     RemoteSessionDetailFromJSON,
     RemoteSessionDetailToJSON,
     RemoteSessionDetailListFromJSON,
@@ -50,6 +53,10 @@ export interface ListRemoteSessionsRequest {
     deviceId?: string;
     cursor?: string;
     limit?: number;
+}
+
+export interface RevokeDeviceSessionsRequest {
+    deviceId: string;
 }
 
 export interface RevokeRemoteSessionRequest {
@@ -231,6 +238,57 @@ export class RemoteSessionsApi extends runtime.BaseAPI {
      */
     async listRemoteSessions(requestParameters: ListRemoteSessionsRequest = {}, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<RemoteSessionList> {
         const response = await this.listRemoteSessionsRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * The owner\'s \"throw everyone out of this machine\": every live controller on the device is ended in one call, whichever server instance happens to hold each socket. Each is closed at its owning instance, and the call confirms the database row before reporting it - the same promise the single-session revoke makes.  A batch does not fail as a whole: one session that cannot be reached must not stop the others, so the response reports each session\'s outcome and counts. `truncated` says the device had more live controllers than one call handles (the cap is 200), which means the machine is not necessarily empty when the call returns. A machine with nothing live is a `200` with `revoked: 0`, not an error.  Ownership answers match the sibling routes: `404` for a device that does not exist, `403` for one that belongs to somebody else. 
+     * End every live control session on one device
+     */
+    async revokeDeviceSessionsRaw(requestParameters: RevokeDeviceSessionsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<RemoteSessionBatchRevocation>> {
+        if (requestParameters['deviceId'] == null) {
+            throw new runtime.RequiredError(
+                'deviceId',
+                'Required parameter "deviceId" was null or undefined when calling revokeDeviceSessions().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        if (this.configuration && this.configuration.apiKey) {
+            headerParameters["X-API-Key"] = await this.configuration.apiKey("X-API-Key"); // ApiKeyAuth authentication
+        }
+
+        if (this.configuration && this.configuration.accessToken) {
+            const token = this.configuration.accessToken;
+            const tokenString = await token("BearerAuth", []);
+
+            if (tokenString) {
+                headerParameters["Authorization"] = `Bearer ${tokenString}`;
+            }
+        }
+
+        let urlPath = `/v1/me/devices/{device_id}/sessions:revoke`;
+        urlPath = urlPath.replace(`{${"device_id"}}`, encodeURIComponent(String(requestParameters['deviceId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'POST',
+            headers: headerParameters,
+            query: queryParameters,
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => RemoteSessionBatchRevocationFromJSON(jsonValue));
+    }
+
+    /**
+     * The owner\'s \"throw everyone out of this machine\": every live controller on the device is ended in one call, whichever server instance happens to hold each socket. Each is closed at its owning instance, and the call confirms the database row before reporting it - the same promise the single-session revoke makes.  A batch does not fail as a whole: one session that cannot be reached must not stop the others, so the response reports each session\'s outcome and counts. `truncated` says the device had more live controllers than one call handles (the cap is 200), which means the machine is not necessarily empty when the call returns. A machine with nothing live is a `200` with `revoked: 0`, not an error.  Ownership answers match the sibling routes: `404` for a device that does not exist, `403` for one that belongs to somebody else. 
+     * End every live control session on one device
+     */
+    async revokeDeviceSessions(requestParameters: RevokeDeviceSessionsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<RemoteSessionBatchRevocation> {
+        const response = await this.revokeDeviceSessionsRaw(requestParameters, initOverrides);
         return await response.value();
     }
 

@@ -533,6 +533,28 @@ const unknownDeviceSessions = await call('GET', '/v1/me/devices/2147483647/sessi
   { token, expect: 404 });
 problemShape(unknownDeviceSessions.json, 'GET devices/{id}/sessions (unknown device)', 'DEVICE_NOT_FOUND');
 
+// Clearing a machine is a batch, so the documented shape is the report, not a
+// single boolean: counts plus one entry per attempted session. A read-only run
+// holds no sockets, so revoked is normally 0 - the envelope is what is pinned.
+if (smokeDevice) {
+  const cleared = await call('POST', `/v1/me/devices/${smokeDevice}/sessions:revoke`,
+    { token, expect: 200 });
+  field(cleared.json, 'device_id', 'string', 'POST devices/{id}/sessions:revoke');
+  const revoked = field(cleared.json, 'revoked', 'number', 'POST devices/{id}/sessions:revoke');
+  const failed = field(cleared.json, 'failed', 'number', 'POST devices/{id}/sessions:revoke');
+  field(cleared.json, 'truncated', 'boolean', 'POST devices/{id}/sessions:revoke');
+  check(Array.isArray(cleared.json?.sessions),
+    `POST devices/{id}/sessions:revoke: sessions is ${typeof cleared.json?.sessions}, spec says an array`);
+  check(cleared.json?.device_id === smokeDevice,
+    'POST devices/{id}/sessions:revoke reported a different device');
+  check(revoked + failed === (cleared.json?.sessions ?? []).length,
+    'POST devices/{id}/sessions:revoke: counts disagree with the per-session list');
+}
+
+const unknownDeviceClear = await call('POST', '/v1/me/devices/2147483647/sessions:revoke',
+  { token, expect: 404 });
+problemShape(unknownDeviceClear.json, 'POST devices/{id}/sessions:revoke (unknown device)', 'DEVICE_NOT_FOUND');
+
 if (smokeDevice) {
   // 6. PUT the rule back unchanged, then restore the prior state exactly.
   const putBody = {

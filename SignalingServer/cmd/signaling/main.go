@@ -518,7 +518,7 @@ func main() {
 		sessionRecordingService, auditService, recordingLifecycle,
 		cfg.Recording.RetentionDays, cfg.Recording.StaleMinutes)
 	adminRemoteSessionHandler := handler.NewAdminRemoteSessionHandler(
-		remoteSessionService, sessionRecordingService, deviceAccessService, realtimeHandler, auditService)
+		remoteSessionService, sessionRecordingService, deviceAccessService, deviceService, realtimeHandler, auditService)
 	adminNotificationDeliveryHandler := handler.NewAdminNotificationDeliveryHandler(
 		notificationDeliveryService, auditService,
 		cfg.Notification.RetentionDays, cfg.Notification.ArchiveRetentionDays)
@@ -641,6 +641,9 @@ func main() {
 			// The same history with the session lifecycle attached: each entry is
 			// a session plus the recordings and access-log rows that share its id.
 			me.GET("/devices/:device_id/sessions", remoteSessionHandler.ListForDevice)
+			// The owner's "clear this machine": every live controller off one
+			// device in one call, whichever instance holds each socket.
+			me.POST("/devices/:device_id/sessions:revoke", remoteSessionHandler.RevokeForDevice)
 			me.GET("/devices/:device_id/access-policy", deviceAccessPolicyHandler.Get)
 			me.PUT("/devices/:device_id/access-policy", deviceAccessPolicyHandler.Put)
 			me.GET("/devices/:device_id/offline-alert", deviceOfflineAlertHandler.Get)
@@ -817,6 +820,9 @@ func main() {
 		adminGuarded.DELETE("/devices/:device_id", adminDevicesHandler.Delete)
 		adminGuarded.POST("/devices/:device_id/unbind", adminDevicesHandler.ForceUnbind)
 		adminGuarded.POST("/devices/:device_id/secret:rotate", adminDevicesHandler.RotateSecret)
+		// Clear every live controller off one machine, whatever instance holds
+		// each socket.
+		adminGuarded.POST("/devices/:device_id/sessions:revoke", adminRemoteSessionHandler.RevokeForDevice)
 		adminGuarded.POST("/devices:batch", func(c *gin.Context) {
 			adminDevicesHandler.Batch(c, groupService)
 		})

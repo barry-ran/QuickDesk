@@ -7,6 +7,7 @@ Method | HTTP request | Description
 [**GetRemoteSession**](RemoteSessionsAPI.md#GetRemoteSession) | **Get** /v1/me/remote-sessions/{session_id} | One control session with the records that share its id
 [**ListDeviceRemoteSessions**](RemoteSessionsAPI.md#ListDeviceRemoteSessions) | **Get** /v1/me/devices/{device_id}/sessions | One device&#39;s control sessions, each with its related records
 [**ListRemoteSessions**](RemoteSessionsAPI.md#ListRemoteSessions) | **Get** /v1/me/remote-sessions | The caller&#39;s control sessions, open and finished
+[**RevokeDeviceSessions**](RemoteSessionsAPI.md#RevokeDeviceSessions) | **Post** /v1/me/devices/{device_id}/sessions:revoke | End every live control session on one device
 [**RevokeRemoteSession**](RemoteSessionsAPI.md#RevokeRemoteSession) | **Post** /v1/me/remote-sessions/{session_id}/revoke | End one of the caller&#39;s control sessions
 
 
@@ -214,6 +215,76 @@ Name | Type | Description  | Notes
 ### Return type
 
 [**RemoteSessionList**](RemoteSessionList.md)
+
+### Authorization
+
+[ApiKeyAuth](../README.md#ApiKeyAuth), [BearerAuth](../README.md#BearerAuth)
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: application/json, application/problem+json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
+[[Back to Model list]](../README.md#documentation-for-models)
+[[Back to README]](../README.md)
+
+
+## RevokeDeviceSessions
+
+> RemoteSessionBatchRevocation RevokeDeviceSessions(ctx, deviceId).Execute()
+
+End every live control session on one device
+
+
+
+### Example
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	openapiclient "github.com/ilh-github/go-remote-next/signaling"
+)
+
+func main() {
+	deviceId := "deviceId_example" // string | The device id shown on the controlled machine.
+
+	configuration := openapiclient.NewConfiguration()
+	apiClient := openapiclient.NewAPIClient(configuration)
+	resp, r, err := apiClient.RemoteSessionsAPI.RevokeDeviceSessions(context.Background(), deviceId).Execute()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error when calling `RemoteSessionsAPI.RevokeDeviceSessions``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
+	}
+	// response from `RevokeDeviceSessions`: RemoteSessionBatchRevocation
+	fmt.Fprintf(os.Stdout, "Response from `RemoteSessionsAPI.RevokeDeviceSessions`: %v\n", resp)
+}
+```
+
+### Path Parameters
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
+**deviceId** | **string** | The device id shown on the controlled machine. | 
+
+### Other Parameters
+
+Other parameters are passed through a pointer to a apiRevokeDeviceSessionsRequest struct via the builder pattern
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+
+
+### Return type
+
+[**RemoteSessionBatchRevocation**](RemoteSessionBatchRevocation.md)
 
 ### Authorization
 

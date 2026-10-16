@@ -205,6 +205,7 @@ Class | Method | HTTP request | Description
 *RemoteSessionsApi* | [**getRemoteSession**](docs/RemoteSessionsApi.md#getRemoteSession) | **GET** /v1/me/remote-sessions/{session_id} | One control session with the records that share its id
 *RemoteSessionsApi* | [**listDeviceRemoteSessions**](docs/RemoteSessionsApi.md#listDeviceRemoteSessions) | **GET** /v1/me/devices/{device_id}/sessions | One device&#39;s control sessions, each with its related records
 *RemoteSessionsApi* | [**listRemoteSessions**](docs/RemoteSessionsApi.md#listRemoteSessions) | **GET** /v1/me/remote-sessions | The caller&#39;s control sessions, open and finished
+*RemoteSessionsApi* | [**revokeDeviceSessions**](docs/RemoteSessionsApi.md#revokeDeviceSessions) | **POST** /v1/me/devices/{device_id}/sessions:revoke | End every live control session on one device
 *RemoteSessionsApi* | [**revokeRemoteSession**](docs/RemoteSessionsApi.md#revokeRemoteSession) | **POST** /v1/me/remote-sessions/{session_id}/revoke | End one of the caller&#39;s control sessions
 *UpdateApi* | [**checkForUpdate**](docs/UpdateApi.md#checkForUpdate) | **GET** /v1/update:check | Check the self-hosted update channel for a newer build
 *UpdateApi* | [**downloadUpdateArtifact**](docs/UpdateApi.md#downloadUpdateArtifact) | **GET** /v1/update-releases/{release_id}/artifact | Download an installer this server hosts itself
@@ -245,6 +246,8 @@ Class | Method | HTTP request | Description
  - [Problem](docs/Problem.md)
  - [RemoteSession](docs/RemoteSession.md)
  - [RemoteSessionAccessLog](docs/RemoteSessionAccessLog.md)
+ - [RemoteSessionBatchRevocation](docs/RemoteSessionBatchRevocation.md)
+ - [RemoteSessionBatchRevocationSessionsInner](docs/RemoteSessionBatchRevocationSessionsInner.md)
  - [RemoteSessionDetail](docs/RemoteSessionDetail.md)
  - [RemoteSessionDetailCounts](docs/RemoteSessionDetailCounts.md)
  - [RemoteSessionDetailList](docs/RemoteSessionDetailList.md)

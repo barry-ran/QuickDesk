@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -65,28 +66,49 @@ type SessionRevoker interface {
 // owning instance is gone.
 const sessionRevokeTimeout = 3 * time.Second
 
-// revokeSessionSocket is the shared body of the owner and administrator revoke
-// actions. Both callers have already loaded the row and established that the
-// caller may act on it, so the only work left is closing the socket - and
-// saying plainly when there was nothing to close, rather than reporting a
-// success that did not happen.
-func revokeSessionSocket(
-	c *gin.Context,
+// revokeOutcome says what happened to one revoke attempt. It exists so the
+// single-session action and the batch action can share one implementation: the
+// first turns the outcome into a problem response, the second reports it per
+// row and keeps going.
+type revokeOutcome int
+
+const (
+	revokeDone revokeOutcome = iota
+	revokeNotConfigured
+	revokeAlreadyOver
+	revokeNotConnectedHere
+	revokePublishFailed
+	revokeNotConfirmed
+)
+
+// revokeOne closes one session - here if this instance holds it, otherwise by
+// asking the instance that does - and reports the outcome plus a detail string.
+// It never writes a response, because a batch caller needs every row's result
+// rather than the first failure.
+func revokeOne(
+	ctx context.Context,
 	sessions *service.RemoteSessionService,
 	revoker SessionRevoker,
 	row *models.RemoteSession,
-) bool {
+) (revokeOutcome, string) {
 	if revoker == nil {
-		ProblemInternal(c, "session revocation is not configured")
-		return false
+		return revokeNotConfigured, "session revocation is not configured"
 	}
 	if !row.Active {
-		ProblemConflict(c, ProblemCodeConflict, "Session is already over")
-		return false
+		return revokeAlreadyOver, "Session is already over"
 	}
 	// This instance first: it is the common case, and it costs nothing.
 	if revoker.RevokeSession(row.SessionID) {
-		return true
+		// The socket is closed by now, but the row is stamped by that socket's
+		// teardown a moment later. Confirm the stamp too, so "200 means it
+		// happened" holds for the local path exactly as it does for the remote
+		// one - a caller that reads the ended list straight away must find it.
+		// A caller with no session store to read (a unit test) takes the socket
+		// close as the answer.
+		if sessions == nil || waitForSessionEnd(ctx, sessions, row.SessionID, sessionRevokeTimeout) {
+			return revokeDone, ""
+		}
+		return revokeNotConfirmed, "The session socket closed but its row was not updated in time"
 	}
 	// The socket is elsewhere. If the row names its instance, ask that one and
 	// wait for the row to actually close: a published command that nobody acted
@@ -94,18 +116,36 @@ func revokeSessionSocket(
 	// column, and a row naming this instance that we could not find means the
 	// socket is already gone - both are "not connected here".
 	if row.InstanceID == "" || row.InstanceID == revoker.InstanceID() {
-		ProblemConflict(c, ProblemCodeConflict, "Session is not connected to this instance")
-		return false
+		return revokeNotConnectedHere, "Session is not connected to this instance"
 	}
-	if err := revoker.AskInstanceRevoke(c.Request.Context(), row.InstanceID, row.SessionID); err != nil {
-		ProblemInternal(c, err.Error())
-		return false
+	if err := revoker.AskInstanceRevoke(ctx, row.InstanceID, row.SessionID); err != nil {
+		return revokePublishFailed, err.Error()
 	}
-	if waitForSessionEnd(c.Request.Context(), sessions, row.SessionID, sessionRevokeTimeout) {
+	if waitForSessionEnd(ctx, sessions, row.SessionID, sessionRevokeTimeout) {
+		return revokeDone, ""
+	}
+	return revokeNotConfirmed, "The instance holding the session did not close it in time"
+}
+
+// revokeSessionSocket is the single-session body of the owner and administrator
+// revoke actions: it runs revokeOne and turns a failure into the problem the
+// caller should see - 500 when the command never left, 409 when it could not be
+// carried out - rather than reporting a success that did not happen.
+func revokeSessionSocket(
+	c *gin.Context,
+	sessions *service.RemoteSessionService,
+	revoker SessionRevoker,
+	row *models.RemoteSession,
+) bool {
+	outcome, detail := revokeOne(c.Request.Context(), sessions, revoker, row)
+	switch outcome {
+	case revokeDone:
 		return true
+	case revokeNotConfigured, revokePublishFailed:
+		ProblemInternal(c, detail)
+	default:
+		ProblemConflict(c, ProblemCodeConflict, detail)
 	}
-	ProblemConflict(c, ProblemCodeConflict,
-		"The instance holding the session did not close it in time")
 	return false
 }
 
@@ -131,6 +171,63 @@ func waitForSessionEnd(ctx context.Context, sessions *service.RemoteSessionServi
 		case <-time.After(50 * time.Millisecond):
 		}
 	}
+}
+
+// maxBatchRevokeSessions bounds one device-wide revoke. It matches the list page
+// cap: a machine with more concurrent controllers than this is not a shape the
+// product has, and an unbounded sweep would let one request hold an operator for
+// a long time. When the cap is hit the response says so rather than pretending
+// the device is now empty.
+const maxBatchRevokeSessions = 200
+
+// revokeDeviceSessions closes every live session on one device and reports the
+// outcome per session. It is shared by the owner and the administrator route:
+// both have already established that the caller may act on the device, so all
+// that is left is doing the work and being honest about partial success.
+//
+// A batch does not fail as a whole. One session on a dead instance must not stop
+// the other nine from being kicked, so each row carries its own result and the
+// caller sees exactly which ones did not go.
+func revokeDeviceSessions(
+	ctx context.Context,
+	sessions *service.RemoteSessionService,
+	revoker SessionRevoker,
+	deviceID string,
+	limit int,
+) (revoked int, failed int, truncated bool, results []gin.H, err error) {
+	if limit <= 0 {
+		limit = maxBatchRevokeSessions
+	}
+	open := true
+	rows, err := sessions.List(ctx, service.RemoteSessionFilter{
+		DeviceID: deviceID,
+		Active:   &open,
+		// One row past the cap, so "there are more" is answerable without a
+		// second count.
+		Limit: limit + 1,
+	})
+	if err != nil {
+		return 0, 0, false, nil, err
+	}
+	if len(rows) > limit {
+		rows = rows[:limit]
+		truncated = true
+	}
+	results = make([]gin.H, 0, len(rows))
+	for i := range rows {
+		outcome, detail := revokeOne(ctx, sessions, revoker, &rows[i])
+		entry := gin.H{"session_id": rows[i].SessionID}
+		if outcome == revokeDone {
+			revoked++
+			entry["revoked"] = true
+		} else {
+			failed++
+			entry["revoked"] = false
+			entry["reason"] = detail
+		}
+		results = append(results, entry)
+	}
+	return revoked, failed, truncated, results, nil
 }
 
 // maxSessionsPerDetailPage bounds how many joined rows one list page may carry.
@@ -421,5 +518,56 @@ func (h *RemoteSessionHandler) Revoke(c *gin.Context) {
 		"session_id": row.SessionID,
 		"device_id":  row.DeviceID,
 		"revoked":    true,
+	})
+}
+
+// RevokeForDevice handles POST /v1/me/devices/:device_id/sessions:revoke: the
+// owner's "throw everyone out of this machine".
+//
+// Ownership answers follow the sibling routes - 404 for an unknown device, 403
+// for somebody else's - and the response reports the outcome per session rather
+// than a single pass/fail, because a batch with one unreachable session is a
+// normal outcome and the operator needs to see which one it was.
+func (h *RemoteSessionHandler) RevokeForDevice(c *gin.Context) {
+	uid := middleware.MustUserID(c)
+	deviceID := strings.TrimSpace(c.Param("device_id"))
+	if deviceID == "" {
+		ProblemBadRequest(c, ProblemCodeInvalidRequest, "device_id is required")
+		return
+	}
+	if h.devices == nil {
+		ProblemInternal(c, "device lookup is not configured")
+		return
+	}
+	device, err := h.devices.GetByDeviceID(c.Request.Context(), deviceID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			ProblemNotFound(c, ProblemCodeDeviceNotFound, "Device not found")
+			return
+		}
+		ProblemInternal(c, err.Error())
+		return
+	}
+	if device.UserID == nil || *device.UserID != uid {
+		ProblemForbidden(c, ProblemCodeForbidden, "Device is not owned by this user")
+		return
+	}
+	revoked, failed, truncated, results, err := revokeDeviceSessions(
+		c.Request.Context(), h.sessions, h.revoker, deviceID, maxBatchRevokeSessions)
+	if err != nil {
+		ProblemInternal(c, err.Error())
+		return
+	}
+	if h.audit != nil && revoked > 0 {
+		h.audit.LogActor(c.Request.Context(), uid, "session.revoke_batch", "device", deviceID,
+			fmt.Sprintf("revoked=%d failed=%d truncated=%t", revoked, failed, truncated),
+			c.ClientIP())
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"device_id": deviceID,
+		"revoked":   revoked,
+		"failed":    failed,
+		"truncated": truncated,
+		"sessions":  results,
 	})
 }

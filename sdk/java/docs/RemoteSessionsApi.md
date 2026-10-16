@@ -7,6 +7,7 @@ All URIs are relative to *https://your-signaling-host*
 | [**getRemoteSession**](RemoteSessionsApi.md#getRemoteSession) | **GET** /v1/me/remote-sessions/{session_id} | One control session with the records that share its id |
 | [**listDeviceRemoteSessions**](RemoteSessionsApi.md#listDeviceRemoteSessions) | **GET** /v1/me/devices/{device_id}/sessions | One device&#39;s control sessions, each with its related records |
 | [**listRemoteSessions**](RemoteSessionsApi.md#listRemoteSessions) | **GET** /v1/me/remote-sessions | The caller&#39;s control sessions, open and finished |
+| [**revokeDeviceSessions**](RemoteSessionsApi.md#revokeDeviceSessions) | **POST** /v1/me/devices/{device_id}/sessions:revoke | End every live control session on one device |
 | [**revokeRemoteSession**](RemoteSessionsApi.md#revokeRemoteSession) | **POST** /v1/me/remote-sessions/{session_id}/revoke | End one of the caller&#39;s control sessions |
 
 
@@ -249,6 +250,83 @@ public class Example {
 | **200** | One page of the caller&#39;s control sessions, newest first. |  -  |
 | **400** | The request was malformed or failed validation. |  -  |
 | **401** | Missing or expired credentials. |  -  |
+
+<a id="revokeDeviceSessions"></a>
+# **revokeDeviceSessions**
+> RemoteSessionBatchRevocation revokeDeviceSessions(deviceId)
+
+End every live control session on one device
+
+The owner&#39;s \&quot;throw everyone out of this machine\&quot;: every live controller on the device is ended in one call, whichever server instance happens to hold each socket. Each is closed at its owning instance, and the call confirms the database row before reporting it - the same promise the single-session revoke makes.  A batch does not fail as a whole: one session that cannot be reached must not stop the others, so the response reports each session&#39;s outcome and counts. &#x60;truncated&#x60; says the device had more live controllers than one call handles (the cap is 200), which means the machine is not necessarily empty when the call returns. A machine with nothing live is a &#x60;200&#x60; with &#x60;revoked: 0&#x60;, not an error.  Ownership answers match the sibling routes: &#x60;404&#x60; for a device that does not exist, &#x60;403&#x60; for one that belongs to somebody else. 
+
+### Example
+```java
+// Import classes:
+import org.openapitools.client.ApiClient;
+import org.openapitools.client.ApiException;
+import org.openapitools.client.Configuration;
+import org.openapitools.client.auth.*;
+import org.openapitools.client.models.*;
+import org.openapitools.client.api.RemoteSessionsApi;
+
+public class Example {
+  public static void main(String[] args) {
+    ApiClient defaultClient = Configuration.getDefaultApiClient();
+    defaultClient.setBasePath("https://your-signaling-host");
+    
+    // Configure API key authorization: ApiKeyAuth
+    ApiKeyAuth ApiKeyAuth = (ApiKeyAuth) defaultClient.getAuthentication("ApiKeyAuth");
+    ApiKeyAuth.setApiKey("YOUR API KEY");
+    // Uncomment the following line to set a prefix for the API key, e.g. "Token" (defaults to null)
+    //ApiKeyAuth.setApiKeyPrefix("Token");
+
+    // Configure HTTP bearer authorization: BearerAuth
+    HttpBearerAuth BearerAuth = (HttpBearerAuth) defaultClient.getAuthentication("BearerAuth");
+    BearerAuth.setBearerToken("BEARER TOKEN");
+
+    RemoteSessionsApi apiInstance = new RemoteSessionsApi(defaultClient);
+    String deviceId = "deviceId_example"; // String | The device id shown on the controlled machine.
+    try {
+      RemoteSessionBatchRevocation result = apiInstance.revokeDeviceSessions(deviceId);
+      System.out.println(result);
+    } catch (ApiException e) {
+      System.err.println("Exception when calling RemoteSessionsApi#revokeDeviceSessions");
+      System.err.println("Status code: " + e.getCode());
+      System.err.println("Reason: " + e.getResponseBody());
+      System.err.println("Response headers: " + e.getResponseHeaders());
+      e.printStackTrace();
+    }
+  }
+}
+```
+
+### Parameters
+
+| Name | Type | Description  | Notes |
+|------------- | ------------- | ------------- | -------------|
+| **deviceId** | **String**| The device id shown on the controlled machine. | |
+
+### Return type
+
+[**RemoteSessionBatchRevocation**](RemoteSessionBatchRevocation.md)
+
+### Authorization
+
+[ApiKeyAuth](../README.md#ApiKeyAuth), [BearerAuth](../README.md#BearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json, application/problem+json
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+| **200** | One result per live session, newest first. |  -  |
+| **400** | The request was malformed or failed validation. |  -  |
+| **401** | Missing or expired credentials. |  -  |
+| **403** | Authenticated but not allowed (includes a rejected access code). |  -  |
+| **404** | The addressed resource does not exist. |  -  |
 
 <a id="revokeRemoteSession"></a>
 # **revokeRemoteSession**

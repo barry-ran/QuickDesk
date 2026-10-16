@@ -33,6 +33,8 @@ export * from './PlaybackTicket';
 export * from './Problem';
 export * from './RemoteSession';
 export * from './RemoteSessionAccessLog';
+export * from './RemoteSessionBatchRevocation';
+export * from './RemoteSessionBatchRevocationSessionsInner';
 export * from './RemoteSessionDetail';
 export * from './RemoteSessionDetailCounts';
 export * from './RemoteSessionDetailList';

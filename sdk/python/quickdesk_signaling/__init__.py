@@ -67,6 +67,8 @@ __all__ = [
     "Problem",
     "RemoteSession",
     "RemoteSessionAccessLog",
+    "RemoteSessionBatchRevocation",
+    "RemoteSessionBatchRevocationSessionsInner",
     "RemoteSessionDetail",
     "RemoteSessionDetailCounts",
     "RemoteSessionDetailList",
@@ -136,6 +138,8 @@ from quickdesk_signaling.models.playback_ticket import PlaybackTicket as Playbac
 from quickdesk_signaling.models.problem import Problem as Problem
 from quickdesk_signaling.models.remote_session import RemoteSession as RemoteSession
 from quickdesk_signaling.models.remote_session_access_log import RemoteSessionAccessLog as RemoteSessionAccessLog
+from quickdesk_signaling.models.remote_session_batch_revocation import RemoteSessionBatchRevocation as RemoteSessionBatchRevocation
+from quickdesk_signaling.models.remote_session_batch_revocation_sessions_inner import RemoteSessionBatchRevocationSessionsInner as RemoteSessionBatchRevocationSessionsInner
 from quickdesk_signaling.models.remote_session_detail import RemoteSessionDetail as RemoteSessionDetail
 from quickdesk_signaling.models.remote_session_detail_counts import RemoteSessionDetailCounts as RemoteSessionDetailCounts
 from quickdesk_signaling.models.remote_session_detail_list import RemoteSessionDetailList as RemoteSessionDetailList

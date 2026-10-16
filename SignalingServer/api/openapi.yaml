@@ -228,6 +228,44 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+  /v1/me/devices/{device_id}/sessions:revoke:
+    post:
+      tags: [remoteSessions]
+      summary: End every live control session on one device
+      operationId: revokeDeviceSessions
+      description: |
+        The owner's "throw everyone out of this machine": every live controller
+        on the device is ended in one call, whichever server instance happens to
+        hold each socket. Each is closed at its owning instance, and the call
+        confirms the database row before reporting it - the same promise the
+        single-session revoke makes.
+
+        A batch does not fail as a whole: one session that cannot be reached must
+        not stop the others, so the response reports each session's outcome and
+        counts. `truncated` says the device had more live controllers than one
+        call handles (the cap is 200), which means the machine is not necessarily
+        empty when the call returns. A machine with nothing live is a `200` with
+        `revoked: 0`, not an error.
+
+        Ownership answers match the sibling routes: `404` for a device that does
+        not exist, `403` for one that belongs to somebody else.
+      parameters:
+        - $ref: '#/components/parameters/DeviceId'
+      responses:
+        '200':
+          description: One result per live session, newest first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteSessionBatchRevocation'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /v1/me/notification-channels:
     get:
       tags: [notifications]
@@ -2184,6 +2222,41 @@ components:
           type: string
         revoked:
           type: boolean
+    RemoteSessionBatchRevocation:
+      type: object
+      description: |
+        The result of clearing every live control session off one device. Unlike
+        the single-session response this is a *report*: a batch can half succeed,
+        so the counts and the per-session entries are the answer. `truncated` is
+        true when the device had more live controllers than one call handles, so
+        a caller that sees it knows the machine may not be empty yet.
+      required: [device_id, revoked, failed, truncated, sessions]
+      properties:
+        device_id:
+          type: string
+        revoked:
+          type: integer
+          description: How many sessions were closed and confirmed.
+        failed:
+          type: integer
+          description: How many were live but could not be closed.
+        truncated:
+          type: boolean
+          description: True when more live sessions existed than one call handles (the cap is 200).
+        sessions:
+          type: array
+          description: One entry per session the call attempted, newest first.
+          items:
+            type: object
+            required: [session_id, revoked]
+            properties:
+              session_id:
+                type: string
+              revoked:
+                type: boolean
+              reason:
+                type: string
+                description: Why the session could not be closed; present only when `revoked` is false.
     UpdateRelease:
       type: object
       description: |
