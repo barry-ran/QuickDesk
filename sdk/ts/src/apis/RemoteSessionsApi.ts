@@ -17,6 +17,7 @@ import * as runtime from '../runtime';
 import type {
   Problem,
   RemoteSessionDetail,
+  RemoteSessionDetailList,
   RemoteSessionList,
 } from '../models/index';
 import {
@@ -24,12 +25,21 @@ import {
     ProblemToJSON,
     RemoteSessionDetailFromJSON,
     RemoteSessionDetailToJSON,
+    RemoteSessionDetailListFromJSON,
+    RemoteSessionDetailListToJSON,
     RemoteSessionListFromJSON,
     RemoteSessionListToJSON,
 } from '../models/index';
 
 export interface GetRemoteSessionRequest {
     sessionId: string;
+}
+
+export interface ListDeviceRemoteSessionsRequest {
+    deviceId: string;
+    status?: ListDeviceRemoteSessionsStatusEnum;
+    cursor?: string;
+    limit?: number;
 }
 
 export interface ListRemoteSessionsRequest {
@@ -96,6 +106,69 @@ export class RemoteSessionsApi extends runtime.BaseAPI {
     }
 
     /**
+     * The same history as `GET /v1/me/remote-sessions?device_id=`, but every entry arrives already joined with the records that share its session id - the shape a device page needs, so a client never has to know a session id (or make a second request per row) to reach the join.  `status` is `active`, `ended` or omitted/`all`; `cursor`/`limit` page it newest first like every other list here. The related arrays are batched across the page, so a page costs three queries rather than three per row, and they are present-but-empty rather than absent.  A device the caller does not own is `403` and an unknown device is `404`, matching `.../access-logs`. (The session detail read answers `404` for somebody else\'s session instead, because a session id is looked up rather than named by its owner.) 
+     * One device\'s control sessions, each with its related records
+     */
+    async listDeviceRemoteSessionsRaw(requestParameters: ListDeviceRemoteSessionsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<RemoteSessionDetailList>> {
+        if (requestParameters['deviceId'] == null) {
+            throw new runtime.RequiredError(
+                'deviceId',
+                'Required parameter "deviceId" was null or undefined when calling listDeviceRemoteSessions().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        if (requestParameters['status'] != null) {
+            queryParameters['status'] = requestParameters['status'];
+        }
+
+        if (requestParameters['cursor'] != null) {
+            queryParameters['cursor'] = requestParameters['cursor'];
+        }
+
+        if (requestParameters['limit'] != null) {
+            queryParameters['limit'] = requestParameters['limit'];
+        }
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        if (this.configuration && this.configuration.apiKey) {
+            headerParameters["X-API-Key"] = await this.configuration.apiKey("X-API-Key"); // ApiKeyAuth authentication
+        }
+
+        if (this.configuration && this.configuration.accessToken) {
+            const token = this.configuration.accessToken;
+            const tokenString = await token("BearerAuth", []);
+
+            if (tokenString) {
+                headerParameters["Authorization"] = `Bearer ${tokenString}`;
+            }
+        }
+
+        let urlPath = `/v1/me/devices/{device_id}/sessions`;
+        urlPath = urlPath.replace(`{${"device_id"}}`, encodeURIComponent(String(requestParameters['deviceId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'GET',
+            headers: headerParameters,
+            query: queryParameters,
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => RemoteSessionDetailListFromJSON(jsonValue));
+    }
+
+    /**
+     * The same history as `GET /v1/me/remote-sessions?device_id=`, but every entry arrives already joined with the records that share its session id - the shape a device page needs, so a client never has to know a session id (or make a second request per row) to reach the join.  `status` is `active`, `ended` or omitted/`all`; `cursor`/`limit` page it newest first like every other list here. The related arrays are batched across the page, so a page costs three queries rather than three per row, and they are present-but-empty rather than absent.  A device the caller does not own is `403` and an unknown device is `404`, matching `.../access-logs`. (The session detail read answers `404` for somebody else\'s session instead, because a session id is looked up rather than named by its owner.) 
+     * One device\'s control sessions, each with its related records
+     */
+    async listDeviceRemoteSessions(requestParameters: ListDeviceRemoteSessionsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<RemoteSessionDetailList> {
+        const response = await this.listDeviceRemoteSessionsRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
      * Who is in the caller\'s machines right now, and who has been.  A remote session is one controller holding a signaling session against a device. It is opened when that controller\'s signaling socket completes authentication and closed when that socket ends, which is the whole lifetime this server can observe: the media path is peer to peer, so a session whose signaling channel is gone is over as far as the control plane is concerned.  `status=active` answers \"who is in right now\", `ended` is history, and the default lists both. `device_id` narrows to one machine. Cursor-paginated, newest first, `next_cursor` absent on the last page. 
      * The caller\'s control sessions, open and finished
      */
@@ -156,6 +229,15 @@ export class RemoteSessionsApi extends runtime.BaseAPI {
 
 }
 
+/**
+ * @export
+ */
+export const ListDeviceRemoteSessionsStatusEnum = {
+    Active: 'active',
+    Ended: 'ended',
+    All: 'all'
+} as const;
+export type ListDeviceRemoteSessionsStatusEnum = typeof ListDeviceRemoteSessionsStatusEnum[keyof typeof ListDeviceRemoteSessionsStatusEnum];
 /**
  * @export
  */

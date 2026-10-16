@@ -160,6 +160,7 @@ Class | Method | HTTP request | Description
 *RecordingsAPI* | [**UploadRecordingArtifact**](docs/RecordingsAPI.md#uploadrecordingartifact) | **Post** /v1/me/recordings/{recording_id}/artifact | Upload a recording&#39;s media bytes
 *RecordingsAPI* | [**UploadRecordingThumbnail**](docs/RecordingsAPI.md#uploadrecordingthumbnail) | **Post** /v1/me/recordings/{recording_id}/thumbnail | Upload a recording&#39;s preview image
 *RemoteSessionsAPI* | [**GetRemoteSession**](docs/RemoteSessionsAPI.md#getremotesession) | **Get** /v1/me/remote-sessions/{session_id} | One control session with the records that share its id
+*RemoteSessionsAPI* | [**ListDeviceRemoteSessions**](docs/RemoteSessionsAPI.md#listdeviceremotesessions) | **Get** /v1/me/devices/{device_id}/sessions | One device&#39;s control sessions, each with its related records
 *RemoteSessionsAPI* | [**ListRemoteSessions**](docs/RemoteSessionsAPI.md#listremotesessions) | **Get** /v1/me/remote-sessions | The caller&#39;s control sessions, open and finished
 *UpdateAPI* | [**CheckForUpdate**](docs/UpdateAPI.md#checkforupdate) | **Get** /v1/update:check | Check the self-hosted update channel for a newer build
 *UpdateAPI* | [**DownloadUpdateArtifact**](docs/UpdateAPI.md#downloadupdateartifact) | **Get** /v1/update-releases/{release_id}/artifact | Download an installer this server hosts itself
@@ -202,6 +203,7 @@ Class | Method | HTTP request | Description
  - [RemoteSessionAccessLog](docs/RemoteSessionAccessLog.md)
  - [RemoteSessionDetail](docs/RemoteSessionDetail.md)
  - [RemoteSessionDetailCounts](docs/RemoteSessionDetailCounts.md)
+ - [RemoteSessionDetailList](docs/RemoteSessionDetailList.md)
  - [RemoteSessionList](docs/RemoteSessionList.md)
  - [RevokeAccessGrant200Response](docs/RevokeAccessGrant200Response.md)
  - [SessionRecording](docs/SessionRecording.md)

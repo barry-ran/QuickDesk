@@ -174,6 +174,60 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+  /v1/me/devices/{device_id}/sessions:
+    get:
+      tags: [remoteSessions]
+      summary: One device's control sessions, each with its related records
+      operationId: listDeviceRemoteSessions
+      description: |
+        The same history as `GET /v1/me/remote-sessions?device_id=`, but every
+        entry arrives already joined with the records that share its session id -
+        the shape a device page needs, so a client never has to know a session id
+        (or make a second request per row) to reach the join.
+
+        `status` is `active`, `ended` or omitted/`all`; `cursor`/`limit` page it
+        newest first like every other list here. The related arrays are batched
+        across the page, so a page costs three queries rather than three per row,
+        and they are present-but-empty rather than absent.
+
+        A device the caller does not own is `403` and an unknown device is `404`,
+        matching `.../access-logs`. (The session detail read answers `404` for
+        somebody else's session instead, because a session id is looked up rather
+        than named by its owner.)
+      parameters:
+        - $ref: '#/components/parameters/DeviceId'
+        - name: status
+          in: query
+          required: false
+          description: Defaults to `all`.
+          schema:
+            type: string
+            enum: [active, ended, all]
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: One page of the device's control sessions, newest first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteSessionDetailList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /v1/me/notification-channels:
     get:
       tags: [notifications]
@@ -2039,6 +2093,19 @@ components:
               type: integer
             access_log:
               type: integer
+    RemoteSessionDetailList:
+      type: object
+      description: |
+        Cursor page of sessions that each carry their related records (see
+        `RemoteSessionDetail`). `next_cursor` is absent on the last page.
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/RemoteSessionDetail'
+        next_cursor:
+          type: string
     RemoteSessionList:
       type: object
       description: |

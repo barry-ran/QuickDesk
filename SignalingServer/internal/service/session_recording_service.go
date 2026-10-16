@@ -242,6 +242,51 @@ func (s *SessionRecordingService) ListForSession(
 	return rows, nil
 }
 
+// ListForSessions is ListForSession for a whole page of sessions.
+//
+// It exists so a device page costs one query instead of one per row. The limit
+// is over the whole batch, newest first; a single session with an implausible
+// number of recordings could crowd out the rest, which is a trade this makes
+// knowingly because a session that produced hundreds of captures is not a shape
+// the product has.
+func (s *SessionRecordingService) ListForSessions(
+	ctx context.Context,
+	userID uint,
+	sessionIDs []string,
+	limit int,
+) ([]models.SessionRecording, error) {
+	if userID == 0 || len(sessionIDs) == 0 {
+		return []models.SessionRecording{}, nil
+	}
+	ids := make([]string, 0, len(sessionIDs))
+	for _, id := range sessionIDs {
+		if trimmed := strings.TrimSpace(id); trimmed != "" {
+			ids = append(ids, trimmed)
+		}
+	}
+	if len(ids) == 0 {
+		return []models.SessionRecording{}, nil
+	}
+	if limit <= 0 {
+		limit = 200
+	}
+	if limit > 500 {
+		limit = 500
+	}
+	var rows []models.SessionRecording
+	if err := s.db.WithContext(ctx).
+		Where("user_id = ? AND session_id IN ?", userID, ids).
+		Order("id DESC").
+		Limit(limit).
+		Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	if rows == nil {
+		rows = []models.SessionRecording{}
+	}
+	return rows, nil
+}
+
 func (s *SessionRecordingService) Get(
 	ctx context.Context,
 	userID uint,

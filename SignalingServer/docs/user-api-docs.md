@@ -1216,6 +1216,7 @@ could not be answered from it.
 |---|---|---|
 | `GET` | `/v1/me/remote-sessions?status=&device_id=&cursor=&limit=` | Owner only. `status` is `active` (who is in right now), `ended` (history) or omitted/`all` for both; anything else is a `400`. Cursor-paginated, newest first, `next_cursor` absent on the last page. |
 | `GET` | `/v1/me/remote-sessions/:session_id` | Owner only. One session with the records that share its id: `{session, recordings, access_log, counts}`. Both lists are capped at 100 entries and are present-but-empty rather than absent. A session belonging to another account answers `404`, not `403`, so a caller cannot probe which session ids exist. |
+| `GET` | `/v1/me/devices/:device_id/sessions?status=&cursor=&limit=` | Owner only. The same history scoped to one machine, but every item is the joined shape above, so a device page never needs a session id (or a second request per row) to reach the records. `403` when the device belongs to another account and `404` when it does not exist, matching `.../access-logs`. |
 
 The detail read is what makes this a session model rather than three logs that
 happen to carry the same string: `recordings` are the caller's recording rows
@@ -1224,6 +1225,12 @@ reported when it indexed the capture), and `access_log` is the device's
 access-log rows for the same id - in practice the single `session_started` entry
 the server wrote when the controller authenticated, which is what pairs "an
 attempt" with "the session it became".
+
+The device-scoped list exists so that join is reachable without already knowing a
+session id: it returns the same `{session, recordings, access_log, counts}`
+items, batched across the page in three queries rather than three per row. The
+related arrays are a page of the records, not a promise of completeness - a
+single session's full detail is what the per-session read is for.
 
 Each row carries `session_id` (the signaling id the server assigned),
 `device_id`, `client_id` (the controller-declared identifier, the same value the

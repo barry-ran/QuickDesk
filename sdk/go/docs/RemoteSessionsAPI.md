@@ -5,6 +5,7 @@ All URIs are relative to *https://your-signaling-host*
 Method | HTTP request | Description
 ------------- | ------------- | -------------
 [**GetRemoteSession**](RemoteSessionsAPI.md#GetRemoteSession) | **Get** /v1/me/remote-sessions/{session_id} | One control session with the records that share its id
+[**ListDeviceRemoteSessions**](RemoteSessionsAPI.md#ListDeviceRemoteSessions) | **Get** /v1/me/devices/{device_id}/sessions | One device&#39;s control sessions, each with its related records
 [**ListRemoteSessions**](RemoteSessionsAPI.md#ListRemoteSessions) | **Get** /v1/me/remote-sessions | The caller&#39;s control sessions, open and finished
 
 
@@ -64,6 +65,82 @@ Name | Type | Description  | Notes
 ### Return type
 
 [**RemoteSessionDetail**](RemoteSessionDetail.md)
+
+### Authorization
+
+[ApiKeyAuth](../README.md#ApiKeyAuth), [BearerAuth](../README.md#BearerAuth)
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: application/json, application/problem+json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
+[[Back to Model list]](../README.md#documentation-for-models)
+[[Back to README]](../README.md)
+
+
+## ListDeviceRemoteSessions
+
+> RemoteSessionDetailList ListDeviceRemoteSessions(ctx, deviceId).Status(status).Cursor(cursor).Limit(limit).Execute()
+
+One device's control sessions, each with its related records
+
+
+
+### Example
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	openapiclient "github.com/ilh-github/go-remote-next/signaling"
+)
+
+func main() {
+	deviceId := "deviceId_example" // string | The device id shown on the controlled machine.
+	status := "status_example" // string | Defaults to `all`. (optional)
+	cursor := "cursor_example" // string |  (optional)
+	limit := int32(56) // int32 |  (optional)
+
+	configuration := openapiclient.NewConfiguration()
+	apiClient := openapiclient.NewAPIClient(configuration)
+	resp, r, err := apiClient.RemoteSessionsAPI.ListDeviceRemoteSessions(context.Background(), deviceId).Status(status).Cursor(cursor).Limit(limit).Execute()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error when calling `RemoteSessionsAPI.ListDeviceRemoteSessions``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
+	}
+	// response from `ListDeviceRemoteSessions`: RemoteSessionDetailList
+	fmt.Fprintf(os.Stdout, "Response from `RemoteSessionsAPI.ListDeviceRemoteSessions`: %v\n", resp)
+}
+```
+
+### Path Parameters
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
+**deviceId** | **string** | The device id shown on the controlled machine. | 
+
+### Other Parameters
+
+Other parameters are passed through a pointer to a apiListDeviceRemoteSessionsRequest struct via the builder pattern
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+
+ **status** | **string** | Defaults to &#x60;all&#x60;. | 
+ **cursor** | **string** |  | 
+ **limit** | **int32** |  | 
+
+### Return type
+
+[**RemoteSessionDetailList**](RemoteSessionDetailList.md)
 
 ### Authorization
 

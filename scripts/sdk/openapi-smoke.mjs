@@ -489,6 +489,33 @@ if ((remoteSessions.json?.items ?? []).length > 0) {
     'GET remote-sessions/{id}: the detail read returned a different session');
 }
 
+// The device-scoped read: the same history, but every entry arrives already
+// joined with its records, so a device page does not need a session id (or a
+// second request per row) to reach the join.
+if (smokeDevice) {
+  const deviceSessions = await call('GET', `/v1/me/devices/${smokeDevice}/sessions?limit=3`,
+    { token, expect: 200 });
+  check(Array.isArray(deviceSessions.json?.items),
+    `GET devices/{id}/sessions: items is ${typeof deviceSessions.json?.items}, spec says an array`);
+  for (const item of deviceSessions.json?.items ?? []) {
+    field(item, 'session', 'object', 'GET devices/{id}/sessions (item)');
+    for (const name of ['recordings', 'access_log']) {
+      check(Array.isArray(item?.[name]), `GET devices/{id}/sessions: ${name} is not an array`);
+    }
+    const itemCounts = field(item, 'counts', 'object', 'GET devices/{id}/sessions (item)');
+    field(itemCounts, 'recordings', 'number', 'GET devices/{id}/sessions (item counts)');
+    field(itemCounts, 'access_log', 'number', 'GET devices/{id}/sessions (item counts)');
+    check(itemCounts.recordings === (item.recordings ?? []).length,
+      'GET devices/{id}/sessions: an item count disagrees with its list');
+    check(item.session?.device_id === smokeDevice,
+      'GET devices/{id}/sessions returned a session for a different device');
+  }
+}
+
+const unknownDeviceSessions = await call('GET', '/v1/me/devices/2147483647/sessions',
+  { token, expect: 404 });
+problemShape(unknownDeviceSessions.json, 'GET devices/{id}/sessions (unknown device)', 'DEVICE_NOT_FOUND');
+
 if (smokeDevice) {
   // 6. PUT the rule back unchanged, then restore the prior state exactly.
   const putBody = {

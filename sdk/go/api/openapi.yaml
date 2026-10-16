@@ -176,6 +176,70 @@ paths:
       summary: Create or replace the owner's offline-alert rule
       tags:
       - notifications
+  /v1/me/devices/{device_id}/sessions:
+    get:
+      description: |
+        The same history as `GET /v1/me/remote-sessions?device_id=`, but every
+        entry arrives already joined with the records that share its session id -
+        the shape a device page needs, so a client never has to know a session id
+        (or make a second request per row) to reach the join.
+
+        `status` is `active`, `ended` or omitted/`all`; `cursor`/`limit` page it
+        newest first like every other list here. The related arrays are batched
+        across the page, so a page costs three queries rather than three per row,
+        and they are present-but-empty rather than absent.
+
+        A device the caller does not own is `403` and an unknown device is `404`,
+        matching `.../access-logs`. (The session detail read answers `404` for
+        somebody else's session instead, because a session id is looked up rather
+        than named by its owner.)
+      operationId: listDeviceRemoteSessions
+      parameters:
+      - $ref: "#/components/parameters/DeviceId"
+      - description: Defaults to `all`.
+        explode: true
+        in: query
+        name: status
+        required: false
+        schema:
+          enum:
+          - active
+          - ended
+          - all
+          type: string
+        style: form
+      - explode: true
+        in: query
+        name: cursor
+        required: false
+        schema:
+          type: string
+        style: form
+      - explode: true
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RemoteSessionDetailList"
+          description: "One page of the device's control sessions, newest first."
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+      summary: "One device's control sessions, each with its related records"
+      tags:
+      - remoteSessions
   /v1/me/notification-channels:
     get:
       description: |
@@ -2538,11 +2602,11 @@ components:
         result: result
         reason: reason
         device_id: device_id
-        owner_id: 6
+        owner_id: 3
         ip: ip
         session_id: session_id
         created_at: 2000-01-23T04:56:07.000+00:00
-        id: 0
+        id: 9
         client_id: client_id
       properties:
         id:
@@ -2586,8 +2650,8 @@ components:
         from "field missing".
       example:
         recordings:
-        - duration_seconds: 1
-          size_bytes: 5
+        - duration_seconds: 2
+          size_bytes: 7
           device_id: device_id
           format: format
           session_id: session_id
@@ -2598,14 +2662,14 @@ components:
           thumbnail_path: thumbnail_path
           artifact_path: artifact_path
           updated_at: 2000-01-23T04:56:07.000+00:00
-          user_id: 6
+          user_id: 5
           started_at: 2000-01-23T04:56:07.000+00:00
-          id: 0
+          id: 5
           user: "{}"
           ended_at: 2000-01-23T04:56:07.000+00:00
           status: recording
-        - duration_seconds: 1
-          size_bytes: 5
+        - duration_seconds: 2
+          size_bytes: 7
           device_id: device_id
           format: format
           session_id: session_id
@@ -2616,9 +2680,9 @@ components:
           thumbnail_path: thumbnail_path
           artifact_path: artifact_path
           updated_at: 2000-01-23T04:56:07.000+00:00
-          user_id: 6
+          user_id: 5
           started_at: 2000-01-23T04:56:07.000+00:00
-          id: 0
+          id: 5
           user: "{}"
           ended_at: 2000-01-23T04:56:07.000+00:00
           status: recording
@@ -2637,26 +2701,26 @@ components:
           id: 0
           ended_at: 2000-01-23T04:56:07.000+00:00
         counts:
-          recordings: 1
-          access_log: 5
+          recordings: 2
+          access_log: 4
         access_log:
         - result: result
           reason: reason
           device_id: device_id
-          owner_id: 6
+          owner_id: 3
           ip: ip
           session_id: session_id
           created_at: 2000-01-23T04:56:07.000+00:00
-          id: 0
+          id: 9
           client_id: client_id
         - result: result
           reason: reason
           device_id: device_id
-          owner_id: 6
+          owner_id: 3
           ip: ip
           session_id: session_id
           created_at: 2000-01-23T04:56:07.000+00:00
-          id: 0
+          id: 9
           client_id: client_id
       properties:
         session:
@@ -2676,6 +2740,168 @@ components:
       - counts
       - recordings
       - session
+    RemoteSessionDetailList:
+      description: |
+        Cursor page of sessions that each carry their related records (see
+        `RemoteSessionDetail`). `next_cursor` is absent on the last page.
+      example:
+        next_cursor: next_cursor
+        items:
+        - recordings:
+          - duration_seconds: 2
+            size_bytes: 7
+            device_id: device_id
+            format: format
+            session_id: session_id
+            created_at: 2000-01-23T04:56:07.000+00:00
+            thumbnail_url: thumbnail_url
+            artifact_url: artifact_url
+            device_name: device_name
+            thumbnail_path: thumbnail_path
+            artifact_path: artifact_path
+            updated_at: 2000-01-23T04:56:07.000+00:00
+            user_id: 5
+            started_at: 2000-01-23T04:56:07.000+00:00
+            id: 5
+            user: "{}"
+            ended_at: 2000-01-23T04:56:07.000+00:00
+            status: recording
+          - duration_seconds: 2
+            size_bytes: 7
+            device_id: device_id
+            format: format
+            session_id: session_id
+            created_at: 2000-01-23T04:56:07.000+00:00
+            thumbnail_url: thumbnail_url
+            artifact_url: artifact_url
+            device_name: device_name
+            thumbnail_path: thumbnail_path
+            artifact_path: artifact_path
+            updated_at: 2000-01-23T04:56:07.000+00:00
+            user_id: 5
+            started_at: 2000-01-23T04:56:07.000+00:00
+            id: 5
+            user: "{}"
+            ended_at: 2000-01-23T04:56:07.000+00:00
+            status: recording
+          session:
+            duration_seconds: 1
+            device_id: device_id
+            end_reason: end_reason
+            session_id: session_id
+            active: true
+            created_at: 2000-01-23T04:56:07.000+00:00
+            client_id: client_id
+            updated_at: 2000-01-23T04:56:07.000+00:00
+            user_id: 6
+            started_at: 2000-01-23T04:56:07.000+00:00
+            client_ip: client_ip
+            id: 0
+            ended_at: 2000-01-23T04:56:07.000+00:00
+          counts:
+            recordings: 2
+            access_log: 4
+          access_log:
+          - result: result
+            reason: reason
+            device_id: device_id
+            owner_id: 3
+            ip: ip
+            session_id: session_id
+            created_at: 2000-01-23T04:56:07.000+00:00
+            id: 9
+            client_id: client_id
+          - result: result
+            reason: reason
+            device_id: device_id
+            owner_id: 3
+            ip: ip
+            session_id: session_id
+            created_at: 2000-01-23T04:56:07.000+00:00
+            id: 9
+            client_id: client_id
+        - recordings:
+          - duration_seconds: 2
+            size_bytes: 7
+            device_id: device_id
+            format: format
+            session_id: session_id
+            created_at: 2000-01-23T04:56:07.000+00:00
+            thumbnail_url: thumbnail_url
+            artifact_url: artifact_url
+            device_name: device_name
+            thumbnail_path: thumbnail_path
+            artifact_path: artifact_path
+            updated_at: 2000-01-23T04:56:07.000+00:00
+            user_id: 5
+            started_at: 2000-01-23T04:56:07.000+00:00
+            id: 5
+            user: "{}"
+            ended_at: 2000-01-23T04:56:07.000+00:00
+            status: recording
+          - duration_seconds: 2
+            size_bytes: 7
+            device_id: device_id
+            format: format
+            session_id: session_id
+            created_at: 2000-01-23T04:56:07.000+00:00
+            thumbnail_url: thumbnail_url
+            artifact_url: artifact_url
+            device_name: device_name
+            thumbnail_path: thumbnail_path
+            artifact_path: artifact_path
+            updated_at: 2000-01-23T04:56:07.000+00:00
+            user_id: 5
+            started_at: 2000-01-23T04:56:07.000+00:00
+            id: 5
+            user: "{}"
+            ended_at: 2000-01-23T04:56:07.000+00:00
+            status: recording
+          session:
+            duration_seconds: 1
+            device_id: device_id
+            end_reason: end_reason
+            session_id: session_id
+            active: true
+            created_at: 2000-01-23T04:56:07.000+00:00
+            client_id: client_id
+            updated_at: 2000-01-23T04:56:07.000+00:00
+            user_id: 6
+            started_at: 2000-01-23T04:56:07.000+00:00
+            client_ip: client_ip
+            id: 0
+            ended_at: 2000-01-23T04:56:07.000+00:00
+          counts:
+            recordings: 2
+            access_log: 4
+          access_log:
+          - result: result
+            reason: reason
+            device_id: device_id
+            owner_id: 3
+            ip: ip
+            session_id: session_id
+            created_at: 2000-01-23T04:56:07.000+00:00
+            id: 9
+            client_id: client_id
+          - result: result
+            reason: reason
+            device_id: device_id
+            owner_id: 3
+            ip: ip
+            session_id: session_id
+            created_at: 2000-01-23T04:56:07.000+00:00
+            id: 9
+            client_id: client_id
+      properties:
+        items:
+          items:
+            $ref: "#/components/schemas/RemoteSessionDetail"
+          type: array
+        next_cursor:
+          type: string
+      required:
+      - items
     RemoteSessionList:
       description: |
         Cursor page of control sessions. `next_cursor` is absent on the last page
@@ -2981,8 +3207,8 @@ components:
         download URL - clients should call `.../artifact-ticket` and use the
         URL they get back.
       example:
-        duration_seconds: 1
-        size_bytes: 5
+        duration_seconds: 2
+        size_bytes: 7
         device_id: device_id
         format: format
         session_id: session_id
@@ -2993,9 +3219,9 @@ components:
         thumbnail_path: thumbnail_path
         artifact_path: artifact_path
         updated_at: 2000-01-23T04:56:07.000+00:00
-        user_id: 6
+        user_id: 5
         started_at: 2000-01-23T04:56:07.000+00:00
-        id: 0
+        id: 5
         user: "{}"
         ended_at: 2000-01-23T04:56:07.000+00:00
         status: recording
@@ -3079,8 +3305,8 @@ components:
       example:
         next_cursor: next_cursor
         items:
-        - duration_seconds: 1
-          size_bytes: 5
+        - duration_seconds: 2
+          size_bytes: 7
           device_id: device_id
           format: format
           session_id: session_id
@@ -3091,14 +3317,14 @@ components:
           thumbnail_path: thumbnail_path
           artifact_path: artifact_path
           updated_at: 2000-01-23T04:56:07.000+00:00
-          user_id: 6
+          user_id: 5
           started_at: 2000-01-23T04:56:07.000+00:00
-          id: 0
+          id: 5
           user: "{}"
           ended_at: 2000-01-23T04:56:07.000+00:00
           status: recording
-        - duration_seconds: 1
-          size_bytes: 5
+        - duration_seconds: 2
+          size_bytes: 7
           device_id: device_id
           format: format
           session_id: session_id
@@ -3109,9 +3335,9 @@ components:
           thumbnail_path: thumbnail_path
           artifact_path: artifact_path
           updated_at: 2000-01-23T04:56:07.000+00:00
-          user_id: 6
+          user_id: 5
           started_at: 2000-01-23T04:56:07.000+00:00
-          id: 0
+          id: 5
           user: "{}"
           ended_at: 2000-01-23T04:56:07.000+00:00
           status: recording
@@ -3388,8 +3614,8 @@ components:
       - denials
     RemoteSessionDetail_counts:
       example:
-        recordings: 1
-        access_log: 5
+        recordings: 2
+        access_log: 4
       properties:
         recordings:
           type: integer

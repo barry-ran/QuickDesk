@@ -52,6 +52,7 @@ docs/RemoteSession.md
 docs/RemoteSessionAccessLog.md
 docs/RemoteSessionDetail.md
 docs/RemoteSessionDetailCounts.md
+docs/RemoteSessionDetailList.md
 docs/RemoteSessionList.md
 docs/RemoteSessionsAPI.md
 docs/RevokeAccessGrant200Response.md
@@ -101,6 +102,7 @@ model_remote_session.go
 model_remote_session_access_log.go
 model_remote_session_detail.go
 model_remote_session_detail_counts.go
+model_remote_session_detail_list.go
 model_remote_session_list.go
 model_revoke_access_grant_200_response.go
 model_session_recording.go

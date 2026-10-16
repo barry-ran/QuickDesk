@@ -459,7 +459,7 @@ func main() {
 		TicketTTL: time.Duration(cfg.Recording.TicketTTLSeconds) * time.Second,
 	}, auditService)
 	hostHandler := handler.NewHostHandler(deviceService, tokenService, presenceService, settingsService, rateLimitService, deviceAccessService, deviceAccessPolicyService, deviceAccessGrantService, deviceAccessApprovalService, bus, cfg)
-	remoteSessionHandler := handler.NewRemoteSessionHandler(remoteSessionService, sessionRecordingService, deviceAccessService)
+	remoteSessionHandler := handler.NewRemoteSessionHandler(remoteSessionService, sessionRecordingService, deviceAccessService, deviceService)
 	realtimeHandler := handler.NewRealtimeHandler(tokenService, bus, presenceService, db, deviceService, favoriteService, metricsService, deviceAccessService, deviceAccessPolicyService, remoteSessionService, redisClient)
 
 	adminAuthHandler := handler.NewAdminAuthHandler(adminUserService, tokenService, auditService)
@@ -594,6 +594,9 @@ func main() {
 			me.POST("/devices", deviceHandler.Bind)
 			me.GET("/devices/:device_id", deviceHandler.GetOne)
 			me.GET("/devices/:device_id/access-logs", deviceHandler.ListAccessLogs)
+			// The same history with the session lifecycle attached: each entry is
+			// a session plus the recordings and access-log rows that share its id.
+			me.GET("/devices/:device_id/sessions", remoteSessionHandler.ListForDevice)
 			me.GET("/devices/:device_id/access-policy", deviceAccessPolicyHandler.Get)
 			me.PUT("/devices/:device_id/access-policy", deviceAccessPolicyHandler.Put)
 			me.GET("/devices/:device_id/offline-alert", deviceOfflineAlertHandler.Get)

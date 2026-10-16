@@ -29,6 +29,7 @@ import java.io.IOException;
 
 import org.openapitools.client.model.Problem;
 import org.openapitools.client.model.RemoteSessionDetail;
+import org.openapitools.client.model.RemoteSessionDetailList;
 import org.openapitools.client.model.RemoteSessionList;
 
 import java.lang.reflect.Type;
@@ -211,6 +212,174 @@ public class RemoteSessionsApi {
 
         okhttp3.Call localVarCall = getRemoteSessionValidateBeforeCall(sessionId, _callback);
         Type localVarReturnType = new TypeToken<RemoteSessionDetail>(){}.getType();
+        localVarApiClient.executeAsync(localVarCall, localVarReturnType, _callback);
+        return localVarCall;
+    }
+    /**
+     * Build call for listDeviceRemoteSessions
+     * @param deviceId The device id shown on the controlled machine. (required)
+     * @param status Defaults to &#x60;all&#x60;. (optional)
+     * @param cursor  (optional)
+     * @param limit  (optional)
+     * @param _callback Callback for upload/download progress
+     * @return Call to execute
+     * @throws ApiException If fail to serialize the request body object
+     * @http.response.details
+     <table border="1">
+       <caption>Response Details</caption>
+        <tr><td> Status Code </td><td> Description </td><td> Response Headers </td></tr>
+        <tr><td> 200 </td><td> One page of the device&#39;s control sessions, newest first. </td><td>  -  </td></tr>
+        <tr><td> 400 </td><td> The request was malformed or failed validation. </td><td>  -  </td></tr>
+        <tr><td> 401 </td><td> Missing or expired credentials. </td><td>  -  </td></tr>
+        <tr><td> 403 </td><td> Authenticated but not allowed (includes a rejected access code). </td><td>  -  </td></tr>
+        <tr><td> 404 </td><td> The addressed resource does not exist. </td><td>  -  </td></tr>
+     </table>
+     */
+    public okhttp3.Call listDeviceRemoteSessionsCall(@javax.annotation.Nonnull String deviceId, @javax.annotation.Nullable String status, @javax.annotation.Nullable String cursor, @javax.annotation.Nullable Integer limit, final ApiCallback _callback) throws ApiException {
+        String basePath = null;
+        // Operation Servers
+        String[] localBasePaths = new String[] {  };
+
+        // Determine Base Path to Use
+        if (localCustomBaseUrl != null){
+            basePath = localCustomBaseUrl;
+        } else if ( localBasePaths.length > 0 ) {
+            basePath = localBasePaths[localHostIndex];
+        } else {
+            basePath = null;
+        }
+
+        Object localVarPostBody = null;
+
+        // create path and map variables
+        String localVarPath = "/v1/me/devices/{device_id}/sessions"
+            .replace("{" + "device_id" + "}", localVarApiClient.escapeString(deviceId.toString()));
+
+        List<Pair> localVarQueryParams = new ArrayList<Pair>();
+        List<Pair> localVarCollectionQueryParams = new ArrayList<Pair>();
+        Map<String, String> localVarHeaderParams = new HashMap<String, String>();
+        Map<String, String> localVarCookieParams = new HashMap<String, String>();
+        Map<String, Object> localVarFormParams = new HashMap<String, Object>();
+
+        if (status != null) {
+            localVarQueryParams.addAll(localVarApiClient.parameterToPair("status", status));
+        }
+
+        if (cursor != null) {
+            localVarQueryParams.addAll(localVarApiClient.parameterToPair("cursor", cursor));
+        }
+
+        if (limit != null) {
+            localVarQueryParams.addAll(localVarApiClient.parameterToPair("limit", limit));
+        }
+
+        final String[] localVarAccepts = {
+            "application/json",
+            "application/problem+json"
+        };
+        final String localVarAccept = localVarApiClient.selectHeaderAccept(localVarAccepts);
+        if (localVarAccept != null) {
+            localVarHeaderParams.put("Accept", localVarAccept);
+        }
+
+        final String[] localVarContentTypes = {
+        };
+        final String localVarContentType = localVarApiClient.selectHeaderContentType(localVarContentTypes);
+        if (localVarContentType != null) {
+            localVarHeaderParams.put("Content-Type", localVarContentType);
+        }
+
+        String[] localVarAuthNames = new String[] { "ApiKeyAuth", "BearerAuth" };
+        return localVarApiClient.buildCall(basePath, localVarPath, "GET", localVarQueryParams, localVarCollectionQueryParams, localVarPostBody, localVarHeaderParams, localVarCookieParams, localVarFormParams, localVarAuthNames, _callback);
+    }
+
+    @SuppressWarnings("rawtypes")
+    private okhttp3.Call listDeviceRemoteSessionsValidateBeforeCall(@javax.annotation.Nonnull String deviceId, @javax.annotation.Nullable String status, @javax.annotation.Nullable String cursor, @javax.annotation.Nullable Integer limit, final ApiCallback _callback) throws ApiException {
+        // verify the required parameter 'deviceId' is set
+        if (deviceId == null) {
+            throw new ApiException("Missing the required parameter 'deviceId' when calling listDeviceRemoteSessions(Async)");
+        }
+
+        return listDeviceRemoteSessionsCall(deviceId, status, cursor, limit, _callback);
+
+    }
+
+    /**
+     * One device&#39;s control sessions, each with its related records
+     * The same history as &#x60;GET /v1/me/remote-sessions?device_id&#x3D;&#x60;, but every entry arrives already joined with the records that share its session id - the shape a device page needs, so a client never has to know a session id (or make a second request per row) to reach the join.  &#x60;status&#x60; is &#x60;active&#x60;, &#x60;ended&#x60; or omitted/&#x60;all&#x60;; &#x60;cursor&#x60;/&#x60;limit&#x60; page it newest first like every other list here. The related arrays are batched across the page, so a page costs three queries rather than three per row, and they are present-but-empty rather than absent.  A device the caller does not own is &#x60;403&#x60; and an unknown device is &#x60;404&#x60;, matching &#x60;.../access-logs&#x60;. (The session detail read answers &#x60;404&#x60; for somebody else&#39;s session instead, because a session id is looked up rather than named by its owner.) 
+     * @param deviceId The device id shown on the controlled machine. (required)
+     * @param status Defaults to &#x60;all&#x60;. (optional)
+     * @param cursor  (optional)
+     * @param limit  (optional)
+     * @return RemoteSessionDetailList
+     * @throws ApiException If fail to call the API, e.g. server error or cannot deserialize the response body
+     * @http.response.details
+     <table border="1">
+       <caption>Response Details</caption>
+        <tr><td> Status Code </td><td> Description </td><td> Response Headers </td></tr>
+        <tr><td> 200 </td><td> One page of the device&#39;s control sessions, newest first. </td><td>  -  </td></tr>
+        <tr><td> 400 </td><td> The request was malformed or failed validation. </td><td>  -  </td></tr>
+        <tr><td> 401 </td><td> Missing or expired credentials. </td><td>  -  </td></tr>
+        <tr><td> 403 </td><td> Authenticated but not allowed (includes a rejected access code). </td><td>  -  </td></tr>
+        <tr><td> 404 </td><td> The addressed resource does not exist. </td><td>  -  </td></tr>
+     </table>
+     */
+    public RemoteSessionDetailList listDeviceRemoteSessions(@javax.annotation.Nonnull String deviceId, @javax.annotation.Nullable String status, @javax.annotation.Nullable String cursor, @javax.annotation.Nullable Integer limit) throws ApiException {
+        ApiResponse<RemoteSessionDetailList> localVarResp = listDeviceRemoteSessionsWithHttpInfo(deviceId, status, cursor, limit);
+        return localVarResp.getData();
+    }
+
+    /**
+     * One device&#39;s control sessions, each with its related records
+     * The same history as &#x60;GET /v1/me/remote-sessions?device_id&#x3D;&#x60;, but every entry arrives already joined with the records that share its session id - the shape a device page needs, so a client never has to know a session id (or make a second request per row) to reach the join.  &#x60;status&#x60; is &#x60;active&#x60;, &#x60;ended&#x60; or omitted/&#x60;all&#x60;; &#x60;cursor&#x60;/&#x60;limit&#x60; page it newest first like every other list here. The related arrays are batched across the page, so a page costs three queries rather than three per row, and they are present-but-empty rather than absent.  A device the caller does not own is &#x60;403&#x60; and an unknown device is &#x60;404&#x60;, matching &#x60;.../access-logs&#x60;. (The session detail read answers &#x60;404&#x60; for somebody else&#39;s session instead, because a session id is looked up rather than named by its owner.) 
+     * @param deviceId The device id shown on the controlled machine. (required)
+     * @param status Defaults to &#x60;all&#x60;. (optional)
+     * @param cursor  (optional)
+     * @param limit  (optional)
+     * @return ApiResponse&lt;RemoteSessionDetailList&gt;
+     * @throws ApiException If fail to call the API, e.g. server error or cannot deserialize the response body
+     * @http.response.details
+     <table border="1">
+       <caption>Response Details</caption>
+        <tr><td> Status Code </td><td> Description </td><td> Response Headers </td></tr>
+        <tr><td> 200 </td><td> One page of the device&#39;s control sessions, newest first. </td><td>  -  </td></tr>
+        <tr><td> 400 </td><td> The request was malformed or failed validation. </td><td>  -  </td></tr>
+        <tr><td> 401 </td><td> Missing or expired credentials. </td><td>  -  </td></tr>
+        <tr><td> 403 </td><td> Authenticated but not allowed (includes a rejected access code). </td><td>  -  </td></tr>
+        <tr><td> 404 </td><td> The addressed resource does not exist. </td><td>  -  </td></tr>
+     </table>
+     */
+    public ApiResponse<RemoteSessionDetailList> listDeviceRemoteSessionsWithHttpInfo(@javax.annotation.Nonnull String deviceId, @javax.annotation.Nullable String status, @javax.annotation.Nullable String cursor, @javax.annotation.Nullable Integer limit) throws ApiException {
+        okhttp3.Call localVarCall = listDeviceRemoteSessionsValidateBeforeCall(deviceId, status, cursor, limit, null);
+        Type localVarReturnType = new TypeToken<RemoteSessionDetailList>(){}.getType();
+        return localVarApiClient.execute(localVarCall, localVarReturnType);
+    }
+
+    /**
+     * One device&#39;s control sessions, each with its related records (asynchronously)
+     * The same history as &#x60;GET /v1/me/remote-sessions?device_id&#x3D;&#x60;, but every entry arrives already joined with the records that share its session id - the shape a device page needs, so a client never has to know a session id (or make a second request per row) to reach the join.  &#x60;status&#x60; is &#x60;active&#x60;, &#x60;ended&#x60; or omitted/&#x60;all&#x60;; &#x60;cursor&#x60;/&#x60;limit&#x60; page it newest first like every other list here. The related arrays are batched across the page, so a page costs three queries rather than three per row, and they are present-but-empty rather than absent.  A device the caller does not own is &#x60;403&#x60; and an unknown device is &#x60;404&#x60;, matching &#x60;.../access-logs&#x60;. (The session detail read answers &#x60;404&#x60; for somebody else&#39;s session instead, because a session id is looked up rather than named by its owner.) 
+     * @param deviceId The device id shown on the controlled machine. (required)
+     * @param status Defaults to &#x60;all&#x60;. (optional)
+     * @param cursor  (optional)
+     * @param limit  (optional)
+     * @param _callback The callback to be executed when the API call finishes
+     * @return The request call
+     * @throws ApiException If fail to process the API call, e.g. serializing the request body object
+     * @http.response.details
+     <table border="1">
+       <caption>Response Details</caption>
+        <tr><td> Status Code </td><td> Description </td><td> Response Headers </td></tr>
+        <tr><td> 200 </td><td> One page of the device&#39;s control sessions, newest first. </td><td>  -  </td></tr>
+        <tr><td> 400 </td><td> The request was malformed or failed validation. </td><td>  -  </td></tr>
+        <tr><td> 401 </td><td> Missing or expired credentials. </td><td>  -  </td></tr>
+        <tr><td> 403 </td><td> Authenticated but not allowed (includes a rejected access code). </td><td>  -  </td></tr>
+        <tr><td> 404 </td><td> The addressed resource does not exist. </td><td>  -  </td></tr>
+     </table>
+     */
+    public okhttp3.Call listDeviceRemoteSessionsAsync(@javax.annotation.Nonnull String deviceId, @javax.annotation.Nullable String status, @javax.annotation.Nullable String cursor, @javax.annotation.Nullable Integer limit, final ApiCallback<RemoteSessionDetailList> _callback) throws ApiException {
+
+        okhttp3.Call localVarCall = listDeviceRemoteSessionsValidateBeforeCall(deviceId, status, cursor, limit, _callback);
+        Type localVarReturnType = new TypeToken<RemoteSessionDetailList>(){}.getType();
         localVarApiClient.executeAsync(localVarCall, localVarReturnType, _callback);
         return localVarCall;
     }

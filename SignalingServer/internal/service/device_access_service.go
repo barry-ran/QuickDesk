@@ -198,3 +198,44 @@ func (s *DeviceAccessService) ListForSession(
 	}
 	return out, nil
 }
+
+// ListForSessions is ListForSession for a whole page of sessions, for the same
+// reason the recording batch exists: one query per page instead of one per row.
+func (s *DeviceAccessService) ListForSessions(
+	ctx context.Context,
+	deviceID string,
+	sessionIDs []string,
+	limit int,
+) ([]models.DeviceAccessLog, error) {
+	deviceID = strings.TrimSpace(deviceID)
+	if deviceID == "" || len(sessionIDs) == 0 {
+		return []models.DeviceAccessLog{}, nil
+	}
+	ids := make([]string, 0, len(sessionIDs))
+	for _, id := range sessionIDs {
+		if trimmed := strings.TrimSpace(id); trimmed != "" {
+			ids = append(ids, trimmed)
+		}
+	}
+	if len(ids) == 0 {
+		return []models.DeviceAccessLog{}, nil
+	}
+	if limit <= 0 {
+		limit = maxDeviceAccessLimit
+	}
+	if limit > maxDeviceAccessLimit {
+		limit = maxDeviceAccessLimit
+	}
+	var out []models.DeviceAccessLog
+	if err := s.db.WithContext(ctx).
+		Where("device_id = ? AND session_id IN ?", deviceID, ids).
+		Order("id DESC").
+		Limit(limit).
+		Find(&out).Error; err != nil {
+		return nil, err
+	}
+	if out == nil {
+		out = []models.DeviceAccessLog{}
+	}
+	return out, nil
+}

@@ -182,6 +182,211 @@ func (a *RemoteSessionsAPIService) GetRemoteSessionExecute(r ApiGetRemoteSession
 	return localVarReturnValue, localVarHTTPResponse, nil
 }
 
+type ApiListDeviceRemoteSessionsRequest struct {
+	ctx context.Context
+	ApiService *RemoteSessionsAPIService
+	deviceId string
+	status *string
+	cursor *string
+	limit *int32
+}
+
+// Defaults to &#x60;all&#x60;.
+func (r ApiListDeviceRemoteSessionsRequest) Status(status string) ApiListDeviceRemoteSessionsRequest {
+	r.status = &status
+	return r
+}
+
+func (r ApiListDeviceRemoteSessionsRequest) Cursor(cursor string) ApiListDeviceRemoteSessionsRequest {
+	r.cursor = &cursor
+	return r
+}
+
+func (r ApiListDeviceRemoteSessionsRequest) Limit(limit int32) ApiListDeviceRemoteSessionsRequest {
+	r.limit = &limit
+	return r
+}
+
+func (r ApiListDeviceRemoteSessionsRequest) Execute() (*RemoteSessionDetailList, *http.Response, error) {
+	return r.ApiService.ListDeviceRemoteSessionsExecute(r)
+}
+
+/*
+ListDeviceRemoteSessions One device's control sessions, each with its related records
+
+The same history as `GET /v1/me/remote-sessions?device_id=`, but every
+entry arrives already joined with the records that share its session id -
+the shape a device page needs, so a client never has to know a session id
+(or make a second request per row) to reach the join.
+
+`status` is `active`, `ended` or omitted/`all`; `cursor`/`limit` page it
+newest first like every other list here. The related arrays are batched
+across the page, so a page costs three queries rather than three per row,
+and they are present-but-empty rather than absent.
+
+A device the caller does not own is `403` and an unknown device is `404`,
+matching `.../access-logs`. (The session detail read answers `404` for
+somebody else's session instead, because a session id is looked up rather
+than named by its owner.)
+
+
+ @param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
+ @param deviceId The device id shown on the controlled machine.
+ @return ApiListDeviceRemoteSessionsRequest
+*/
+func (a *RemoteSessionsAPIService) ListDeviceRemoteSessions(ctx context.Context, deviceId string) ApiListDeviceRemoteSessionsRequest {
+	return ApiListDeviceRemoteSessionsRequest{
+		ApiService: a,
+		ctx: ctx,
+		deviceId: deviceId,
+	}
+}
+
+// Execute executes the request
+//  @return RemoteSessionDetailList
+func (a *RemoteSessionsAPIService) ListDeviceRemoteSessionsExecute(r ApiListDeviceRemoteSessionsRequest) (*RemoteSessionDetailList, *http.Response, error) {
+	var (
+		localVarHTTPMethod   = http.MethodGet
+		localVarPostBody     interface{}
+		formFiles            []formFile
+		localVarReturnValue  *RemoteSessionDetailList
+	)
+
+	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "RemoteSessionsAPIService.ListDeviceRemoteSessions")
+	if err != nil {
+		return localVarReturnValue, nil, &GenericOpenAPIError{error: err.Error()}
+	}
+
+	localVarPath := localBasePath + "/v1/me/devices/{device_id}/sessions"
+	localVarPath = strings.Replace(localVarPath, "{"+"device_id"+"}", url.PathEscape(parameterValueToString(r.deviceId, "deviceId")), -1)
+
+	localVarHeaderParams := make(map[string]string)
+	localVarQueryParams := url.Values{}
+	localVarFormParams := url.Values{}
+	if strlen(r.deviceId) > 20 {
+		return localVarReturnValue, nil, reportError("deviceId must have less than 20 elements")
+	}
+
+	if r.status != nil {
+		parameterAddToHeaderOrQuery(localVarQueryParams, "status", r.status, "form", "")
+	}
+	if r.cursor != nil {
+		parameterAddToHeaderOrQuery(localVarQueryParams, "cursor", r.cursor, "form", "")
+	}
+	if r.limit != nil {
+		parameterAddToHeaderOrQuery(localVarQueryParams, "limit", r.limit, "form", "")
+	}
+	// to determine the Content-Type header
+	localVarHTTPContentTypes := []string{}
+
+	// set Content-Type header
+	localVarHTTPContentType := selectHeaderContentType(localVarHTTPContentTypes)
+	if localVarHTTPContentType != "" {
+		localVarHeaderParams["Content-Type"] = localVarHTTPContentType
+	}
+
+	// to determine the Accept header
+	localVarHTTPHeaderAccepts := []string{"application/json", "application/problem+json"}
+
+	// set Accept header
+	localVarHTTPHeaderAccept := selectHeaderAccept(localVarHTTPHeaderAccepts)
+	if localVarHTTPHeaderAccept != "" {
+		localVarHeaderParams["Accept"] = localVarHTTPHeaderAccept
+	}
+	if r.ctx != nil {
+		// API Key Authentication
+		if auth, ok := r.ctx.Value(ContextAPIKeys).(map[string]APIKey); ok {
+			if apiKey, ok := auth["ApiKeyAuth"]; ok {
+				var key string
+				if apiKey.Prefix != "" {
+					key = apiKey.Prefix + " " + apiKey.Key
+				} else {
+					key = apiKey.Key
+				}
+				localVarHeaderParams["X-API-Key"] = key
+			}
+		}
+	}
+	req, err := a.client.prepareRequest(r.ctx, localVarPath, localVarHTTPMethod, localVarPostBody, localVarHeaderParams, localVarQueryParams, localVarFormParams, formFiles)
+	if err != nil {
+		return localVarReturnValue, nil, err
+	}
+
+	localVarHTTPResponse, err := a.client.callAPI(req)
+	if err != nil || localVarHTTPResponse == nil {
+		return localVarReturnValue, localVarHTTPResponse, err
+	}
+
+	localVarBody, err := io.ReadAll(localVarHTTPResponse.Body)
+	localVarHTTPResponse.Body.Close()
+	localVarHTTPResponse.Body = io.NopCloser(bytes.NewBuffer(localVarBody))
+	if err != nil {
+		return localVarReturnValue, localVarHTTPResponse, err
+	}
+
+	if localVarHTTPResponse.StatusCode >= 300 {
+		newErr := &GenericOpenAPIError{
+			body:  localVarBody,
+			error: localVarHTTPResponse.Status,
+		}
+		if localVarHTTPResponse.StatusCode == 400 {
+			var v Problem
+			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
+			if err != nil {
+				newErr.error = err.Error()
+				return localVarReturnValue, localVarHTTPResponse, newErr
+			}
+					newErr.error = formatErrorMessage(localVarHTTPResponse.Status, &v)
+					newErr.model = v
+			return localVarReturnValue, localVarHTTPResponse, newErr
+		}
+		if localVarHTTPResponse.StatusCode == 401 {
+			var v Problem
+			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
+			if err != nil {
+				newErr.error = err.Error()
+				return localVarReturnValue, localVarHTTPResponse, newErr
+			}
+					newErr.error = formatErrorMessage(localVarHTTPResponse.Status, &v)
+					newErr.model = v
+			return localVarReturnValue, localVarHTTPResponse, newErr
+		}
+		if localVarHTTPResponse.StatusCode == 403 {
+			var v Problem
+			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
+			if err != nil {
+				newErr.error = err.Error()
+				return localVarReturnValue, localVarHTTPResponse, newErr
+			}
+					newErr.error = formatErrorMessage(localVarHTTPResponse.Status, &v)
+					newErr.model = v
+			return localVarReturnValue, localVarHTTPResponse, newErr
+		}
+		if localVarHTTPResponse.StatusCode == 404 {
+			var v Problem
+			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
+			if err != nil {
+				newErr.error = err.Error()
+				return localVarReturnValue, localVarHTTPResponse, newErr
+			}
+					newErr.error = formatErrorMessage(localVarHTTPResponse.Status, &v)
+					newErr.model = v
+		}
+		return localVarReturnValue, localVarHTTPResponse, newErr
+	}
+
+	err = a.client.decode(&localVarReturnValue, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
+	if err != nil {
+		newErr := &GenericOpenAPIError{
+			body:  localVarBody,
+			error: err.Error(),
+		}
+		return localVarReturnValue, localVarHTTPResponse, newErr
+	}
+
+	return localVarReturnValue, localVarHTTPResponse, nil
+}
+
 type ApiListRemoteSessionsRequest struct {
 	ctx context.Context
 	ApiService *RemoteSessionsAPIService

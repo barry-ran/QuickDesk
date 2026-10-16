@@ -44,6 +44,7 @@ docs/RemoteSession.md
 docs/RemoteSessionAccessLog.md
 docs/RemoteSessionDetail.md
 docs/RemoteSessionDetailCounts.md
+docs/RemoteSessionDetailList.md
 docs/RemoteSessionList.md
 docs/RemoteSessionsApi.md
 docs/RevokeAccessGrant200Response.md
@@ -106,6 +107,7 @@ quickdesk_signaling/models/remote_session.py
 quickdesk_signaling/models/remote_session_access_log.py
 quickdesk_signaling/models/remote_session_detail.py
 quickdesk_signaling/models/remote_session_detail_counts.py
+quickdesk_signaling/models/remote_session_detail_list.py
 quickdesk_signaling/models/remote_session_list.py
 quickdesk_signaling/models/revoke_access_grant200_response.py
 quickdesk_signaling/models/session_recording.py
@@ -162,6 +164,7 @@ test/test_remote_session.py
 test/test_remote_session_access_log.py
 test/test_remote_session_detail.py
 test/test_remote_session_detail_counts.py
+test/test_remote_session_detail_list.py
 test/test_remote_session_list.py
 test/test_remote_sessions_api.py
 test/test_revoke_access_grant200_response.py

@@ -35,6 +35,7 @@ export * from './RemoteSession';
 export * from './RemoteSessionAccessLog';
 export * from './RemoteSessionDetail';
 export * from './RemoteSessionDetailCounts';
+export * from './RemoteSessionDetailList';
 export * from './RemoteSessionList';
 export * from './RevokeAccessGrant200Response';
 export * from './SessionRecording';
