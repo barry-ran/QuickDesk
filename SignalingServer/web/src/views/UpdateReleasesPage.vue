@@ -67,7 +67,9 @@
               size="small"
               :loading="uploadingId === row.id"
               @click="handleUpload(row)"
-            >{{ t('updateReleases.upload') }}</el-button>
+            >{{ uploadingId === row.id && uploadPercent > 0
+                ? `${uploadPercent}%`
+                : t('updateReleases.upload') }}</el-button>
             <el-button link type="danger" size="small" @click="handleDelete(row)">{{ t('common.delete') }}</el-button>
           </template>
         </el-table-column>
@@ -139,7 +141,7 @@ import {
   getUpdateReleases,
   publishUpdateRelease,
   deleteUpdateRelease,
-  uploadUpdateReleaseArtifact,
+  uploadUpdateReleaseArtifactResumable,
 } from '../api/updateReleases.js'
 
 const { t } = useI18n()
@@ -150,6 +152,7 @@ const dialogVisible = ref(false)
 const releases = ref([])
 const channel = ref('')
 const fileInput = ref(null)
+const uploadPercent = ref(0)
 // The row whose "upload" button opened the picker; the file arrives later.
 const uploadTarget = ref(null)
 
@@ -250,14 +253,20 @@ async function handleFilePicked(event) {
   event.target.value = ''
   if (!file || !row) return
   uploadingId.value = row.id
+  uploadPercent.value = 0
   try {
-    await uploadUpdateReleaseArtifact(row.id, file)
+    await uploadUpdateReleaseArtifactResumable(row.id, file, {
+      onProgress: (sent, total) => {
+        uploadPercent.value = total > 0 ? Math.round((sent / total) * 100) : 0
+      },
+    })
     ElMessage.success(t('common.success'))
     await loadReleases()
   } catch (e) {
     ElMessage.error(e.message)
   } finally {
     uploadingId.value = null
+    uploadPercent.value = 0
   }
 }
 

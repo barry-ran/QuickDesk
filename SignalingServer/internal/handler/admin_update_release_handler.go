@@ -26,10 +26,12 @@ import (
 //	POST   /v1/admin/update-releases
 //	DELETE /v1/admin/update-releases/:id
 //	POST   /v1/admin/update-releases/:id/artifact
+//	PATCH  /v1/admin/update-releases/:id/artifact
 //
 // This is the index of which version exists for which channel/platform/arch and
 // what it hashes to. The bytes normally stay wherever the operator hosts them;
-// UploadArtifact is the optional path that lets this server hold them instead.
+// UploadArtifact (one request) and AppendArtifact (one chunk per request) are
+// the optional paths that let this server hold them instead.
 type AdminUpdateReleaseHandler struct {
 	releases *service.UpdateReleaseService
 	audit    *service.AuditService
@@ -322,11 +324,21 @@ func sanitizeUpdateArtifactName(name string) string {
 	return leaf
 }
 
-// removeStoredArtifact deletes a re-hosted installer and the per-release
-// directory that held it. Best effort: the row is already gone.
+// removeStoredArtifact deletes a re-hosted installer, any staging file left by
+// an interrupted resumable upload, and the per-release directory that held them.
+// Best effort: the row is already gone.
 func removeStoredArtifact(path string) {
-	if err := os.Remove(path); err != nil {
-		return
+	dir := filepath.Dir(path)
+	_ = os.Remove(path)
+	_ = os.Remove(path + ".part")
+	if entries, err := os.ReadDir(dir); err == nil {
+		for _, entry := range entries {
+			name := entry.Name()
+			if entry.IsDir() || !strings.HasSuffix(name, ".part") {
+				continue
+			}
+			_ = os.Remove(filepath.Join(dir, name))
+		}
 	}
-	_ = os.Remove(filepath.Dir(path))
+	_ = os.Remove(dir)
 }

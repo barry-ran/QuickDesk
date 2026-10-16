@@ -1138,16 +1138,42 @@ one alert for it.
 The installed clients ask this server which build they should be running,
 instead of asking upstream. The server owns the **index** - which version
 exists for which channel/platform/arch, where the bytes live and what they hash
-to - and the artifact itself stays on whatever static host the operator
-controls (`download_url`, an absolute http(s) URL). Publishing is a
+to. The artifact normally stays on whatever static host the operator controls
+(`download_url`, an absolute http(s) URL), but the operator may also hand the
+installer to this server, which then serves it itself. Publishing is a
 super-admin operation.
 
 | Method | Path | Body | Notes |
 |---|---|---|---|
 | `GET` | `/v1/update:check?platform=&arch=&channel=&current_version=` | — | Client-facing. API-key gated, **not** user-authenticated: a controlled machine checks before anyone logs in. Returns `{update_available, mandatory, channel, platform, arch, current_version?, latest}`, where `latest` is always present and is `null` when the channel has no release for that platform/arch. `current_version` is optional; without it any release counts as an update. A publish that is not strictly newer than `current_version` reports `update_available: false`. |
+| `GET` | `/v1/update-releases/:id/artifact` | — | Client-facing. Streams an installer this server hosts itself; the same API key as the check, and supports `Range`. `404` when the release's bytes live on an external host or the release is unknown. |
 | `GET` | `/v1/admin/update-releases?channel=&platform=&arch=&limit=` | — | Super-admin. Newest first. |
-| `POST` | `/v1/admin/update-releases` | `{channel?, platform, arch, version, download_url, sha256, size_bytes?, notes?, mandatory?, published_at?}` | Super-admin. `channel` defaults to `stable`; `download_url` must be absolute http(s); `sha256` must be the 64-character hex digest of the artifact. Publishing the same channel/platform/arch/version twice is `409` rather than a silent replacement. Audited as `update_release.publish`. |
-| `DELETE` | `/v1/admin/update-releases/:id` | — | Super-admin. `404` for an unknown id. Audited as `update_release.delete`. |
+| `POST` | `/v1/admin/update-releases` | `{channel?, platform, arch, version, download_url?, sha256, size_bytes?, notes?, mandatory?, published_at?}` | Super-admin. `channel` defaults to `stable`; a non-empty `download_url` must be absolute http(s); `sha256` must be the 64-character hex digest of the artifact. Publishing the same channel/platform/arch/version twice is `409` rather than a silent replacement. Audited as `update_release.publish`. |
+| `POST` | `/v1/admin/update-releases/:id/artifact` | Installer bytes. `multipart/form-data` with a `file` part, or a raw body plus `?filename=`. | Super-admin. Re-hosting: stores the bytes under `UPDATE_ARTIFACT_DIR` and points `download_url` at `GET /v1/update-releases/:id/artifact`. The upload is refused with `400` unless it hashes to the `sha256` the release already advertises, so re-hosting can never swap the bytes clients were told to expect. Audited as `update_release.artifact.upload`. |
+| `PATCH` | `/v1/admin/update-releases/:id/artifact?filename=` | One chunk (raw body). | Super-admin. Resumable upload, same protocol as the recording artifact: `Upload-Offset` (required) is where this chunk starts, `Upload-Length` (optional, `*` while unknown) declares the total, `Upload-Complete: 1` ends the upload when no total was declared and `Upload-Probe: 1` asks where the upload stands without staging bytes. `202` stages the chunk and returns the release row with the authoritative offset in the `Upload-Offset` response header; `200` means this chunk finished the upload and the digest matched; `409` means the offset did not match and that same header carries the offset the server actually holds. The digest is only knowable once the last chunk lands, so a mismatch is reported then (`400`) and the staged bytes are discarded rather than hosted. |
+| `DELETE` | `/v1/admin/update-releases/:id` | — | Super-admin. Deletes the row **and** any stored installer. `404` for an unknown id. Audited as `update_release.delete`. |
+
+A release published without a `download_url` is a **placeholder**: the operator
+has decided the version exists but has not stored the bytes yet. It is listed in
+the admin index and is invisible to clients - `update:check` skips it - because
+announcing an update nobody can download is worse than announcing nothing. The
+upload hashing to the published `sha256` is what makes it fetchable, and
+`hosted_here` in the check response says whether `download_url` is this server's
+own artifact route or the operator's static host.
+
+Re-hosting is configured by `UPDATE_ARTIFACT_DIR` (default `data/updates`, never
+mounted as a static site), `UPDATE_MAX_UPLOAD_MB` (default 4096) and
+`UPDATE_PUBLIC_BASE_URL`. Set the last one whenever a reverse proxy terminates
+TLS in front of this server: the stored `download_url` is absolute, and without
+an explicit base it is built from the host on the admin upload request (which
+would otherwise be `http://` behind an HTTPS proxy).
+
+A resumable upload is keyed by the release id **and** the file name, because that
+name is what the download route sends back. Starting a second upload under a
+different name while one is staged is a `400` that names the staged file, so a
+typo cannot silently abandon hundreds of megabytes. A single-shot `POST` to the
+same release starts over from zero, which is what "here is the whole file"
+means.
 
 Versions are dotted numbers (`4.2.5.0`); a leading `v` is accepted and missing
 trailing parts count as zero, so `4.2` and `4.2.0.0` are equal. `channel` is

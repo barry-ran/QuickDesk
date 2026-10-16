@@ -809,6 +809,7 @@ func main() {
 		adminGuarded.GET("/update-releases", adminUpdateReleaseHandler.List)
 		adminGuarded.POST("/update-releases", adminUpdateReleaseHandler.Publish)
 		adminGuarded.POST("/update-releases/:id/artifact", adminUpdateReleaseHandler.UploadArtifact)
+		adminGuarded.PATCH("/update-releases/:id/artifact", adminUpdateReleaseHandler.AppendArtifact)
 		adminGuarded.DELETE("/update-releases/:id", adminUpdateReleaseHandler.Delete)
 
 		// Device groups.
