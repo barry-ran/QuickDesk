@@ -166,8 +166,8 @@ func TestRemoteSessionLifecycle(t *testing.T) {
 
 // A device that is not bound to an account still gets a row - the signaling side
 // legitimately knows about devices the control plane has not bound - but it has
-// no owner to show it to, and a restart has to close whatever the previous
-// process left open.
+// no owner to show it to, and an orphan sweep has to close what no process is
+// holding any more.
 func TestRemoteSessionUnboundDeviceAndRestartSweep(t *testing.T) {
 	db := newRemoteSessionTestDB(t)
 	svc := NewRemoteSessionService(db)
@@ -185,9 +185,9 @@ func TestRemoteSessionUnboundDeviceAndRestartSweep(t *testing.T) {
 	if _, err := svc.Open(ctx, OpenRemoteSessionInput{SessionID: "sig_restart", DeviceID: "700000002"}); err != nil {
 		t.Fatalf("open second session: %v", err)
 	}
-	// The restart sweep is unconditional: every open row belongs to a process
-	// that no longer exists, so the count is exactly what was left open.
-	closed, err := svc.CloseOpenSessions(ctx, models.RemoteSessionEndServerRestart)
+	// Neither row recorded an instance, so both are orphans by construction and
+	// the live set is irrelevant to them.
+	closed, err := svc.CloseOrphanedSessions(ctx, []string{"inst-somewhere-else"}, models.RemoteSessionEndServerRestart)
 	if err != nil {
 		t.Fatalf("close open sessions: %v", err)
 	}
@@ -207,8 +207,91 @@ func TestRemoteSessionUnboundDeviceAndRestartSweep(t *testing.T) {
 	}
 
 	// Nothing to close the second time.
-	if again, err := svc.CloseOpenSessions(ctx, models.RemoteSessionEndServerRestart); err != nil || again != 0 {
+	if again, err := svc.CloseOrphanedSessions(ctx, []string{"inst-somewhere-else"}, models.RemoteSessionEndServerRestart); err != nil || again != 0 {
 		t.Fatalf("second restart sweep closed %d sessions (err=%v), want 0", again, err)
+	}
+}
+
+// The orphan sweep is the multi-instance half of that: it must close a dead
+// instance's sessions and leave a live one's alone. Closing everything at boot
+// is only correct when there is exactly one instance, and the whole point of
+// the live set is to stop being wrong the moment there are two.
+func TestRemoteSessionOrphanSweepSparesLiveInstances(t *testing.T) {
+	db := newRemoteSessionTestDB(t)
+	svc := NewRemoteSessionService(db)
+	ctx := context.Background()
+	seedRemoteSessionDevice(t, db, "700000020", 990220)
+
+	for _, in := range []OpenRemoteSessionInput{
+		{SessionID: "sig_live", DeviceID: "700000020", InstanceID: "inst-live"},
+		{SessionID: "sig_dead", DeviceID: "700000020", InstanceID: "inst-dead"},
+		// No instance id at all: written before the column existed, so nothing
+		// is holding it.
+		{SessionID: "sig_legacy", DeviceID: "700000020"},
+	} {
+		if _, err := svc.Open(ctx, in); err != nil {
+			t.Fatalf("open %s: %v", in.SessionID, err)
+		}
+	}
+
+	closed, err := svc.CloseOrphanedSessions(ctx, []string{"inst-live"}, models.RemoteSessionEndServerRestart)
+	if err != nil {
+		t.Fatalf("orphan sweep: %v", err)
+	}
+	if closed != 2 {
+		t.Fatalf("orphan sweep closed %d sessions, want the dead one and the legacy one", closed)
+	}
+
+	live, err := svc.Get(ctx, "sig_live")
+	if err != nil {
+		t.Fatalf("get live: %v", err)
+	}
+	if !live.Active || live.EndReason != "" {
+		t.Fatalf("the live instance's session was closed: %+v", live)
+	}
+	if live.InstanceID != "inst-live" {
+		t.Fatalf("the live row lost its instance id: %+v", live)
+	}
+	for _, id := range []string{"sig_dead", "sig_legacy"} {
+		row, err := svc.Get(ctx, id)
+		if err != nil {
+			t.Fatalf("get %s: %v", id, err)
+		}
+		if row.Active || row.EndReason != models.RemoteSessionEndServerRestart {
+			t.Fatalf("%s = %+v, want a server_restart end", id, row)
+		}
+	}
+
+	// Idempotent: the second pass has nothing left to close.
+	if again, err := svc.CloseOrphanedSessions(ctx, []string{"inst-live"}, models.RemoteSessionEndServerRestart); err != nil || again != 0 {
+		t.Fatalf("second orphan sweep closed %d sessions (err=%v), want 0", again, err)
+	}
+}
+
+// An empty live set means the liveness store could not be read, not that the
+// fleet is empty: refusing is the only safe answer, because the alternative is
+// closing every live session on a Redis blip.
+func TestRemoteSessionOrphanSweepRefusesAnEmptyLiveSet(t *testing.T) {
+	db := newRemoteSessionTestDB(t)
+	svc := NewRemoteSessionService(db)
+	ctx := context.Background()
+	seedRemoteSessionDevice(t, db, "700000021", 990221)
+	if _, err := svc.Open(ctx, OpenRemoteSessionInput{
+		SessionID: "sig_untouched", DeviceID: "700000021", InstanceID: "inst-live",
+	}); err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	for _, live := range [][]string{nil, {}, {"   "}} {
+		if _, err := svc.CloseOrphanedSessions(ctx, live, models.RemoteSessionEndServerRestart); err == nil {
+			t.Fatalf("orphan sweep with live=%v did not refuse", live)
+		}
+	}
+	row, err := svc.Get(ctx, "sig_untouched")
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if !row.Active {
+		t.Fatalf("a refused sweep still closed the session: %+v", row)
 	}
 }
 

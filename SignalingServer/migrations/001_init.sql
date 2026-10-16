@@ -687,6 +687,7 @@ CREATE TABLE IF NOT EXISTS remote_sessions (
     device_id   VARCHAR(9)    NOT NULL,
     client_id   VARCHAR(64)   NOT NULL DEFAULT '',
     client_ip   VARCHAR(50)   NOT NULL DEFAULT '',
+    instance_id VARCHAR(64)   NOT NULL DEFAULT '',
     started_at  TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
     ended_at    TIMESTAMPTZ,
     end_reason  VARCHAR(32)   NOT NULL DEFAULT '',
@@ -700,5 +701,7 @@ CREATE INDEX IF NOT EXISTS idx_remote_sessions_user_id
     ON remote_sessions (user_id);
 CREATE INDEX IF NOT EXISTS idx_remote_sessions_device_id
     ON remote_sessions (device_id);
+CREATE INDEX IF NOT EXISTS idx_remote_sessions_instance_id
+    ON remote_sessions (instance_id);
 CREATE INDEX IF NOT EXISTS idx_remote_sessions_ended_at
     ON remote_sessions (ended_at);

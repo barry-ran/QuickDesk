@@ -26,6 +26,13 @@ type RemoteSession struct {
 	// access log records, which is what lets the two be read together.
 	ClientID string `gorm:"size:64" json:"client_id"`
 	ClientIP string `gorm:"size:50" json:"client_ip"`
+	// InstanceID names the signaling-server process that admitted the session.
+	// A signaling socket cannot outlive its process, so an open row whose
+	// instance is no longer alive is finished - but a *different* instance may
+	// be holding its own sessions right now, which is why the sweep has to know
+	// whose rows these are. It is internal bookkeeping, not part of the wire
+	// contract: no client can act on an instance id.
+	InstanceID string `gorm:"size:64;index" json:"-"`
 	// StartedAt is when the signaling handshake completed.
 	StartedAt time.Time `gorm:"not null;index" json:"started_at"`
 	// EndedAt is null while the signaling channel is up.

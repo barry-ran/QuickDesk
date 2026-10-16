@@ -241,15 +241,10 @@ func main() {
 	notificationChannelService := service.NewNotificationChannelService(db, notificationDeliveryService)
 	sessionRecordingService := service.NewSessionRecordingService(db)
 	remoteSessionService := service.NewRemoteSessionService(db)
-	// A signaling socket cannot outlive the process that held it, so anything
-	// still open at boot ended with the previous process, without the handler's
-	// deferred close ever running. Stamping those rows is what keeps "who is in
-	// this machine right now" honest across a restart.
-	if closed, err := remoteSessionService.CloseOpenSessions(context.Background(), models.RemoteSessionEndServerRestart); err != nil {
-		log.Printf("Warning: closing remote sessions left open by the previous process failed: %v", err)
-	} else if closed > 0 {
-		log.Printf("Remote sessions: closed %d left open by the previous process", closed)
-	}
+	// The orphan sweep that closes sessions left open by a dead process runs a
+	// little further down, once presence knows which instances are alive: with
+	// more than one instance, "everything still open at boot" is not the same
+	// set as "everything whose process is gone".
 	recordingLifecycle := service.NewRecordingLifecycle(
 		sessionRecordingService,
 		cfg.Recording.Dir,
@@ -286,6 +281,47 @@ func main() {
 	instanceID := uuid.NewString()
 	presenceService := service.NewPresenceService(redisClient, instanceID)
 	presenceService.Start(context.Background())
+	// Write this instance's lease now, not just on the background ticker: the
+	// orphan sweep below has to see itself in the live set, or it would refuse
+	// to run (an empty live set is indistinguishable from an unreachable Redis).
+	if err := presenceService.MarkAlive(context.Background()); err != nil {
+		log.Printf("Warning: could not write this instance's presence lease: %v", err)
+	}
+	// A signaling socket cannot outlive the process that held it, so an open
+	// session row whose instance is no longer alive really did end - it just
+	// ended without the handler's deferred close running. The live set comes
+	// from the presence lease every process keeps refreshing, so a restart on
+	// one instance can no longer stamp another instance's live sessions as
+	// finished. Until this instance's own lease is written the sweep finds only
+	// itself missing, so it is run once the lease is up.
+	sweepOrphanedRemoteSessions := func() {
+		live, err := presenceService.LiveInstances(context.Background())
+		if err != nil {
+			log.Printf("Warning: remote session sweep skipped, could not read live instances: %v", err)
+			return
+		}
+		closed, err := remoteSessionService.CloseOrphanedSessions(
+			context.Background(), live, models.RemoteSessionEndServerRestart)
+		if err != nil {
+			log.Printf("Warning: remote session sweep failed: %v", err)
+			return
+		}
+		if closed > 0 {
+			log.Printf("Remote sessions: closed %d left open by instances that are no longer alive", closed)
+		}
+	}
+	sweepOrphanedRemoteSessions()
+	if cfg.RemoteSession.SweepIntervalMin > 0 {
+		go func() {
+			ticker := time.NewTicker(time.Duration(cfg.RemoteSession.SweepIntervalMin) * time.Minute)
+			defer ticker.Stop()
+			for range ticker.C {
+				sweepOrphanedRemoteSessions()
+			}
+		}()
+		log.Printf("Remote session sweep: interval=%dm (a killed instance's sessions close once its presence lease expires)",
+			cfg.RemoteSession.SweepIntervalMin)
+	}
 	// Cross-instance log shipping. Attaching the sink after the database is open
 	// (rather than inside observability.Configure) is what makes it possible at
 	// all: the store is the database. Lines logged before this point - the

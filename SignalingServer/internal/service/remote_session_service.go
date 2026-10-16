@@ -31,6 +31,10 @@ type OpenRemoteSessionInput struct {
 	DeviceID  string
 	ClientID  string
 	ClientIP  string
+	// InstanceID is the signaling-server process admitting the session. It is
+	// what lets a later sweep tell this process's sessions apart from another
+	// live instance's, so a restart closes only what really died.
+	InstanceID string
 }
 
 // Open records a newly established control session.
@@ -49,12 +53,13 @@ func (s *RemoteSessionService) Open(ctx context.Context, in OpenRemoteSessionInp
 		return nil, errors.New("session_id and device_id are required")
 	}
 	row := models.RemoteSession{
-		SessionID: sessionID,
-		UserID:    s.ownerOf(ctx, deviceID),
-		DeviceID:  deviceID,
-		ClientID:  strings.TrimSpace(in.ClientID),
-		ClientIP:  strings.TrimSpace(in.ClientIP),
-		StartedAt: time.Now().UTC(),
+		SessionID:  sessionID,
+		UserID:     s.ownerOf(ctx, deviceID),
+		DeviceID:   deviceID,
+		ClientID:   strings.TrimSpace(in.ClientID),
+		ClientIP:   strings.TrimSpace(in.ClientIP),
+		InstanceID: strings.TrimSpace(in.InstanceID),
+		StartedAt:  time.Now().UTC(),
 	}
 	if err := s.db.WithContext(ctx).Create(&row).Error; err != nil {
 		if isUniqueViolation(err) {
@@ -124,19 +129,48 @@ func (s *RemoteSessionService) Close(ctx context.Context, sessionID string, reas
 	return &row, result.RowsAffected > 0, nil
 }
 
-// CloseOpenSessions finishes every session still marked open and reports how
-// many were affected. The caller runs it at startup: a signaling socket cannot
-// outlive the process that held it, so anything still open at boot belongs to a
-// session that ended with the previous process, without the handler's deferred
-// close ever running.
-func (s *RemoteSessionService) CloseOpenSessions(ctx context.Context, reason string) (int64, error) {
+// CloseOrphanedSessions finishes the open sessions whose instance is no longer
+// alive, and reports how many it closed.
+//
+// Closing *every* open row is only correct when there is one instance; with
+// two, a restart on one machine would stamp the other's live sessions as
+// finished. So the caller passes the set of instances that are currently alive,
+// and only rows outside that set are closed.
+//
+// An empty live set is refused rather than treated as "everybody is dead":
+// that is what an unreachable or unconfigured liveness store looks like, and
+// answering it by closing every session in the fleet would turn a Redis blip
+// into an outage. A running instance always has at least itself in the set.
+//
+// Rows with no instance id are closed too. They were written before this column
+// existed, so nothing is holding them: a row without an owner instance cannot be
+// anybody's live session.
+func (s *RemoteSessionService) CloseOrphanedSessions(
+	ctx context.Context,
+	liveInstanceIDs []string,
+	reason string,
+) (int64, error) {
 	if s == nil || s.db == nil {
 		return 0, errors.New("remote session service is not configured")
+	}
+	seen := make(map[string]bool, len(liveInstanceIDs))
+	live := make([]string, 0, len(liveInstanceIDs))
+	for _, id := range liveInstanceIDs {
+		id = strings.TrimSpace(id)
+		if id == "" || seen[id] {
+			continue
+		}
+		seen[id] = true
+		live = append(live, id)
+	}
+	if len(live) == 0 {
+		return 0, errors.New("no live instances were reported; refusing to close every open session")
 	}
 	now := time.Now().UTC()
 	result := s.db.WithContext(ctx).
 		Model(&models.RemoteSession{}).
 		Where("ended_at IS NULL").
+		Where("instance_id IS NULL OR instance_id = '' OR instance_id NOT IN ?", live).
 		Updates(map[string]interface{}{
 			"ended_at":   now,
 			"end_reason": strings.TrimSpace(reason),

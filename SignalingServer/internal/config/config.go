@@ -147,6 +147,7 @@ type Config struct {
 	Recording     RecordingConfig
 	Notification  NotificationConfig
 	Audit         AuditConfig
+	RemoteSession RemoteSessionConfig
 	InstanceLog   InstanceLogConfig
 	OfflineAlert  OfflineAlertConfig
 	ScheduledTask ScheduledTaskConfig
@@ -155,6 +156,17 @@ type Config struct {
 	Sms           SmsConfig
 	Update        UpdateConfig
 	Runtime       RuntimeConfig
+}
+
+// RemoteSessionConfig controls the orphan sweep for `remote_sessions`.
+//
+// A session row whose signaling-server instance is no longer alive is finished,
+// because a signaling socket cannot outlive its process. The sweep runs at boot
+// and then on this interval, so an instance that is killed without cleanup has
+// its sessions closed once its presence lease expires - even if no other
+// instance restarts. 0 disables the periodic worker; the boot pass still runs.
+type RemoteSessionConfig struct {
+	SweepIntervalMin int
 }
 
 // InstanceLogConfig controls shipping this process's log lines into the shared
@@ -355,6 +367,10 @@ func Load() *Config {
 
 	viper.SetDefault("RECORDING_DIR", "data/recordings")
 	viper.SetDefault("RECORDING_MAX_UPLOAD_MB", 2048)
+	// Orphaned remote-session sweep: a minute is short enough that a killed
+	// instance's sessions stop counting as "active" quickly, and long enough
+	// that the scan is negligible.
+	viper.SetDefault("REMOTE_SESSION_SWEEP_INTERVAL_MINUTES", 1)
 	viper.SetDefault("RECORDING_URL_SECRET", "")
 	viper.SetDefault("CONTROLLER_CHALLENGE_SECRET", "")
 	viper.SetDefault("RECORDING_TICKET_TTL_SECONDS", 600)
@@ -563,6 +579,9 @@ func Load() *Config {
 		Sink:             viper.GetBool("INSTANCE_LOG_SINK"),
 		RetentionDays:    viper.GetInt("INSTANCE_LOG_RETENTION_DAYS"),
 		SweepIntervalMin: viper.GetInt("INSTANCE_LOG_SWEEP_INTERVAL_MINUTES"),
+	}
+	cfg.RemoteSession = RemoteSessionConfig{
+		SweepIntervalMin: viper.GetInt("REMOTE_SESSION_SWEEP_INTERVAL_MINUTES"),
 	}
 	cfg.OfflineAlert = OfflineAlertConfig{
 		IntervalSeconds: viper.GetInt("OFFLINE_ALERT_INTERVAL_SECONDS"),

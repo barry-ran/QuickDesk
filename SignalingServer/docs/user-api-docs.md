@@ -1244,11 +1244,16 @@ that is still counting and the total once it has stopped.
 `end_reason` is `disconnected` in the ordinary case (the controller closed, the
 client crashed, or the network dropped - the server cannot tell those apart and
 does not pretend to), `revoked` when an owner or an administrator ended it on
-purpose (see the revoke route below and §8.5), and `server_restart` for rows a
-restart found still open: a signaling socket cannot outlive the process that
-held it, so those sessions really did end, they just ended without the handler's
-close running. Unbound devices are recorded with `user_id: 0` and never appear in
-an owner's list.
+purpose (see the revoke route below and §8.5), and `server_restart` for rows left
+open by a process that is no longer alive. That last one is decided by
+**instance liveness**, not by "this process just booted": each server keeps a
+short presence lease, an open session records the instance that admitted it, and
+a sweep closes only the rows whose instance has dropped out of the live set. In
+a multi-instance deployment a restart on one host therefore leaves another
+host's live sessions alone, and an instance killed without cleanup has its
+sessions closed once its lease expires (`REMOTE_SESSION_SWEEP_INTERVAL_MINUTES`,
+default 1, drives the periodic pass; the boot pass always runs). Unbound devices
+are recorded with `user_id: 0` and never appear in an owner's list.
 
 The owner's realtime stream (`/v1/realtime/events`, §6) carries the transitions
 as `remote_session.started` and `remote_session.ended`, both with the same fields

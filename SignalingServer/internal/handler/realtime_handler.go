@@ -839,6 +839,10 @@ func (h *RealtimeHandler) openRemoteSession(c *gin.Context, sc *signalConn, sess
 		DeviceID:  sc.deviceID,
 		ClientID:  sc.clientID,
 		ClientIP:  c.ClientIP(),
+		// Recording the instance is what makes the startup sweep safe in a
+		// multi-instance deployment: a restart must not stamp another live
+		// instance's sessions as finished.
+		InstanceID: h.presence.InstanceID(),
 	})
 	if err != nil {
 		log.Printf("[realtime/signal] remote session open failed device=%s session=%s: %v",
