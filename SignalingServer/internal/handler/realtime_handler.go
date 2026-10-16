@@ -57,6 +57,9 @@ type RealtimeHandler struct {
 	// owns the socket. It is built by StartSessionRevokeBus; a nil bus means
 	// revokes only work on this instance.
 	revokeBus *SessionRevokeBus
+	// revokeCooldown refuses a controller that was just thrown out for a short
+	// window, so the kick is not cosmetic. Nil (or a zero TTL) disables it.
+	revokeCooldown *service.RevokeCooldown
 
 	// Per-user fan-out for realtime events.
 	eventsMu sync.RWMutex
@@ -721,6 +724,28 @@ func (h *RealtimeHandler) HandleSignal(c *gin.Context) {
 		done:     make(chan struct{}),
 	}
 
+	// "You were just thrown out of this machine." Checked before auth_ok for the
+	// same reason as the cap: a controller must not be told the session is up
+	// and then dropped. The access code is still valid - that is exactly the
+	// hole this closes - so the refusal is keyed by the device and the observed
+	// source, the identity the approval cooldown also uses.
+	if sc.role == service.SignalRoleClient && h.revokeCooldown != nil && h.revokeCooldown.TTL() > 0 {
+		armed, err := h.revokeCooldown.Armed(c.Request.Context(), sc.deviceID, c.ClientIP())
+		if err != nil {
+			log.Printf("[realtime/signal] revoke cooldown lookup failed device=%s: %v", sc.deviceID, err)
+		} else if armed {
+			remaining, _ := h.revokeCooldown.Remaining(c.Request.Context(), sc.deviceID, c.ClientIP())
+			reason := fmt.Sprintf("this controller was removed from the device; try again in %ds",
+				int(remaining.Seconds())+1)
+			log.Printf("[realtime/signal] session revoked recently device=%s client_id=%s session=%s retry_after=%s",
+				sc.deviceID, sc.clientID, sessionID, remaining)
+			h.recordAccessEvent(c, sc, "", service.DeviceAccessDeniedRevoked, reason, service.EventDeviceAccessDenied)
+			writeSignalError(conn, "SESSION_REVOKED", reason)
+			_ = conn.Close()
+			return
+		}
+	}
+
 	// Per-device concurrency cap from the access policy, checked *before*
 	// auth_ok: the client must never be told the session is up and then be
 	// dropped a microsecond later. The access code was already accepted (the
@@ -885,6 +910,17 @@ func (h *RealtimeHandler) closeRemoteSession(sc *signalConn) {
 		// would make an owner's "session ended" count wrong.
 		return
 	}
+	// A revoked session was ended on purpose, and the access code that admitted
+	// it is still valid - so open the window that keeps the same source out for a
+	// while. Armed here rather than by the caller because this is the moment the
+	// row is actually stamped, i.e. the only place that knows the revoke really
+	// happened. `server_restart` and ordinary disconnects do not arm it.
+	if closed.EndReason == models.RemoteSessionEndRevoked && h.revokeCooldown != nil {
+		if err := h.revokeCooldown.Arm(ctx, closed.DeviceID, closed.ClientIP); err != nil {
+			log.Printf("[realtime/signal] arming the revoke cooldown failed device=%s session=%s: %v",
+				closed.DeviceID, closed.SessionID, err)
+		}
+	}
 	h.publishRemoteSessionEvent(ctx, service.EventRemoteSessionEnded, closed)
 }
 
@@ -934,6 +970,14 @@ func (h *RealtimeHandler) findSessionConn(sessionID string) *signalConn {
 // a revoke can be addressed at the instance that holds the socket.
 func (h *RealtimeHandler) InstanceID() string {
 	return h.presence.InstanceID()
+}
+
+// WithRevokeCooldown turns on the "you were just kicked out" window. It is a
+// setter rather than another constructor argument because only this handler
+// needs it, and a zero ttl leaves the behaviour exactly as it was.
+func (h *RealtimeHandler) WithRevokeCooldown(ttl time.Duration) *RealtimeHandler {
+	h.revokeCooldown = service.NewRevokeCooldown(h.rdb, ttl)
+	return h
 }
 
 // AskInstanceRevoke asks another instance to close one of its sessions. It only

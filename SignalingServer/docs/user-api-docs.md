@@ -493,6 +493,7 @@ written server-side, never reported by the client. `result` is one of:
 | `session_started` | The controller actually opened the signaling channel with the token from a `granted` attempt — i.e. the attempt turned into a real control session. Recorded by the realtime handler; `session_id` identifies that session. |
 | `denied_policy` | The device's own access policy refused the client (remote access disabled, or the client IP is outside `allow_ips`). See 5.3.3. |
 | `denied_session_limit` | The access code was accepted, but the device already had as many controllers as `max_sessions` allows. Recorded when the controller opens its signaling socket. |
+| `denied_revoked` | The access code was accepted, but this source was thrown out of this device a moment ago and is still inside `REVOKE_COOLDOWN_SECONDS` (default 300, `0` disables). Recorded when the controller opens its signaling socket. The window is keyed by device + observed client IP, so a revoked controller cannot walk straight back in while everybody else is unaffected. |
 
 `owner_id` is the owner at the moment of the attempt (`0` when the device is
 unbound). Rows are newest-first and paginated by the `next_cursor` keyset.

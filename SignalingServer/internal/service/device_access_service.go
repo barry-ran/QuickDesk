@@ -37,6 +37,11 @@ const (
 	// DeviceAccessDeniedSessionLimit means the access code was accepted but
 	// the device already had as many controllers as its policy allows.
 	DeviceAccessDeniedSessionLimit = "denied_session_limit"
+	// DeviceAccessDeniedRevoked means the controller was refused because it (or
+	// its source address) was thrown out of this device a moment ago. The access
+	// code was still valid - the point of the window is that a valid code is not
+	// enough right after a revoke.
+	DeviceAccessDeniedRevoked = "denied_revoked"
 	// DeviceAccessPendingApproval means the code matched but the device
 	// policy requires the owner to approve the session first. The access log
 	// shows it as neither granted nor denied until the owner decides.
@@ -60,6 +65,7 @@ func IsDeviceAccessResult(result string) bool {
 		DeviceAccessSessionStarted,
 		DeviceAccessDeniedPolicy,
 		DeviceAccessDeniedSessionLimit,
+		DeviceAccessDeniedRevoked,
 		DeviceAccessPendingApproval,
 		DeviceAccessDeniedApproval:
 		return true

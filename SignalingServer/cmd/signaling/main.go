@@ -496,6 +496,14 @@ func main() {
 	}, auditService)
 	hostHandler := handler.NewHostHandler(deviceService, tokenService, presenceService, settingsService, rateLimitService, deviceAccessService, deviceAccessPolicyService, deviceAccessGrantService, deviceAccessApprovalService, bus, cfg)
 	realtimeHandler := handler.NewRealtimeHandler(tokenService, bus, presenceService, db, deviceService, favoriteService, metricsService, deviceAccessService, deviceAccessPolicyService, remoteSessionService, redisClient)
+	// A revoked controller must not walk straight back in with the same access
+	// code; the window is per device + observed source, so it cannot lock out
+	// anybody else. 0 leaves the historical behaviour (immediate reconnects).
+	realtimeHandler.WithRevokeCooldown(time.Duration(cfg.RemoteSession.RevokeCooldownSeconds) * time.Second)
+	if cfg.RemoteSession.RevokeCooldownSeconds > 0 {
+		log.Printf("Session revoke cooldown: %ds (a kicked source is refused for this long)",
+			cfg.RemoteSession.RevokeCooldownSeconds)
+	}
 	// A revoke arrives at whichever instance the operator is talking to, but the
 	// socket lives on the one that admitted it. Subscribe to this instance's own
 	// channel so the other instance can hand the close over.

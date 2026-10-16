@@ -167,6 +167,10 @@ type Config struct {
 // instance restarts. 0 disables the periodic worker; the boot pass still runs.
 type RemoteSessionConfig struct {
 	SweepIntervalMin int
+	// RevokeCooldownSeconds keeps a thrown-out controller from walking straight
+	// back in with the same access code. It is keyed by device and observed
+	// source address, and 0 disables it (immediate reconnects allowed).
+	RevokeCooldownSeconds int
 }
 
 // InstanceLogConfig controls shipping this process's log lines into the shared
@@ -371,6 +375,10 @@ func Load() *Config {
 	// instance's sessions stop counting as "active" quickly, and long enough
 	// that the scan is negligible.
 	viper.SetDefault("REMOTE_SESSION_SWEEP_INTERVAL_MINUTES", 1)
+	// Five minutes, matching the approval denial cooldown's default window: long
+	// enough that a kick is not cosmetic, short enough that a mistaken one is not
+	// an outage. 0 disables it.
+	viper.SetDefault("REVOKE_COOLDOWN_SECONDS", 300)
 	viper.SetDefault("RECORDING_URL_SECRET", "")
 	viper.SetDefault("CONTROLLER_CHALLENGE_SECRET", "")
 	viper.SetDefault("RECORDING_TICKET_TTL_SECONDS", 600)
@@ -581,7 +589,8 @@ func Load() *Config {
 		SweepIntervalMin: viper.GetInt("INSTANCE_LOG_SWEEP_INTERVAL_MINUTES"),
 	}
 	cfg.RemoteSession = RemoteSessionConfig{
-		SweepIntervalMin: viper.GetInt("REMOTE_SESSION_SWEEP_INTERVAL_MINUTES"),
+		SweepIntervalMin:      viper.GetInt("REMOTE_SESSION_SWEEP_INTERVAL_MINUTES"),
+		RevokeCooldownSeconds: viper.GetInt("REVOKE_COOLDOWN_SECONDS"),
 	}
 	cfg.OfflineAlert = OfflineAlertConfig{
 		IntervalSeconds: viper.GetInt("OFFLINE_ALERT_INTERVAL_SECONDS"),
