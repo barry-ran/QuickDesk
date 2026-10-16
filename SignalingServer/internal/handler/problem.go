@@ -27,13 +27,18 @@ const (
 	ProblemCodeInvalidCredentials = httpx.CodeInvalidCredentials
 	ProblemCodeAccountDisabled    = httpx.CodeAccountDisabled
 
-	ProblemCodeDeviceNotFound   = httpx.CodeDeviceNotFound
-	ProblemCodeHostOffline      = httpx.CodeHostOffline
-	ProblemCodeInvalidCode      = httpx.CodeInvalidCode
-	ProblemCodeTooManyAttempts  = httpx.CodeTooManyAttempts
-	ProblemCodeDeviceSecretBad  = httpx.CodeDeviceSecretBad
-	ProblemCodeProvisionFailed  = httpx.CodeProvisionFailed
-	ProblemCodePeerDisconnected = httpx.CodePeerDisconnected
+	ProblemCodeDeviceNotFound     = httpx.CodeDeviceNotFound
+	ProblemCodeHostOffline        = httpx.CodeHostOffline
+	ProblemCodeInvalidCode        = httpx.CodeInvalidCode
+	ProblemCodeAccessPolicyDenied = httpx.CodeAccessPolicyDenied
+	ProblemCodeTooManyAttempts    = httpx.CodeTooManyAttempts
+	ProblemCodeDeviceSecretBad    = httpx.CodeDeviceSecretBad
+	ProblemCodeProvisionFailed    = httpx.CodeProvisionFailed
+	ProblemCodePeerDisconnected   = httpx.CodePeerDisconnected
+
+	ProblemCodeControllerProofRequired = httpx.CodeControllerProofRequired
+	ProblemCodeControllerProofInvalid  = httpx.CodeControllerProofInvalid
+	ProblemCodeProofNotRequired        = httpx.CodeProofNotRequired
 
 	ProblemCodeSmsDisabled   = httpx.CodeSmsDisabled
 	ProblemCodeSmsRateLimit  = httpx.CodeSmsRateLimit
@@ -47,11 +52,11 @@ func WriteProblem(c *gin.Context, status int, code, title, detail string) {
 func WriteProblemJSON(c *gin.Context, status int, code, title, detail string, extra gin.H) {
 	httpx.WriteProblemJSON(c, status, code, title, detail, extra)
 }
-func ProblemBadRequest(c *gin.Context, code, detail string)    { httpx.BadRequest(c, code, detail) }
-func ProblemUnauthorized(c *gin.Context, code, detail string)  { httpx.Unauthorized(c, code, detail) }
-func ProblemForbidden(c *gin.Context, code, detail string)     { httpx.Forbidden(c, code, detail) }
-func ProblemNotFound(c *gin.Context, code, detail string)      { httpx.NotFound(c, code, detail) }
-func ProblemConflict(c *gin.Context, code, detail string)      { httpx.Conflict(c, code, detail) }
+func ProblemBadRequest(c *gin.Context, code, detail string)   { httpx.BadRequest(c, code, detail) }
+func ProblemUnauthorized(c *gin.Context, code, detail string) { httpx.Unauthorized(c, code, detail) }
+func ProblemForbidden(c *gin.Context, code, detail string)    { httpx.Forbidden(c, code, detail) }
+func ProblemNotFound(c *gin.Context, code, detail string)     { httpx.NotFound(c, code, detail) }
+func ProblemConflict(c *gin.Context, code, detail string)     { httpx.Conflict(c, code, detail) }
 func ProblemTooManyRequests(c *gin.Context, code, detail string, retry int) {
 	httpx.TooManyRequests(c, code, detail, retry)
 }

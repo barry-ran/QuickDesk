@@ -1,0 +1,353 @@
+name: SignalingServer verify
+
+# The other workflows here build clients and the server image. This one is the
+# gate on the server itself: unit tests against a real Postgres, the OpenAPI
+# contract against the committed client, and the conformance smoke against a
+# running server. It used to be manual - the docs carried "冒烟脚本要手动跑，没有
+# 接进任何流水线" as an open gap - which meant a spec change could land with
+# nothing checking it.
+on:
+  push:
+    paths:
+      - 'SignalingServer/**'
+      - 'sdk/**'
+      - 'scripts/sdk/**'
+      - '.github/workflows/signaling-server-verify.yml'
+  pull_request:
+    paths:
+      - 'SignalingServer/**'
+      - 'sdk/**'
+      - 'scripts/sdk/**'
+      - '.github/workflows/signaling-server-verify.yml'
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  go:
+    name: Go vet and tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: quickdesk
+          POSTGRES_PASSWORD: quickdesk
+          POSTGRES_DB: quickdesk_verify
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U quickdesk"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      # Set on purpose: without it the Postgres-backed tests skip themselves and
+      # the job would go green having checked nothing that needs a database.
+      QD_TEST_DATABASE_URL: host=localhost port=5432 user=quickdesk password=quickdesk dbname=quickdesk_verify sslmode=disable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: SignalingServer/go.mod
+          cache-dependency-path: SignalingServer/go.sum
+      - name: Provide the embedded admin UI directory
+        working-directory: SignalingServer
+        run: |
+          # `//go:embed web/dist/*` needs at least one matching file to compile,
+          # and web/dist is a build artifact that is not in the repository. The
+          # real admin UI build is covered by the Docker workflow, which builds
+          # the image on pull requests; here a placeholder is enough for the
+          # server to compile and its tests to run.
+          mkdir -p web/dist
+          printf '<!doctype html><title>ci placeholder</title>\n' > web/dist/index.html
+      - name: go vet
+        working-directory: SignalingServer
+        run: go vet ./...
+      - name: go test
+        working-directory: SignalingServer
+        run: go test ./... -count=1
+
+  contract:
+    name: OpenAPI contract and generated clients
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          # The Java client is built below, so the local Maven repository is
+          # worth caching; without it each run re-downloads the plugin tree.
+          cache: maven
+      - uses: actions/setup-go@v5
+        with:
+          # The nested Go client module has its own go.mod; it is deliberately
+          # not part of the server module.
+          go-version-file: sdk/go/go.mod
+          cache-dependency-path: sdk/go/go.sum
+      - name: Committed clients match the spec
+        run: |
+          ./scripts/sdk/check-generated-sdk.sh
+          ./scripts/sdk/check-generated-sdk.sh go
+          ./scripts/sdk/check-generated-sdk.sh python
+          ./scripts/sdk/check-generated-sdk.sh java
+      - name: Generated Go client vets and compiles
+        # `go vet ./...` type-checks the hand-written examples/ package too, so a
+        # change to the client's API surface that the example no longer matches
+        # fails here rather than in someone's editor.
+        working-directory: sdk/go
+        run: |
+          go vet ./...
+          go build ./...
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Generated Python client imports
+        # Importing the package and every generated module is the compile-level
+        # gate: a generator upgrade that emits syntax this interpreter cannot
+        # parse fails here. The live Python call belongs to the smoke job, which
+        # is where a server is running.
+        working-directory: sdk/python
+        run: |
+          pip install --quiet -r requirements.txt
+          python -c "import quickdesk_signaling; from quickdesk_signaling.api import auth_api, devices_api, me_api, notifications_api, recordings_api; print('imported', len(quickdesk_signaling.__all__), 'symbols')"
+      - name: Generated Java client builds
+        # Maven only, on purpose: the generate script drops the Gradle and SBT
+        # builds so this repository verifies exactly one of them. `-DskipTests`
+        # because the generated JUnit tree is removed - the live smoke is what
+        # covers behaviour.
+        working-directory: sdk/java
+        run: mvn -B -q --no-transfer-progress -DskipTests package
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Generated TypeScript client compiles
+        working-directory: sdk/ts
+        run: |
+          npm install --no-audit --no-fund
+          npm run build
+
+  smoke:
+    name: Conformance smoke against a live server
+    runs-on: ubuntu-latest
+    needs: [go]
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: quickdesk
+          POSTGRES_PASSWORD: quickdesk
+          POSTGRES_DB: quickdesk_verify
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U quickdesk"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      SERVER_HOST: 127.0.0.1
+      SERVER_PORT: '8000'
+      RUN_AUTO_MIGRATE: 'true'
+      LOG_DIR: /tmp/qd-ci-logs
+      DB_HOST: localhost
+      DB_PORT: '5432'
+      DB_USER: quickdesk
+      DB_PASSWORD: quickdesk
+      DB_NAME: quickdesk_verify
+      REDIS_HOST: localhost
+      REDIS_PORT: '6379'
+      API_KEY: ci-smoke-key
+      ADMIN_USER: admin
+      ADMIN_PASSWORD: admin
+      TURN_URLS: turn:127.0.0.1:3478?transport=udp
+      TURN_AUTH_SECRET: ci-turn-secret
+      # Nothing to schedule or watch in CI; the workers would only add noise.
+      SCHEDULED_TASK_INTERVAL_SECONDS: '0'
+      OFFLINE_ALERT_INTERVAL_SECONDS: '0'
+      QD_API_KEY: ci-smoke-key
+      QD_SERVER: http://127.0.0.1:8000
+      # The seeder creates a new device for every run, so driving the deny
+      # outcome (which arms a per-device cooldown) cannot affect anything later.
+      QD_SMOKE_APPROVAL_DENY: '1'
+      # The seed is disposable, so also remove its heartbeat mid-approval and
+      # assert the claim is refused as HOST_OFFLINE.
+      QD_SMOKE_HOST_OFFLINE: '1'
+      QD_REDIS_HOST: localhost
+      QD_REDIS_PORT: '6379'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: SignalingServer/go.mod
+          cache-dependency-path: SignalingServer/go.sum
+      - uses: actions/setup-node@v4
+        with:
+          # 22 for the built-in WebSocket the realtime smoke uses; the HTTP
+          # smoke and the generated client do not care either way.
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          # The Java approval example builds the generated client below.
+          cache: maven
+      - name: Provide the embedded admin UI directory
+        working-directory: SignalingServer
+        run: |
+          # Same reason as the Go job: the embed pattern needs a file, and the
+          # real UI build belongs to the Docker workflow.
+          mkdir -p web/dist
+          printf '<!doctype html><title>ci placeholder</title>\n' > web/dist/index.html
+      - name: Build the server
+        working-directory: SignalingServer
+        run: go build -o /tmp/qd-signaling ./cmd/signaling
+      - name: Start the server
+        working-directory: SignalingServer
+        run: |
+          mkdir -p "$LOG_DIR"
+          nohup /tmp/qd-signaling >"$LOG_DIR/ci-stdout.log" 2>&1 &
+          for _ in $(seq 1 60); do
+            if curl -fsS "$QD_SERVER/health" >/dev/null; then
+              echo "server is up"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "server did not become healthy in 60s" >&2
+          cat "$LOG_DIR/ci-stdout.log" >&2
+          exit 1
+      - name: Seed the smoke account and device
+        working-directory: SignalingServer
+        run: |
+          # The smoke needs an account and a device it can read; the device it
+          # would normally use is provisioned by a real controlled machine, so
+          # this creates one bound to a throwaway account instead.
+          go run ./cmd/seed-smoke \
+            -server "$QD_SERVER" \
+            -api-key "$QD_API_KEY" \
+            -admin-password "$ADMIN_PASSWORD" > /tmp/seed.out
+          cat /tmp/seed.out
+          grep -E '^QD_(IDENTIFIER|PASSWORD|SMOKE_DEVICE)=' /tmp/seed.out >> "$GITHUB_ENV"
+      - name: Run the approval workflow through the generated Go client
+        # This runs before the conformance smoke, and the ordering matters: the
+        # smoke's host-offline check deletes the seeded device's heartbeat on
+        # purpose, and an approval request needs an online host. The second
+        # factor flow used to be undrivable from a typed client because the 202
+        # answer is a different schema and a generated client declares one
+        # success type; the contract now puts the approval fields on that type,
+        # and this example proves a Go caller can read them, poll, and exchange
+        # the approval for a signal token.
+        working-directory: sdk/go
+        run: go run ./examples/approvalflow
+      - name: Run the approval workflow through the generated Python client
+        # Same flow, same live server, different generated client. Python maps
+        # the 202 answers to their own classes (AccessCodeApprovalPending /
+        # ApprovalClaimPending), so this is the check that the shared `status`
+        # field survives a generator that switches types per status code.
+        working-directory: sdk/python
+        run: |
+          pip install --quiet .
+          python examples/approval_flow.py
+      - name: Run the approval workflow through the generated TypeScript client
+        # The example is hand-written JavaScript against the compiled client
+        # (dist/), so it adds no dependency beyond the client's own devDeps and
+        # still exercises the generated request/response types.
+        working-directory: sdk/ts
+        run: |
+          npm install --no-audit --no-fund
+          npm run build
+          node examples/approval-flow.js
+      - name: Run the approval workflow through the generated Java client
+        working-directory: sdk/java
+        run: |
+          mvn -B -q --no-transfer-progress -DskipTests compile
+          mvn -B -q --no-transfer-progress dependency:build-classpath \
+            -Dmdep.outputFile=/tmp/qd-java-classpath.txt
+          java -cp "target/classes:$(cat /tmp/qd-java-classpath.txt)" \
+            org.openapitools.client.examples.ApprovalFlow
+      - name: Run the conformance smoke
+        run: node scripts/sdk/openapi-smoke.mjs
+      - name: Run the realtime conformance smoke
+        # Same seeded account and device as the HTTP smoke; the WebSocket routes
+        # take their credentials in the first frame, not in the URL.
+        run: node scripts/sdk/realtime-smoke.mjs
+      - name: Run the generated Go client
+        # The same seeded account, driven through the committed Go client rather
+        # than through curl: the smoke above proves the server matches the spec,
+        # this proves the generated Go code can actually talk to it.
+        working-directory: sdk/go
+        run: go run ./examples
+      - name: Run a business workflow through the generated Go client
+        # Logging in proves the client can reach the server; this runs an actual
+        # write path - create a recording, upload the media, patch it, find it in
+        # the index, mint a playback ticket, read the bytes back through that
+        # ticket and delete the row - so a break in a business route fails here
+        # rather than in someone's integration.
+        working-directory: sdk/go
+        run: go run ./examples/recordinglifecycle
+      - name: Run a resumable upload through the generated Go client
+        # The recording lifecycle above covers the single-shot POST. This one
+        # stages two chunks, probes with Upload-Probe, resyncs after a 409, lets
+        # the declared total finish the upload, and reads the bytes back through
+        # a playback ticket.
+        working-directory: sdk/go
+        run: go run ./examples/resumableupload
+      - name: Run a resumable upload through the generated Python client
+        # The chunked upload does not need an online host, so unlike the
+        # approval examples this can run after the conformance smoke took the
+        # seeded device offline.
+        working-directory: sdk/python
+        run: python examples/resumable_upload.py
+      - name: Run a resumable upload through the generated TypeScript client
+        # The approval step above already installed and built the client.
+        working-directory: sdk/ts
+        run: node examples/resumable-upload.js
+      - name: Run a resumable upload through the generated Java client
+        # The approval step above already compiled the client and wrote the
+        # classpath file.
+        working-directory: sdk/java
+        run: |
+          java -cp "target/classes:$(cat /tmp/qd-java-classpath.txt)" \
+            org.openapitools.client.examples.ResumableUpload
+      - name: Run the generated Python client
+        # Same argument as the Go client: the freshness check proves the tree
+        # matches the spec, only a real call proves it can talk to the server.
+        # Installing the package (rather than only its requirements) is also the
+        # check that the generated `pyproject.toml` still builds.
+        working-directory: sdk/python
+        run: |
+          pip install --quiet .
+          python examples/login_and_list_devices.py
+      - name: Upload the server log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: signaling-server-log
+          path: |
+            /tmp/qd-ci-logs/*.log
+            /tmp/seed.out
+          if-no-files-found: warn

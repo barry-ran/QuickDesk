@@ -36,23 +36,54 @@ type Event struct {
 // Canonical event type strings. Add new ones here so grep can find every
 // producer at a glance.
 const (
-	EventDeviceBound             = "device.bound"
-	EventDeviceAdded             = "device.added"
-	EventDeviceUnbound           = "device.unbound"
-	EventDeviceOwnershipLost     = "device.ownership.lost"
-	EventDeviceOnlineChanged     = "device.online.changed"
+	EventDeviceBound         = "device.bound"
+	EventDeviceAdded         = "device.added"
+	EventDeviceUnbound       = "device.unbound"
+	EventDeviceOwnershipLost = "device.ownership.lost"
+	EventDeviceOnlineChanged = "device.online.changed"
+	// Fired by the offline-alert evaluator, not by presence itself:
+	// `online.changed` says the heartbeat stopped, this says it has stayed
+	// stopped for longer than the owner's threshold. A device that reboots or
+	// sleeps produces the first and not the second.
+	EventDeviceOfflineSustained  = "device.offline.sustained"
 	EventDeviceSessionUpdated    = "device.session.updated"
 	EventDeviceAccessCodeChanged = "device.access_code.changed"
 	EventDeviceRemarkChanged     = "device.remark.changed"
 	EventDeviceNameChanged       = "device.device_name.changed"
 	EventDeviceSecretRotated     = "device.secret.rotated"
+	EventDeviceAccessGranted     = "device.access.granted"
+	EventDeviceAccessDenied      = "device.access.denied"
+	EventDeviceAccessSession     = "device.access.session_started"
+	EventDevicePolicyChanged     = "device.access_policy.changed"
+	// Grant lifecycle and redemption. `changed` fires on create/revoke and is
+	// audited; `used` fires when a grant actually admits a session. Neither
+	// carries the grant code - the owner already got it in the create response.
+	EventDeviceAccessGrantChanged = "device.access_grant.changed"
+	EventDeviceAccessGrantUsed    = "device.access_grant.used"
+	// Second-factor approval. `requested` tells the owner "someone with the
+	// right code is waiting for your yes/no"; `decided` fires when the owner
+	// approves or denies (and, for the requesting client, when the deadline
+	// passes). Neither carries the access code or the claim secret.
+	EventDeviceAccessApprovalRequested = "device.access_approval.requested"
+	EventDeviceAccessApprovalDecided   = "device.access_approval.decided"
 
 	EventFavoriteAdded   = "favorite.added"
 	EventFavoriteUpdated = "favorite.updated"
 	EventFavoriteRemoved = "favorite.removed"
 
+	EventRecordingCreated = "recording.created"
+	EventRecordingUpdated = "recording.updated"
+	EventRecordingDeleted = "recording.deleted"
+
 	EventSessionRevoked  = "session.revoked"
 	EventTurnConfigChang = "turn.config.changed"
+
+	// EventScheduledTaskFailed fires once per occurrence, when a scheduled
+	// task has spent its retry budget and will not be attempted again. Per-
+	// attempt failures are deliberately not events: they are visible on the
+	// row (`attempts`, `last_error`) and in the audit trail, and paging the
+	// owner on every retry would train them to ignore the alert.
+	EventScheduledTaskFailed = "scheduled_task.failed"
 )
 
 // EventSubscriber is the in-process interface for anything that wants to

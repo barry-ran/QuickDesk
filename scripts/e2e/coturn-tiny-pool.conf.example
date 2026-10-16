@@ -1,0 +1,38 @@
+# A second, deliberately tiny coturn instance.
+#
+# The default coturn relay pool is 49152-65535, so "what happens when the pool
+# runs dry" is a question you cannot answer by accident on a normal server -
+# and it is exactly the failure mode that turns into a support ticket
+# ("connections stopped working after a while") rather than a clear error.
+# This instance reserves four relay ports so the exhaustion path can be
+# exercised on purpose.
+#
+#   turnserver -c scripts/e2e/coturn-tiny-pool.conf.example
+#
+# It shares static-auth-secret with the main instance on purpose: that is what
+# makes it a *second* instance behind the same signaling server rather than a
+# different deployment, and it is what proves one credential minted by
+# /v1/ice-config authenticates against either one.
+
+listening-port=3479
+listening-ip=127.0.0.1
+relay-ip=127.0.0.1
+
+use-auth-secret
+static-auth-secret=qd-turn-secret-dev
+realm=quickdesk
+
+fingerprint
+no-cli
+no-multicast-peers
+no-tcp-relay
+# Local-only: the relays are all on 127.0.0.1, which coturn forbids by default.
+# Never enable this on a public TURN server.
+allow-loopback-peers
+
+# The whole point of this file: a pool small enough to exhaust on demand.
+min-port=49200
+max-port=49203
+
+simple-log
+log-file=/tmp/qd-turn-tiny.log

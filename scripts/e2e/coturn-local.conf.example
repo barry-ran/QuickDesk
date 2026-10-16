@@ -1,0 +1,59 @@
+# Local-only coturn config for the TURN capacity / relay-quality harness
+# (scripts/e2e/turn-capacity.mjs). It mirrors the signaling server's
+# `use-auth-secret` mode: the server's /v1/ice-config mints credentials that
+# coturn validates against the same shared secret.
+#
+#   brew install coturn
+#   cp scripts/e2e/coturn-local.conf.example /tmp/qd-turn.conf
+#   turnserver -c /tmp/qd-turn.conf
+#
+# Then point SignalingServer/.env at it:
+#   TURN_URLS=turn:127.0.0.1:3478?transport=udp
+#   TURN_AUTH_SECRET=qd-turn-secret-dev
+#   TURN_CREDENTIAL_TTL=86400
+#
+# WARNING: `allow-loopback-peers` exists only so the relay-quality test can put
+# both peers on 127.0.0.1. Never enable it on a public TURN server.
+
+listening-port=3478
+listening-ip=127.0.0.1
+relay-ip=127.0.0.1
+
+# Shared secret with the signaling server. Change it for anything but a local
+# throwaway, and keep the two sides identical.
+use-auth-secret
+static-auth-secret=qd-turn-secret-dev
+realm=quickdesk
+
+fingerprint
+no-multicast-peers
+allow-loopback-peers
+
+# Relay bandwidth cap. coturn's `max-bps` is in BYTES per second, per session
+# (50000 B/s = 400 kbps). The signaling server only signs credentials, so this
+# is the one place a relay cap can actually be enforced - verified in the E2E
+# log section 28. Leave it commented out for an uncapped local test.
+# max-bps=50000
+
+# TURN over TLS/DTLS. Providing a certificate is what makes coturn open its TLS
+# listener; for a local test a self-signed cert is enough. Real clients verify
+# the certificate, so a public deployment needs one they already trust (see E2E
+# log section 29 for the harness flags and the canary that verification is real).
+#   openssl req -x509 -newkey rsa:2048 -nodes \
+#     -keyout /tmp/qd-turn-pkey.pem -out /tmp/qd-turn-cert.pem -days 365 \
+#     -subj "/CN=localhost" -addext "subjectAltName=DNS:localhost,IP:127.0.0.1"
+# cert=/tmp/qd-turn-cert.pem
+# pkey=/tmp/qd-turn-pkey.pem
+# tls-listening-port=5349
+#
+# coturn 4.18 does NOT open the DTLS/UDP listener just because a certificate is
+# configured: it logs "DTLS listeners are not started; use --dtls to start
+# them" and leaves the secure port TCP-only, so `turn:...?transport=udp` over
+# DTLS silently has nothing to talk to. `dtls` below is the config-file form of
+# --dtls. Verified with turnutils_uclient and recorded in E2E log section 39.
+# dtls
+
+# Local test convenience; drop these for a real deployment.
+simple-log
+log-file=/tmp/qd-turn.log
+verbose

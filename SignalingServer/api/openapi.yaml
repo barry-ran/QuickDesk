@@ -1,0 +1,2096 @@
+openapi: 3.1.0
+info:
+  title: QuickDesk Signaling Server - business API
+  version: 1.0.0
+  summary: The stable, integrator-facing subset of the signaling API.
+  description: |
+    This document is the contract for the operations a business system needs to
+    integrate with a self-hosted QuickDesk signaling server: authenticate,
+    enumerate the caller's devices, verify a device access code, and manage the
+    owner's access policy, guest access codes, second-factor approvals,
+    offline-alert rule and notification channels.
+
+    It deliberately covers a **subset**. The server exposes more (admin
+    endpoints, the approve/deny and claim halves of the approval flow,
+    recordings, realtime WebSockets); those are documented in
+    `docs/user-api-docs.md` and are added here as they are pinned by a
+    conformance test. Everything listed here is exercised against a live server
+    by `scripts/sdk/openapi-smoke.mjs`, so a change to a documented field fails
+    that check rather than silently invalidating this file.
+
+    That smoke is read-only by default; `QD_SMOKE_DEVICE=<device_id>` adds the
+    operations with side effects, and it restores what it touches: the
+    offline-alert rule and the access policy (including the `approval_mode` it
+    temporarily switches on to drive the approval flow) are put back exactly as
+    they were, and the recording it creates is deleted again.
+
+    Two residues are deliberate and are the reason this document says so: a
+    **revoked, never-used guest code** row from the create-then-revoke probe
+    (revocation, not deletion, is how a grant is disabled), and **two decided
+    approval rows** on the smoke device - one approved and consumed, one denied
+    - because a decision is history and the flow is auditable precisely by
+    leaving it.
+
+    Four generated clients are committed - **TypeScript** under `sdk/ts`,
+    **Go** under `sdk/go`, **Python** under `sdk/python` and **Java** under
+    `sdk/java` - and all four are kept in step with this file by
+    `scripts/sdk/check-generated-sdk.sh`, which CI runs: an edit here without a
+    regenerated client fails the build. Regenerate them with
+    `scripts/sdk/generate-client.sh sdk/ts`,
+    `scripts/sdk/generate-client.sh sdk/go go`,
+    `scripts/sdk/generate-client.sh sdk/python python` and
+    `scripts/sdk/generate-client.sh sdk/java java` (a pinned openapi-generator
+    jar, so local and CI output are byte-identical); the script takes the
+    language as its last argument. All four clients carry a hand-written
+    `examples/` entry that the CI smoke job runs against a live server: Go runs
+    the recording and approval workflows, while Python, TypeScript and Java each
+    run the approval workflow through their own generated client. The
+    `examples/` directories are excluded from the freshness comparison, so they
+    are the only hand-written code under `sdk/`. For a fifth language, use the
+    generator directly, for example:
+
+        npx @openapitools/openapi-generator-cli generate \
+          -i SignalingServer/api/openapi.yaml -g csharp -o sdk/csharp
+
+    All non-2xx responses are RFC 7807 problem details with
+    `Content-Type: application/problem+json`.
+servers:
+  - url: https://your-signaling-host
+    description: Replace with the base URL of your signaling server.
+tags:
+  - name: auth
+  - name: me
+  - name: devices
+  - name: notifications
+security:
+  - ApiKeyAuth: []
+  - ApiKeyAuth: []
+    BearerAuth: []
+paths:
+  /v1/auth/sessions:
+    post:
+      tags: [auth]
+      summary: Exchange a username/password for a session
+      operationId: createSession
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthSessionRequest'
+      responses:
+        '200':
+          description: A session with an access token and a refresh token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthSessionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /v1/me:
+    get:
+      tags: [me]
+      summary: The authenticated user
+      operationId: getMe
+      responses:
+        '200':
+          description: The current user.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /v1/me/devices:
+    get:
+      tags: [devices]
+      summary: Devices owned by the authenticated user
+      operationId: listMyDevices
+      responses:
+        '200':
+          description: The caller's devices.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Device'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /v1/me/devices/{device_id}/offline-alert:
+    parameters:
+      - $ref: '#/components/parameters/DeviceId'
+    get:
+      tags: [notifications]
+      summary: The owner's offline-alert rule for a device
+      operationId: getOfflineAlert
+      description: |
+        Returns the documented defaults (`enabled: false`, `after_minutes: 10`)
+        when the owner never configured a rule, so a client can render the form
+        without a second "does it exist" call.
+      responses:
+        '200':
+          description: The rule, or its defaults.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OfflineAlertRule'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [notifications]
+      summary: Create or replace the owner's offline-alert rule
+      operationId: putOfflineAlert
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OfflineAlertInput'
+      responses:
+        '200':
+          description: The stored rule.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OfflineAlertRule'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/me/notification-channels:
+    get:
+      tags: [notifications]
+      summary: The user's notification channels
+      operationId: listNotificationChannels
+      description: |
+        `supported_events` is the authoritative list of event types a channel
+        may subscribe to. The signing secret is never returned; deliveries are
+        signed with `signature_header` using `signature_scheme`.
+      responses:
+        '200':
+          description: The caller's channels plus the subscription vocabulary.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationChannelList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /v1/me/recordings:
+    get:
+      tags: [recordings]
+      summary: The caller's session-recording index
+      operationId: listSessionRecordings
+      description: |
+        Cursor-paginated, newest first. `next_cursor` is opaque: pass it back
+        as `?cursor=` to fetch the next page and stop when it is absent. The
+        envelope here has no `total` because this endpoint does not count the
+        whole set on every page, so an integrator must page until
+        `next_cursor` is empty rather than trusting a count. This is the
+        metadata index only; the media bytes live behind the per-recording
+        `.../artifact` routes documented in `docs/user-api-docs.md`.
+      parameters:
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: One page of the caller's recordings, newest first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionRecordingList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [recordings]
+      summary: Index a new recording
+      operationId: createSessionRecording
+      description: |
+        Called by the capturing side when a session starts (or when a finished
+        capture is handed over), so the owner sees the recording while it is
+        still being written and the row can carry the outcome afterwards.
+        `status` is one of `recording`, `completed` or `failed`; `started_at`
+        defaults to now. The media is uploaded separately to `.../artifact`.
+
+        The row belongs to the *caller*: `device_id` is recorded as a label and
+        is not checked for ownership, so a producer can index a capture for a
+        machine that is not bound to it. Only the caller can then read or delete
+        the row.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SessionRecordingInput'
+      responses:
+        '201':
+          description: The created index row.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionRecording'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /v1/me/recordings/{recording_id}:
+    parameters:
+      - $ref: '#/components/parameters/RecordingId'
+    get:
+      tags: [recordings]
+      summary: One recording the caller owns
+      operationId: getSessionRecording
+      description: |
+        The same row the list returns. Another user's id is a `404` rather than
+        a `403`, so the route cannot be used to discover which recording ids
+        exist.
+      responses:
+        '200':
+          description: The recording.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionRecording'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [recordings]
+      summary: Update a recording's lifecycle metadata
+      operationId: updateSessionRecording
+      description: |
+        Partial update: only the fields present in the body are written, so a
+        producer can patch `status` when a capture starts and then
+        `size_bytes`/`ended_at` when the upload finishes. `status` accepts the
+        same three values as create; anything else is a `400` and writes
+        nothing.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SessionRecordingPatch'
+      responses:
+        '200':
+          description: The updated recording.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionRecording'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [recordings]
+      summary: Delete a recording and its stored media
+      operationId: deleteSessionRecording
+      description: |
+        Removes the index row and the media files that belong to it, so the
+        recording cannot be played back afterwards. There is no "already gone"
+        success: a second delete is a `404`. The deletion is published on the
+        owner's realtime stream and written to the audit trail as
+        `recording.delete` with the actor's observed address.
+      responses:
+        '204':
+          description: Deleted. No body.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/me/recordings/{recording_id}/artifact:
+    parameters:
+      - $ref: '#/components/parameters/RecordingId'
+    get:
+      tags: [recordings]
+      summary: Download a recording's media bytes
+      operationId: downloadRecordingArtifact
+      description: |
+        Owner-only, `Authorization` (Bearer) required. The response is the
+        stored file itself: the `Content-Type` follows the stored file's
+        extension (`video/mp4` for `.mp4`, `application/octet-stream`
+        otherwise) and `Content-Disposition` is `inline`. A browser cannot
+        attach an `Authorization` header to `<video src>`, which is why the
+        ticket routes below exist; this route is for API clients.
+      responses:
+        '200':
+          description: The media bytes.
+          content:
+            video/mp4:
+              schema:
+                type: string
+                format: binary
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags: [recordings]
+      summary: Upload a recording's media bytes
+      operationId: uploadRecordingArtifact
+      description: |
+        Two request shapes, because the producers differ: `multipart/form-data`
+        with a `file` part (the browser and Qt clients) or the raw body with
+        `?ext=`. The extension is allow-listed (`.mp4`, `.m4v`, `.mkv`, `.webm`,
+        `.h264`, `.grf`), the bytes are written to a temporary file and renamed
+        into place so a dropped upload can never leave a half-written file under
+        the real name, and the row is then updated with `artifact_path`,
+        `artifact_url`, `format` and `size_bytes` in one step.
+
+        An empty body is a `400`; a body over the configured limit
+        (`RECORDING_MAX_BYTES`, exposed as `store.max_bytes`) is a `400` as well,
+        never a truncated file. Uploading again replaces the stored artifact.
+      parameters:
+        - name: ext
+          in: query
+          required: false
+          description: Required for the raw-body shape; ignored for multipart.
+          schema:
+            type: string
+            enum: ['.mp4', '.m4v', '.mkv', '.webm', '.h264', '.grf']
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '200':
+          description: The recording, now carrying the stored artifact.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionRecording'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [recordings]
+      summary: Append one chunk of a resumable recording upload
+      operationId: appendRecordingArtifact
+      description: |
+        The resumable half of the upload contract, for a capture that does not
+        fit in one request body or a connection that drops halfway. The client
+        sends chunks; the server answers with the offset it actually holds in
+        the `Upload-Offset` response header, so a retry resumes from that number
+        instead of starting over.
+
+        Three headers drive it. `Upload-Offset` (required) is where the chunk
+        starts and must equal the bytes already staged; otherwise the answer is
+        `409` with the authoritative offset in the same header and the client
+        resyncs. `Upload-Length` (optional, `*` while unknown) declares the total
+        size, which lets the server finish by itself when the last byte lands and
+        lets it refuse a chunk that would overshoot. `Upload-Complete: 1` says
+        this chunk ends the upload, which is how a client finishes without ever
+        declaring a total.
+
+        A status probe asks where the upload stands without staging bytes. Send
+        `Upload-Probe: 1` with a valid `Upload-Offset` and no body; the answer is
+        `202` with the current offset, so a client that crashed can re-learn
+        where it stopped without a second endpoint. An empty body with a valid
+        offset does the same thing for raw-HTTP callers, but a generated client
+        cannot send a zero-length body, which is why the explicit header exists.
+
+        The staging file (`<artifact-path>.part`) is subject to the same size
+        limit as the single-shot upload, an empty artifact is refused on every
+        path, and the recording lifecycle deletes a staging file that has been
+        untouched for six hours.
+      parameters:
+        - name: ext
+          in: query
+          required: true
+          description: The artifact extension, allow-listed exactly like the raw-body POST shape.
+          schema:
+            type: string
+            enum: ['.mp4', '.m4v', '.mkv', '.webm', '.h264', '.grf']
+        - name: Upload-Offset
+          in: header
+          required: true
+          description: The byte offset this chunk starts at.
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+        - name: Upload-Length
+          in: header
+          required: false
+          description: The total size of the artifact, or `*` while it is unknown.
+          schema:
+            type: string
+        - name: Upload-Complete
+          in: header
+          required: false
+          description: Set to `1` when this chunk ends the upload.
+          schema:
+            type: string
+            enum: ['0', '1']
+        - name: Upload-Probe
+          in: header
+          required: false
+          description: Set to `1` to ask for the current offset without staging any bytes. The generated clients use this instead of an empty body.
+          schema:
+            type: string
+            enum: ['0', '1']
+      requestBody:
+        required: false
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '200':
+          description: The final chunk; the recording now carries the stored artifact.
+          headers:
+            Upload-Offset:
+              description: Bytes staged, which for a finished upload is the artifact size.
+              schema:
+                type: integer
+                format: int64
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionRecording'
+        '202':
+          description: |
+            The chunk was staged and more are expected. The authoritative offset
+            is the `Upload-Offset` response header. The body is the recording
+            row - the same `SessionRecording` schema as the `200` - because a
+            generated client declares one success type per operation and would
+            otherwise fail to decode a staging-only body.
+          headers:
+            Upload-Offset:
+              description: Bytes staged so far; a client resumes from this number.
+              schema:
+                type: integer
+                format: int64
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionRecording'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: |
+            `Upload-Offset` did not match the bytes already staged. The header
+            carries the authoritative offset, so the client can resume from it.
+          headers:
+            Upload-Offset:
+              description: The offset the server actually holds.
+              schema:
+                type: integer
+                format: int64
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/me/recordings/{recording_id}/thumbnail:
+    parameters:
+      - $ref: '#/components/parameters/RecordingId'
+    get:
+      tags: [recordings]
+      summary: Download a recording's preview image
+      operationId: downloadRecordingThumbnail
+      description: |
+        Owner-only. Served with `Cache-Control: private, max-age=300` because a
+        preview is user-scoped and can change under the same URL.
+      responses:
+        '200':
+          description: The preview image bytes.
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags: [recordings]
+      summary: Upload a recording's preview image
+      operationId: uploadRecordingThumbnail
+      description: |
+        The same two shapes as the artifact upload (`multipart/form-data` with a
+        `file` part, or the raw body with `?ext=`), but the extension is limited
+        to `.jpg`, `.jpeg` and `.png` and the size to 2 MiB - a preview is a
+        small still, and an oversized one means the wrong file was sent.
+
+        The bytes are sniffed before they are stored rather than trusted from
+        the name or the declared content type: the index renders this image
+        inline, so a file that only claims to be a JPEG is a `400`.
+      parameters:
+        - name: ext
+          in: query
+          required: false
+          description: Required for the raw-body shape; ignored for multipart.
+          schema:
+            type: string
+            enum: ['.jpg', '.jpeg', '.png']
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '200':
+          description: The recording, now carrying the preview.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionRecording'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/me/recordings/{recording_id}/artifact-ticket:
+    parameters:
+      - $ref: '#/components/parameters/RecordingId'
+    post:
+      tags: [recordings]
+      summary: Mint a short-lived playback URL for a recording
+      operationId: createRecordingArtifactTicket
+      description: |
+        Owner-only. Returns a signed, time-limited `url` that can be fetched
+        **without** an `Authorization` header, which is what makes playback work
+        from `<video src>`. The ticket is bound to the recording, the owner and
+        its purpose, so an artifact ticket cannot be replayed against the
+        thumbnail route. Minting is stateless - nothing is written - and the
+        link stops working when `expires_at` passes. `400` when playback tickets
+        are disabled on the deployment (`RECORDING_URL_SECRET`/`API_KEY` unset);
+        `404` when the recording has no stored artifact.
+      responses:
+        '200':
+          description: A signed playback URL.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlaybackTicket'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/me/recordings/{recording_id}/thumbnail-ticket:
+    parameters:
+      - $ref: '#/components/parameters/RecordingId'
+    post:
+      tags: [recordings]
+      summary: Mint a short-lived preview URL for a recording
+      operationId: createRecordingThumbnailTicket
+      description: |
+        Same rules as the artifact ticket, but the URL addresses the thumbnail
+        route and the ticket's purpose is checked on redemption.
+      responses:
+        '200':
+          description: A signed preview URL.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlaybackTicket'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/recordings/{recording_id}/artifact:
+    parameters:
+      - $ref: '#/components/parameters/RecordingId'
+    get:
+      tags: [recordings]
+      summary: Fetch recording media with a playback ticket
+      operationId: downloadRecordingArtifactByTicket
+      description: |
+        The URL returned by `POST /v1/me/recordings/{recording_id}/artifact-ticket`.
+        Deliberately registered **outside** the API-key and user-auth groups,
+        because a browser `<video>` element can send neither header - the signed
+        `t` query parameter is the authorization, and the ticket is bound to
+        owner and purpose. `401` for a missing, malformed or expired ticket;
+        `404` when the ticket is for the wrong route or the recording is gone.
+      parameters:
+        - name: t
+          in: query
+          required: true
+          description: The signed ticket from the artifact-ticket endpoint.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The media bytes.
+          content:
+            video/mp4:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/recordings/{recording_id}/thumbnail:
+    parameters:
+      - $ref: '#/components/parameters/RecordingId'
+    get:
+      tags: [recordings]
+      summary: Fetch a recording preview with a playback ticket
+      operationId: downloadRecordingThumbnailByTicket
+      description: |
+        The URL returned by `POST /v1/me/recordings/{recording_id}/thumbnail-ticket`.
+        Same ticket rules as the artifact route; an artifact ticket is rejected
+        here (`404`) because the purpose is part of the signature.
+      parameters:
+        - name: t
+          in: query
+          required: true
+          description: The signed ticket from the thumbnail-ticket endpoint.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The preview image bytes.
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/devices/{device_id}/access-code:verify:
+    parameters:
+      - $ref: '#/components/parameters/DeviceId'
+    post:
+      tags: [devices]
+      summary: Verify a device access code and mint a signal token
+      operationId: verifyAccessCode
+      description: |
+        The controller-side entry point. On success it returns a signal token
+        for the relay. When the device policy wants the owner to confirm the
+        session it returns `202` with a pending approval instead, and the caller
+        polls `/v1/devices/{device_id}/access-approvals:claim`. A rejected code
+        is a `403` problem with `code: INVALID_CODE`.
+
+        This route is reachable without a user token (the controlling client is
+        not logged in) but still requires the API key or an allowed Origin.
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccessCodeVerifyRequest'
+      responses:
+        '200':
+          description: The code was accepted and a signal token was minted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessCodeVerifyResponse'
+        '202':
+          description: The device policy requires the owner to approve this session.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessCodeApprovalPending'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /v1/me/devices/{device_id}/access-policy:
+    parameters:
+      - $ref: '#/components/parameters/DeviceId'
+    get:
+      tags: [devices]
+      summary: The device's access policy
+      operationId: getAccessPolicy
+      description: |
+        Returns the documented "no policy" defaults when the owner never saved
+        one, so a client can render the form without a second existence check.
+      responses:
+        '200':
+          description: The policy, or its defaults.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceAccessPolicy'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [devices]
+      summary: Create or replace the device's access policy
+      operationId: putAccessPolicy
+      description: |
+        A **full replace**: every field not sent is reset to its zero value. The
+        policy is enforced on the device-side verify route before the access
+        code is compared, so a blocked client never gets to guess codes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeviceAccessPolicyInput'
+      responses:
+        '200':
+          description: The stored policy.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceAccessPolicy'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/me/devices/{device_id}/access-grants:
+    parameters:
+      - $ref: '#/components/parameters/DeviceId'
+    get:
+      tags: [devices]
+      summary: Guest access codes issued for a device
+      operationId: listAccessGrants
+      responses:
+        '200':
+          description: The device's grants, newest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AccessGrant'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags: [devices]
+      summary: Issue a time-boxed guest access code
+      operationId: createAccessGrant
+      description: |
+        The plaintext code is returned **once**, in the creation response; a
+        grant is limited by expiry and uses, may be bound to a client id and/or
+        source addresses, and is revoked with the DELETE below.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccessGrantInput'
+      responses:
+        '201':
+          description: The created grant, including its one-time plaintext code.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessGrant'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/me/devices/{device_id}/access-grants/{grant_id}:
+    parameters:
+      - $ref: '#/components/parameters/DeviceId'
+      - name: grant_id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    delete:
+      tags: [devices]
+      summary: Revoke a guest access code
+      operationId: revokeAccessGrant
+      responses:
+        '200':
+          description: The grant is no longer redeemable.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success]
+                properties:
+                  success:
+                    type: boolean
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/me/devices/{device_id}/access-approvals:
+    parameters:
+      - $ref: '#/components/parameters/DeviceId'
+    get:
+      tags: [devices]
+      summary: Second-factor approvals awaiting (or already decided by) the owner
+      operationId: listAccessApprovals
+      description: |
+        `status` is a comma-separated subset of `pending, approved, denied,
+        expired, consumed` and defaults to `pending`. Approval is created by the
+        device-side verify route when the policy asks for it; approving or
+        denying happens on the sub-resource routes documented in
+        `docs/user-api-docs.md` §5.3.5 (not yet part of this contract).
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: The matching approvals, newest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AccessApproval'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/me/devices/{device_id}/access-approvals:summary:
+    parameters:
+      - $ref: '#/components/parameters/DeviceId'
+    get:
+      tags: [devices]
+      summary: Aggregated view of a device's approval queue
+      operationId: getAccessApprovalSummary
+      description: |
+        The row list shows requests one at a time; this is what makes "one
+        address has been refused six times this afternoon" legible. The window
+        is keyed on `created_at` for every count.
+      parameters:
+        - name: since
+          in: query
+          required: false
+          description: RFC3339 start of the window; defaults to the last 24 hours.
+          schema:
+            type: string
+            format: date-time
+        - name: limit
+          in: query
+          required: false
+          description: How many refused sources to list (default 5, capped at 10).
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        '200':
+          description: The window's counts and refused sources.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalSummary'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/me/devices/{device_id}/access-approvals/{approval_id}/approve:
+    parameters:
+      - $ref: '#/components/parameters/DeviceId'
+      - $ref: '#/components/parameters/ApprovalId'
+    post:
+      tags: [devices]
+      summary: Approve a pending access request
+      operationId: approveAccessApproval
+      description: |
+        Owner-only. The body is optional; a `reason` is stored on the row and
+        shown to the requester. A request that was already decided or has
+        expired returns `409` with the current status instead of pretending the
+        decision landed. The conformance smoke pins the `404` shape with an
+        unknown id; the happy path needs a real pending approval (an online
+        device plus `approval_mode`), so it is covered by the end-to-end run in
+        `docs/dev/自托管端到端联调记录.md` rather than the smoke.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: The approval after the decision.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessApproval'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: The request was already decided or has expired.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalAlreadyDecided'
+  /v1/me/devices/{device_id}/access-approvals/{approval_id}/deny:
+    parameters:
+      - $ref: '#/components/parameters/DeviceId'
+      - $ref: '#/components/parameters/ApprovalId'
+    post:
+      tags: [devices]
+      summary: Deny a pending access request
+      operationId: denyAccessApproval
+      description: |
+        Owner-only, same shape as `approve`. Denying also arms the per-source
+        denial cooldown (`APPROVAL_DENIAL_COOLDOWN_SECONDS`), so the same client
+        cannot immediately re-request.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: The approval after the decision.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessApproval'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: The request was already decided or has expired.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalAlreadyDecided'
+  /v1/devices/{device_id}/access-approvals:claim:
+    parameters:
+      - $ref: '#/components/parameters/DeviceId'
+    post:
+      tags: [devices]
+      summary: Exchange an approved request for a signal token
+      operationId: claimAccessApproval
+      description: |
+        The requesting controller calls this with the `approval_id` and
+        `approval_secret` it received from `access-code:verify`. It is API-key
+        gated rather than user-authenticated because the caller has no account.
+        `202` means the owner has not decided yet - keep polling with the same
+        id and secret; `200` returns the signal token; `403` means denied or
+        expired; `409` means the approval was already spent or the host went
+        offline before the exchange.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApprovalClaimRequest'
+      responses:
+        '200':
+          description: The owner approved and the signal token is ready.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessCodeVerifyResponse'
+        '202':
+          description: Still waiting for the owner to decide.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalClaimPending'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: |
+            The approval was already spent, or the host went offline before the
+            exchange could happen.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalClaimConsumed'
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/update:check:
+    get:
+      tags: [update]
+      summary: Check the self-hosted update channel for a newer build
+      operationId: checkForUpdate
+      description: |
+        The client-facing half of the self-hosted update channel. It is API-key
+        gated but not user-authenticated: a controlled machine checks for
+        updates before anyone logs in.
+
+        The server owns the index of published releases; the artifact itself
+        lives at `download_url` on whatever host the operator controls. The
+        index is managed through the admin API (`POST /v1/admin/update-releases`
+        and friends), which stays outside this business contract.
+
+        `current_version` is optional. Without it the newest release is returned
+        and `update_available` is true whenever one exists; with it,
+        `update_available` is true only when the published version is strictly
+        newer, and `mandatory` mirrors the release flag once an update is
+        available. `latest` is always present and is `null` when the channel has
+        no release for that platform/arch.
+      parameters:
+        - name: platform
+          in: query
+          required: true
+          description: Which operating system the caller is running.
+          schema:
+            type: string
+            enum: [windows, macos, linux]
+        - name: arch
+          in: query
+          required: true
+          description: Which architecture the caller is running.
+          schema:
+            type: string
+            enum: [x64, arm64, universal]
+        - name: channel
+          in: query
+          required: false
+          description: Defaults to `stable`.
+          schema:
+            type: string
+            enum: [stable, beta, nightly]
+        - name: current_version
+          in: query
+          required: false
+          description: The dotted numeric version the caller is running, e.g. `4.2.5.0`. A leading `v` is accepted.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The newest release for that channel/platform/arch, or a null `latest` when the channel is empty.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateCheckResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque
+  parameters:
+    DeviceId:
+      name: device_id
+      in: path
+      required: true
+      description: The device id shown on the controlled machine.
+      schema:
+        type: string
+        maxLength: 20
+    ApprovalId:
+      name: approval_id
+      in: path
+      required: true
+      description: The numeric id from an approval row.
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+    RecordingId:
+      name: recording_id
+      in: path
+      required: true
+      description: The numeric id from a recording index row.
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+  responses:
+    BadRequest:
+      description: The request was malformed or failed validation.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Unauthorized:
+      description: Missing or expired credentials.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Forbidden:
+      description: Authenticated but not allowed (includes a rejected access code).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    NotFound:
+      description: The addressed resource does not exist.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    RateLimited:
+      description: Too many requests; retry after the advertised delay.
+      headers:
+        Retry-After:
+          description: Seconds to wait before retrying.
+          schema:
+            type: string
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+  schemas:
+    AuthSessionRequest:
+      type: object
+      required: [identifier, password]
+      properties:
+        identifier:
+          type: string
+          description: Username, phone, or email, depending on how the account was created.
+        password:
+          type: string
+          format: password
+    AuthSessionResponse:
+      type: object
+      required: [user, access_token, access_expires_at, refresh_token, refresh_expires_at]
+      properties:
+        user:
+          $ref: '#/components/schemas/User'
+        access_token:
+          type: string
+        access_expires_at:
+          type: string
+          format: date-time
+        refresh_token:
+          type: string
+        refresh_expires_at:
+          type: string
+          format: date-time
+    User:
+      type: object
+      required: [id, username, status]
+      properties:
+        id:
+          type: integer
+          format: int64
+        username:
+          type: string
+        phone:
+          type: string
+        email:
+          type: string
+        level:
+          type: string
+        device_count:
+          type: integer
+        channel_type:
+          type: string
+        status:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    Device:
+      type: object
+      required: [device_id, device_name, online, logged_in]
+      properties:
+        device_id:
+          type: string
+        device_name:
+          type: string
+        remark:
+          type: string
+          description: The owner's private note; empty when none is set.
+        online:
+          type: boolean
+          description: Whether the machine currently holds a live connection.
+        logged_in:
+          type: boolean
+          description: True only when the device is online *and* logged in, so a parked machine is not reported as reachable.
+        access_code:
+          type: string
+          description: The current access code. It rotates, so treat it as short-lived.
+        os:
+          type: string
+        os_version:
+          type: string
+        app_version:
+          type: string
+        last_seen_at:
+          type: string
+          description: RFC3339 UTC, omitted when the device has never been seen.
+    OfflineAlertInput:
+      type: object
+      required: [enabled]
+      properties:
+        enabled:
+          type: boolean
+        after_minutes:
+          type: integer
+          minimum: 1
+          maximum: 10080
+          description: Omitting it (or sending 0) stores the default of 10.
+        repeat_minutes:
+          type: integer
+          minimum: 0
+          maximum: 10080
+          description: 0 (the default) sends one alert per outage.
+        snoozed_until:
+          type: [string, 'null']
+          format: date-time
+          description: Silences alerts until this instant; null clears an existing snooze.
+        maintenance_windows:
+          type: array
+          maxItems: 20
+          description: Recurring quiet periods evaluated in `maintenance_timezone`.
+          items:
+            $ref: '#/components/schemas/MaintenanceWindow'
+        maintenance_timezone:
+          type: string
+          description: IANA zone name for the windows; empty means the server's local zone.
+    MaintenanceWindow:
+      type: object
+      required: [start, end]
+      properties:
+        days:
+          type: array
+          description: Weekdays 0-6 (0 = Sunday); empty means every day.
+          items:
+            type: integer
+            minimum: 0
+            maximum: 6
+        start:
+          type: string
+          pattern: '^[0-2][0-9]:[0-5][0-9]$'
+        end:
+          type: string
+          pattern: '^[0-2][0-9]:[0-5][0-9]$'
+    OfflineAlertRule:
+      type: object
+      required: [device_id, enabled, after_minutes, repeat_minutes, maintenance_windows, in_maintenance_window]
+      properties:
+        device_id:
+          type: string
+        enabled:
+          type: boolean
+        after_minutes:
+          type: integer
+        repeat_minutes:
+          type: integer
+        snoozed_until:
+          type: [string, 'null']
+          format: date-time
+        maintenance_windows:
+          type: array
+          items:
+            $ref: '#/components/schemas/MaintenanceWindow'
+        maintenance_timezone:
+          type: string
+        in_maintenance_window:
+          type: boolean
+          description: Computed at read time, so a client can explain a quiet period without re-implementing the schedule.
+        offline_since:
+          type: [string, 'null']
+          format: date-time
+          description: The evaluator's episode state; present only while the device is in an outage.
+        last_alerted_at:
+          type: [string, 'null']
+          format: date-time
+        updated_at:
+          type: [string, 'null']
+          format: date-time
+    NotificationChannel:
+      type: object
+      required: [id, user_id, name, url, events, enabled, last_status]
+      properties:
+        id:
+          type: integer
+          format: int64
+        user_id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        url:
+          type: string
+          format: uri
+        events:
+          type: string
+          description: |
+            A JSON-encoded array of subscribed event types (a string, not an
+            array, because that is how the column is stored). Decode it before
+            matching against `supported_events`.
+        enabled:
+          type: boolean
+        last_triggered:
+          type: [string, 'null']
+          format: date-time
+        last_status:
+          type: integer
+          description: HTTP status of the most recent delivery attempt; 0 means none yet.
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    NotificationChannelList:
+      type: object
+      required: [items, supported_events, signature_header, signature_scheme]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/NotificationChannel'
+        supported_events:
+          type: array
+          items:
+            type: string
+        signature_header:
+          type: string
+        signature_scheme:
+          type: string
+    AccessCodeVerifyRequest:
+      type: object
+      required: [code]
+      properties:
+        code:
+          type: string
+        client_id:
+          type: string
+          description: Optional self-reported client identity, recorded on the access log.
+    AccessCodeVerifyResponse:
+      type: object
+      description: |
+        The answer to `access-code:verify` and to the approval claim endpoint.
+        `status` says which shape it is: `granted` (HTTP 200) carries
+        `signal_token`, `pending` (HTTP 202) carries the approval the controller
+        polls. The approval fields live on this schema rather than only on the
+        202 schema because a generated client declares one success type per
+        operation - a Go caller receives the 202 body as this type, and without
+        these properties it could not read the approval it is supposed to poll.
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [granted, pending]
+          description: Which shape this response is.
+        signal_token:
+          type: string
+          description: Present when `status` is `granted`.
+        expires_at:
+          type: string
+          format: date-time
+          description: When the signal token (granted) or the approval (pending) expires.
+        approval_id:
+          type: integer
+          format: int64
+          description: Present when `status` is `pending`.
+        approval_secret:
+          type: string
+          description: |
+            Present when `status` is `pending`. Shown once; exchanged for a
+            signal token at the claim endpoint.
+        poll_after_ms:
+          type: integer
+          description: Present when `status` is `pending`.
+    AccessCodeApprovalPending:
+      description: |
+        The HTTP 202 body of `access-code:verify` - the same fields as
+        `AccessCodeVerifyResponse` with `status: pending`.
+      type: object
+      required: [approval_id, approval_secret, status, expires_at, poll_after_ms]
+      properties:
+        approval_id:
+          type: integer
+          format: int64
+        approval_secret:
+          type: string
+          description: Shown once; exchanged for a signal token at the claim endpoint.
+        status:
+          type: string
+          enum: [pending]
+        expires_at:
+          type: string
+          format: date-time
+        poll_after_ms:
+          type: integer
+    DeviceAccessPolicyInput:
+      type: object
+      description: |
+        Full replace: fields not sent are reset to their zero value.
+      properties:
+        remote_disabled:
+          type: boolean
+          description: When true, no controller may start a session at all.
+        allow_ips:
+          type: array
+          description: Bare IPs or CIDR blocks; empty means "no IP restriction".
+          items:
+            type: string
+        max_sessions:
+          type: integer
+          description: Concurrent controller cap; 0 means unlimited, negative is rejected.
+        allowed_windows:
+          type: array
+          description: Recurring windows in which access is allowed; empty means always.
+          items:
+            $ref: '#/components/schemas/AccessWindow'
+        timezone:
+          type: string
+          description: IANA zone the windows are evaluated in; empty means the server's local zone.
+        exception_dates:
+          type: array
+          description: Per-date overrides (holidays, one-off closures, lunar dates).
+          items:
+            $ref: '#/components/schemas/AccessExceptionDate'
+        approval_required:
+          type: boolean
+          description: Legacy switch kept for older clients; prefer `approval_mode`.
+        approval_mode:
+          type: string
+          # `off` is quoted on purpose: YAML 1.1 resolves a bare `off` to the
+          # boolean false, which is how the generated clients ended up with an
+          # enum of `false` and could not deserialize the server's default
+          # policy. Same trap below for `holiday_day`.
+          enum: ['off', always, grant, untrusted_ip]
+          description: When the owner must approve a correct code before a session starts.
+        approval_trusted_ips:
+          type: array
+          description: "Sources exempted by `approval_mode: untrusted_ip`."
+          items:
+            type: string
+    DeviceAccessPolicy:
+      allOf:
+        - $ref: '#/components/schemas/DeviceAccessPolicyInput'
+        - type: object
+          required: [device_id, allow_ips, allowed_windows, exception_dates, approval_mode, approval_trusted_ips]
+          properties:
+            device_id:
+              type: string
+            updated_at:
+              type: [string, 'null']
+              format: date-time
+              description: Omitted when the owner never saved a policy.
+    AccessWindow:
+      type: object
+      required: [start, end]
+      description: |
+        `start > end` wraps past midnight and the day filter then applies to the
+        day the window starts; `start == end` means all day on the selected days;
+        an empty `days` list means every day.
+      properties:
+        days:
+          type: array
+          items:
+            type: integer
+            minimum: 0
+            maximum: 6
+        start:
+          type: string
+          pattern: '^[0-2][0-9]:[0-5][0-9]$'
+        end:
+          type: string
+          pattern: '^[0-2][0-9]:[0-5][0-9]$'
+    AccessExceptionDate:
+      type: object
+      required: [mode]
+      description: |
+        Exactly one of `date` (+ optional `end_date`), `holiday`, or
+        `repeat: "lunar"` with the lunar month/day. `mode` is `allow` or
+        `deny`; an allow and a deny entry covering the same day are rejected.
+      properties:
+        date:
+          type: string
+          description: First date of the exception (YYYY-MM-DD).
+        end_date:
+          type: string
+          description: Last date of a range (YYYY-MM-DD); omit for a single day.
+        mode:
+          type: string
+          enum: [allow, deny]
+        repeat:
+          type: string
+          enum: [yearly, lunar]
+        holiday:
+          type: string
+          description: A statutory holiday name from the server's calendar, e.g. 春节.
+        holiday_day:
+          type: string
+          enum: ['off', work]
+          description: Which dates of the holiday an entry covers (default `off`).
+        lunar_month:
+          type: integer
+        lunar_day:
+          type: integer
+      additionalProperties: true
+    AccessGrantInput:
+      type: object
+      required: [expires_in_minutes]
+      properties:
+        label:
+          type: string
+        expires_in_minutes:
+          type: integer
+          minimum: 1
+        max_uses:
+          type: integer
+          description: 0 means "no use limit"; the grant still expires.
+        code:
+          type: string
+          description: Optional caller-chosen code; omitted means the server generates one.
+        bound_client_id:
+          type: string
+          description: Self-reported controller identity the code is bound to.
+        bound_ips:
+          type: array
+          items:
+            type: string
+    AccessGrant:
+      type: object
+      required: [id, device_id, code, expires_at, max_uses, uses, active, bound_client_id, bound_ips, created_at]
+      properties:
+        id:
+          type: integer
+          format: int64
+        device_id:
+          type: string
+        code:
+          type: string
+          description: Returned only in the creation response; treat it as a secret.
+        label:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+        max_uses:
+          type: integer
+        uses:
+          type: integer
+        active:
+          type: boolean
+        revoked_at:
+          type: [string, 'null']
+          format: date-time
+        last_used_at:
+          type: [string, 'null']
+          format: date-time
+        bound_client_id:
+          type: string
+        bound_ips:
+          type: array
+          items:
+            type: string
+        last_used_client_id:
+          type: string
+        last_used_ip:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+    AccessApproval:
+      type: object
+      required: [id, device_id, client_id, client_ip, source, status, expires_at, created_at]
+      properties:
+        id:
+          type: integer
+          format: int64
+        device_id:
+          type: string
+        client_id:
+          type: string
+          description: Self-reported by the requesting controller.
+        client_ip:
+          type: string
+          description: The address the server observed (trusted-proxy aware).
+        source:
+          type: string
+          enum: [device_code, grant]
+        grant_id:
+          type: [integer, 'null']
+          format: int64
+        status:
+          type: string
+          enum: [pending, approved, denied, expired, consumed]
+        expires_at:
+          type: string
+          format: date-time
+        decided_at:
+          type: [string, 'null']
+          format: date-time
+        reason:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+    ApprovalSummary:
+      type: object
+      required: [since, total, by_status, denied_sources, denial_cooldown_seconds, denial_cooldown_multiplier, denial_cooldown_max_seconds]
+      properties:
+        since:
+          type: string
+          format: date-time
+          description: Inclusive start of the window the counts cover.
+        total:
+          type: integer
+          format: int64
+          description: Every request created inside the window, whatever its outcome.
+        by_status:
+          type: object
+          description: Always carries all five states, zeroes included.
+          required: [pending, approved, denied, expired, consumed]
+          properties:
+            pending:
+              type: integer
+              format: int64
+            approved:
+              type: integer
+              format: int64
+            denied:
+              type: integer
+              format: int64
+            expired:
+              type: integer
+              format: int64
+            consumed:
+              type: integer
+              format: int64
+        denied_sources:
+          type: array
+          description: Refused sources inside the window, most refusals first.
+          items:
+            type: object
+            required: [client_ip, denials]
+            properties:
+              client_ip:
+                type: string
+              denials:
+                type: integer
+                format: int64
+              last_denied_at:
+                type: [string, 'null']
+                format: date-time
+        denial_cooldown_seconds:
+          type: integer
+          description: The live APPROVAL_DENIAL_COOLDOWN_SECONDS, so an owner can tell "refused right now" from "refused a while ago".
+        denial_cooldown_multiplier:
+          type: integer
+          description: The live APPROVAL_DENIAL_COOLDOWN_MULTIPLIER; 1 means each further consecutive refusal costs the same as the last.
+        denial_cooldown_max_seconds:
+          type: integer
+          description: The live APPROVAL_DENIAL_COOLDOWN_MAX_SECONDS, the ceiling the escalation cannot pass; 0 means uncapped.
+    UpdateRelease:
+      type: object
+      description: One build published to the self-hosted update channel. The artifact itself lives at `download_url`.
+      required: [id, channel, platform, arch, version, download_url, sha256, size_bytes, mandatory, published_at]
+      properties:
+        id:
+          type: integer
+          format: int64
+        channel:
+          type: string
+          enum: [stable, beta, nightly]
+        platform:
+          type: string
+          enum: [windows, macos, linux]
+        arch:
+          type: string
+          enum: [x64, arm64, universal]
+        version:
+          type: string
+          description: Dotted numeric version, e.g. `4.2.5.0`.
+        download_url:
+          type: string
+          format: uri
+          description: Absolute http(s) URL of the installer or archive.
+        sha256:
+          type: string
+          description: Lowercase hex SHA-256 of the artifact; clients verify what they downloaded.
+        size_bytes:
+          type: integer
+          format: int64
+        notes:
+          type: string
+        mandatory:
+          type: boolean
+          description: When true, the update is not optional for older clients.
+        published_at:
+          type: string
+          format: date-time
+    UpdateCheckResult:
+      type: object
+      required: [update_available, mandatory, channel, platform, arch, latest]
+      properties:
+        update_available:
+          type: boolean
+        mandatory:
+          type: boolean
+        channel:
+          type: string
+        platform:
+          type: string
+        arch:
+          type: string
+        current_version:
+          type: string
+          description: Echoed when the caller supplied it.
+        latest:
+          description: The newest release, or null when the channel has no release for that platform/arch.
+          oneOf:
+            - $ref: '#/components/schemas/UpdateRelease'
+            - type: 'null'
+    Problem:
+      type: object
+      description: RFC 7807 problem details, served as `application/problem+json`.
+      required: [type, title, status, code]
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+        code:
+          type: string
+          description: A stable machine-readable code, e.g. `INVALID_CODE` or `RATE_LIMITED`.
+        trace_id:
+          type: string
+    SessionRecordingInput:
+      type: object
+      description: |
+        The index row a producer creates before (or instead of) uploading media.
+        `device_id` is recorded as a label; it is not checked against the
+        caller's devices, because a headless producer may be indexing a capture
+        for a machine it is not bound to.
+      required: [device_id, status]
+      properties:
+        device_id:
+          type: string
+          description: The device the capture came from.
+        device_name:
+          type: string
+        session_id:
+          type: string
+          description: The control session this recording belongs to, when there is one.
+        status:
+          type: string
+          enum: [recording, completed, failed]
+          description: How far the capture got when this row was written.
+        format:
+          type: string
+          description: Free-form label; the upload route overwrites it from the file extension.
+        artifact_path:
+          type: string
+          description: Server-side path. Set by the upload route; clients do not need to send it.
+        artifact_url:
+          type: string
+        thumbnail_path:
+          type: string
+        duration_seconds:
+          type: integer
+          minimum: 0
+        size_bytes:
+          type: integer
+          minimum: 0
+        started_at:
+          type: [string, 'null']
+          format: date-time
+          description: Defaults to the time the row was created when omitted.
+        ended_at:
+          type: [string, 'null']
+          format: date-time
+    SessionRecordingPatch:
+      type: object
+      description: |
+        Partial update - every field is optional and only the ones present are
+        written, so a producer can patch the row as the capture progresses.
+      properties:
+        status:
+          type: string
+          enum: [recording, completed, failed]
+        format:
+          type: string
+        artifact_path:
+          type: string
+        artifact_url:
+          type: string
+        thumbnail_path:
+          type: string
+        duration_seconds:
+          type: integer
+          minimum: 0
+        size_bytes:
+          type: integer
+          minimum: 0
+        ended_at:
+          type: [string, 'null']
+          format: date-time
+    SessionRecording:
+      type: object
+      description: |
+        One indexed recording. The row is the control-plane metadata; the media
+        artifact is produced by the control engine and fetched through the
+        artifact routes. `artifact_path` is a server-side path and is not a
+        download URL - clients should call `.../artifact-ticket` and use the
+        URL they get back.
+      required:
+        - id
+        - user_id
+        - device_id
+        - device_name
+        - session_id
+        - status
+        - format
+        - artifact_path
+        - artifact_url
+        - thumbnail_path
+        - thumbnail_url
+        - duration_seconds
+        - size_bytes
+        - started_at
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: integer
+        user_id:
+          type: integer
+        device_id:
+          type: string
+        device_name:
+          type: string
+        session_id:
+          type: string
+        status:
+          type: string
+          enum: [recording, completed, failed]
+          description: |
+            `recording` while the capture is in progress, then `completed` or
+            `failed`. A stale `recording` row is swept to `failed` by the
+            recording lifecycle worker.
+        format:
+          type: string
+          description: Container/codec hint, e.g. `mp4`, `h264`, `grf`.
+        artifact_path:
+          type: string
+          description: Server-side stored path; not a client-fetchable URL.
+        artifact_url:
+          type: string
+        thumbnail_path:
+          type: string
+        thumbnail_url:
+          type: string
+        duration_seconds:
+          type: integer
+        size_bytes:
+          type: integer
+          format: int64
+        started_at:
+          type: string
+          format: date-time
+        ended_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        user:
+          type: object
+          description: |
+            The owning user, present when the server eager-loads it. Optional -
+            clients must not depend on this being present.
+    SessionRecordingList:
+      type: object
+      description: |
+        Cursor page of recordings. `next_cursor` is absent on the last page;
+        `total` is intentionally absent because this endpoint does not count the
+        whole set per page.
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SessionRecording'
+        next_cursor:
+          type: string
+    ApprovalAlreadyDecided:
+      type: object
+      description: |
+        Returned by approve/deny when the request was already decided (or
+        expired) so the click is reported honestly instead of silently
+        succeeding.
+      required: [status, message]
+      properties:
+        status:
+          type: string
+          enum: [pending, approved, denied, expired, consumed]
+        message:
+          type: string
+    ApprovalClaimRequest:
+      type: object
+      required: [approval_id, secret]
+      properties:
+        approval_id:
+          type: integer
+          format: int64
+        secret:
+          type: string
+          description: The `approval_secret` returned once by `access-code:verify`.
+    ApprovalClaimPending:
+      type: object
+      description: The owner has not decided yet; poll again after `poll_after_ms`.
+      required: [status, expires_at, poll_after_ms]
+      properties:
+        status:
+          type: string
+          enum: [pending]
+        expires_at:
+          type: string
+          format: date-time
+        poll_after_ms:
+          type: integer
+    ApprovalClaimConsumed:
+      type: object
+      description: The approval was already exchanged for a token.
+      required: [status, message]
+      properties:
+        status:
+          type: string
+          enum: [consumed]
+        message:
+          type: string
+    PlaybackTicket:
+      type: object
+      description: |
+        A signed, time-limited URL for one recording's media or preview. It
+        carries no credentials, so it must be treated as a bearer token: anyone
+        who holds the link can fetch the file until `expires_at`.
+      required: [url, expires_at]
+      properties:
+        url:
+          type: string
+          description: Absolute path (with the signed `t` parameter) to fetch.
+        expires_at:
+          type: string
+          format: date-time

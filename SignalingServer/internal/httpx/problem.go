@@ -34,13 +34,18 @@ const (
 	CodeAccountDisabled    = "ACCOUNT_DISABLED"
 
 	// Device / signaling
-	CodeDeviceNotFound   = "DEVICE_NOT_FOUND"
-	CodeHostOffline      = "HOST_OFFLINE"
-	CodeInvalidCode      = "INVALID_CODE"
-	CodeTooManyAttempts  = "TOO_MANY_ATTEMPTS"
-	CodeDeviceSecretBad  = "DEVICE_SECRET_INVALID"
-	CodeProvisionFailed  = "PROVISION_FAILED"
-	CodePeerDisconnected = "PEER_DISCONNECTED"
+	CodeDeviceNotFound     = "DEVICE_NOT_FOUND"
+	CodeHostOffline        = "HOST_OFFLINE"
+	CodeInvalidCode        = "INVALID_CODE"
+	CodeAccessPolicyDenied = "ACCESS_POLICY_DENIED"
+	CodeTooManyAttempts    = "TOO_MANY_ATTEMPTS"
+	CodeDeviceSecretBad    = "DEVICE_SECRET_INVALID"
+	CodeProvisionFailed    = "PROVISION_FAILED"
+	CodePeerDisconnected   = "PEER_DISCONNECTED"
+	// Proof of possession for a key-bound access grant.
+	CodeControllerProofRequired = "CONTROLLER_PROOF_REQUIRED"
+	CodeControllerProofInvalid  = "CONTROLLER_PROOF_INVALID"
+	CodeProofNotRequired        = "PROOF_NOT_REQUIRED"
 
 	// SMS
 	CodeSmsDisabled   = "SMS_DISABLED"

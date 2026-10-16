@@ -25,7 +25,10 @@ func LoggerMiddleware(metrics *service.MetricsService) gin.HandlerFunc {
 		latency := time.Since(start)
 		statusCode := c.Writer.Status()
 		if metrics != nil {
-			metrics.RecordHTTPRequest(path)
+			// FullPath is the matched pattern; it is empty for a request that
+			// matched nothing, which the metrics service records as
+			// "unmatched" instead of inventing a series per bogus path.
+			metrics.RecordHTTPRequest(method, path, c.FullPath(), statusCode)
 		}
 
 		if statusCode >= 400 || latency >= time.Second {

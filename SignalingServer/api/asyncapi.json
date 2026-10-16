@@ -1,0 +1,586 @@
+{
+  "asyncapi": "3.0.0",
+  "info": {
+    "title": "QuickDesk Signaling Server - realtime WebSockets",
+    "version": "1.0.0",
+    "description": "The two WebSocket surfaces of a self-hosted signaling server, as a machine-checkable contract. This document is JSON rather than YAML on purpose: `scripts/sdk/realtime-smoke.mjs` reads it and drives its assertions from it (frame order, envelope fields, the event-type catalogue), so the document is exercised by a live check instead of only being read by people - and the smoke stays dependency-free.\n\nNeither route authenticates in the URL. Browsers cannot attach an `Authorization` header to a WebSocket upgrade and a token in a query string would end up in access logs and browser history, so both channels take their credentials in the **first frame**, within five seconds of the upgrade, and close with code 4401 when it does not arrive. Both routes are registered outside the API-key-protected group for the same reason.\n\n`x-server-handshake` under each channel is the order the server is expected to send frames in; it is the part a client author actually needs and the part the smoke checks.\n"
+  },
+  "servers": {
+    "selfHosted": {
+      "host": "{host}",
+      "protocol": "ws",
+      "protocolVersion": "13",
+      "description": "Replace with your server. Use `wss` (a TLS-terminating reverse proxy works) for anything that is not loopback.",
+      "variables": {
+        "host": {
+          "default": "localhost:8000"
+        }
+      }
+    }
+  },
+  "channels": {
+    "events": {
+      "address": "/v1/realtime/events",
+      "title": "Per-user event stream",
+      "description": "One user's device, favorite, recording, approval and session events, plus a bootstrap snapshot so a client can render before any event arrives.",
+      "x-server-handshake": [
+        "auth_ok",
+        "snapshot_required?",
+        "snapshot?",
+        "bootstrap_done",
+        "event*"
+      ],
+      "x-error-frames": [
+        "error"
+      ],
+      "messages": {
+        "authFrame": {
+          "$ref": "#/components/messages/EventsAuthFrame"
+        },
+        "authOK": {
+          "$ref": "#/components/messages/EventsAuthOK"
+        },
+        "snapshotRequired": {
+          "$ref": "#/components/messages/EventsSnapshotRequired"
+        },
+        "snapshot": {
+          "$ref": "#/components/messages/EventsSnapshot"
+        },
+        "bootstrapDone": {
+          "$ref": "#/components/messages/EventsBootstrapDone"
+        },
+        "event": {
+          "$ref": "#/components/messages/EventEnvelope"
+        },
+        "error": {
+          "$ref": "#/components/messages/EventsError"
+        }
+      }
+    },
+    "signal": {
+      "address": "/v1/realtime/signal",
+      "title": "Signaling channel",
+      "description": "A single-use `signal_token` (host) or a validated-and-extended one (client) is exchanged in the first frame for an `auth_ok` carrying a server session id. After that the channel relays Jingle-shaped messages between the host and that device's controllers **opaquely**: the server does not interpret SDP or ICE, so this document pins the handshake and not the payload.",
+      "x-server-handshake": [
+        "auth_ok"
+      ],
+      "x-error-frames": [
+        "error"
+      ],
+      "messages": {
+        "authFrame": {
+          "$ref": "#/components/messages/SignalAuthFrame"
+        },
+        "authOK": {
+          "$ref": "#/components/messages/SignalAuthOK"
+        },
+        "error": {
+          "$ref": "#/components/messages/SignalError"
+        }
+      }
+    }
+  },
+  "operations": {
+    "sendEventsAuth": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/events"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/events/messages/authFrame"
+        }
+      ]
+    },
+    "receiveEventsHandshake": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/events"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/events/messages/authOK"
+        },
+        {
+          "$ref": "#/channels/events/messages/snapshotRequired"
+        },
+        {
+          "$ref": "#/channels/events/messages/snapshot"
+        },
+        {
+          "$ref": "#/channels/events/messages/bootstrapDone"
+        }
+      ]
+    },
+    "receiveEvents": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/events"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/events/messages/event"
+        },
+        {
+          "$ref": "#/channels/events/messages/error"
+        }
+      ]
+    },
+    "sendSignalAuth": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/signal"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/signal/messages/authFrame"
+        }
+      ]
+    },
+    "receiveSignalHandshake": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/signal"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/signal/messages/authOK"
+        },
+        {
+          "$ref": "#/channels/signal/messages/error"
+        }
+      ]
+    }
+  },
+  "components": {
+    "messages": {
+      "EventsAuthFrame": {
+        "name": "events auth frame",
+        "title": "First frame on /v1/realtime/events",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/EventsAuthFrame"
+        }
+      },
+      "EventsAuthOK": {
+        "name": "auth_ok",
+        "title": "Accepted, bootstrap follows",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/EventsAuthOK"
+        }
+      },
+      "EventsSnapshotRequired": {
+        "name": "snapshot_required",
+        "title": "The requested resume could not be replayed",
+        "description": "Sent only when the client asked for `since_rev` and the stream could not guarantee an exact replay (trimmed, or the lookup failed). It is a hint: the snapshot follows either way.",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/SnapshotRequired"
+        }
+      },
+      "EventsSnapshot": {
+        "name": "snapshot",
+        "title": "Full state baseline",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/EventsSnapshot"
+        }
+      },
+      "EventsBootstrapDone": {
+        "name": "bootstrap_done",
+        "title": "The baseline is complete",
+        "description": "Everything after this frame is live. Events published while the bootstrap was being written are queued and drained after it, and carry a `server_rev` so a client can ignore any that its baseline already covered.",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/BootstrapDone"
+        }
+      },
+      "EventEnvelope": {
+        "name": "event",
+        "title": "One user-scoped event",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/EventEnvelope"
+        },
+        "traits": [
+          {
+            "$ref": "#/components/messageTraits/EventTypeCatalogue"
+          }
+        ]
+      },
+      "EventsError": {
+        "name": "error",
+        "title": "Authentication failed on the events channel",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/EventsError"
+        }
+      },
+      "SignalAuthFrame": {
+        "name": "signal auth frame",
+        "title": "First frame on /v1/realtime/signal",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/SignalAuthFrame"
+        }
+      },
+      "SignalAuthOK": {
+        "name": "auth_ok",
+        "title": "Signaling session established",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/SignalAuthOK"
+        }
+      },
+      "SignalError": {
+        "name": "error",
+        "title": "Signaling authentication failed",
+        "contentType": "application/json",
+        "payload": {
+          "$ref": "#/components/schemas/SignalError"
+        }
+      }
+    },
+    "messageTraits": {
+      "EventTypeCatalogue": {
+        "headers": {
+          "type": "object",
+          "properties": {
+            "x-event-types": {
+              "$ref": "#/components/schemas/EventType"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "EventsAuthFrame": {
+        "type": "object",
+        "required": [
+          "type",
+          "access_token"
+        ],
+        "properties": {
+          "type": {
+            "const": "auth"
+          },
+          "access_token": {
+            "type": "string",
+            "description": "The `access_token` from POST /v1/auth/sessions."
+          },
+          "since_rev": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Last `server_rev` the client processed. When the gap can be replayed exactly the server replays events instead of sending a snapshot."
+          }
+        }
+      },
+      "EventsAuthOK": {
+        "type": "object",
+        "required": [
+          "type",
+          "server_rev",
+          "data"
+        ],
+        "properties": {
+          "type": {
+            "const": "auth_ok"
+          },
+          "server_rev": {
+            "type": "integer"
+          },
+          "data": {
+            "type": "object",
+            "required": [
+              "family_id"
+            ],
+            "properties": {
+              "family_id": {
+                "type": "string",
+                "description": "The refresh-token family this connection authenticated with. `session.revoked` events for other families of the same user are filtered out of the stream, so a revoked session cannot observe the revocation of its siblings."
+              }
+            }
+          }
+        }
+      },
+      "SnapshotRequired": {
+        "type": "object",
+        "required": [
+          "type",
+          "server_rev"
+        ],
+        "properties": {
+          "type": {
+            "const": "snapshot_required"
+          },
+          "server_rev": {
+            "type": "integer"
+          }
+        }
+      },
+      "EventsSnapshot": {
+        "type": "object",
+        "required": [
+          "type",
+          "server_rev",
+          "data"
+        ],
+        "properties": {
+          "type": {
+            "const": "snapshot"
+          },
+          "server_rev": {
+            "type": "integer"
+          },
+          "data": {
+            "type": "object",
+            "required": [
+              "devices",
+              "favorites"
+            ],
+            "properties": {
+              "devices": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/SnapshotDevice"
+                }
+              },
+              "favorites": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      },
+      "SnapshotDevice": {
+        "type": "object",
+        "required": [
+          "device_id",
+          "device_name",
+          "remark",
+          "online",
+          "logged_in",
+          "access_code",
+          "os",
+          "os_version",
+          "app_version",
+          "last_seen_at"
+        ],
+        "properties": {
+          "device_id": {
+            "type": "string"
+          },
+          "device_name": {
+            "type": "string"
+          },
+          "remark": {
+            "type": "string"
+          },
+          "online": {
+            "type": "boolean",
+            "description": "Derived: a live heartbeat **and** at least one live signaling connection."
+          },
+          "logged_in": {
+            "type": "boolean",
+            "description": "The owner's intent to be connected, **and** derived online."
+          },
+          "access_code": {
+            "type": "string"
+          },
+          "os": {
+            "type": "string"
+          },
+          "os_version": {
+            "type": "string"
+          },
+          "app_version": {
+            "type": "string"
+          },
+          "last_seen_at": {
+            "type": "string"
+          }
+        }
+      },
+      "BootstrapDone": {
+        "type": "object",
+        "required": [
+          "type",
+          "server_rev"
+        ],
+        "properties": {
+          "type": {
+            "const": "bootstrap_done"
+          },
+          "server_rev": {
+            "type": "integer"
+          }
+        }
+      },
+      "EventEnvelope": {
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Stream id. Present on events that came through the bus, absent on server-generated frames like the bootstrap ones."
+          },
+          "type": {
+            "type": "string",
+            "description": "One of the documented event types (`device.*`, `favorite.*`, `recording.*`, `session.revoked`, `scheduled_task.failed`, `turn.config.changed`)."
+          },
+          "ts": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "server_rev": {
+            "type": "integer",
+            "description": "Server-wide revision, stamped by the bus so the live stream and a later replay agree on ordering."
+          },
+          "data": {
+            "type": "object",
+            "description": "Event-specific payload. `session.revoked` carries `reason`; approval events carry the device and status but never the access code or the claim secret."
+          }
+        }
+      },
+      "EventType": {
+        "type": "string",
+        "description": "The user-scoped event catalogue. Keep in step with the constants in `internal/service/event_bus.go`; the realtime smoke rejects anything outside this list.",
+        "enum": [
+          "device.bound",
+          "device.added",
+          "device.unbound",
+          "device.ownership.lost",
+          "device.online.changed",
+          "device.offline.sustained",
+          "device.session.updated",
+          "device.access_code.changed",
+          "device.remark.changed",
+          "device.device_name.changed",
+          "device.secret.rotated",
+          "device.access.granted",
+          "device.access.denied",
+          "device.access.session_started",
+          "device.access_policy.changed",
+          "device.access_grant.changed",
+          "device.access_grant.used",
+          "device.access_approval.requested",
+          "device.access_approval.decided",
+          "favorite.added",
+          "favorite.updated",
+          "favorite.removed",
+          "recording.created",
+          "recording.updated",
+          "recording.deleted",
+          "session.revoked",
+          "turn.config.changed",
+          "scheduled_task.failed"
+        ]
+      },
+      "EventsError": {
+        "type": "object",
+        "required": [
+          "type",
+          "data"
+        ],
+        "properties": {
+          "type": {
+            "const": "error"
+          },
+          "data": {
+            "type": "object",
+            "required": [
+              "code"
+            ],
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "AUTH_INVALID",
+                  "TOKEN_INVALID"
+                ]
+              }
+            }
+          }
+        }
+      },
+      "SignalAuthFrame": {
+        "type": "object",
+        "required": [
+          "type",
+          "signal_token",
+          "device_id",
+          "role"
+        ],
+        "properties": {
+          "type": {
+            "const": "auth"
+          },
+          "signal_token": {
+            "type": "string",
+            "description": "From `POST /v1/devices/{device_id}/access-code:verify` (client role) or the host token route. Consumed on use for hosts, validated and extended for clients so a brief reconnect does not need a new access code."
+          },
+          "device_id": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "host",
+              "client"
+            ]
+          },
+          "client_id": {
+            "type": "string",
+            "description": "Declared by a client role in the first frame; the server falls back to the token's client id and then to a generated one."
+          }
+        }
+      },
+      "SignalAuthOK": {
+        "type": "object",
+        "required": [
+          "type",
+          "session_id"
+        ],
+        "properties": {
+          "type": {
+            "const": "auth_ok"
+          },
+          "session_id": {
+            "type": "string",
+            "description": "Server-assigned signaling session id, also used in the logs for this connection."
+          }
+        }
+      },
+      "SignalError": {
+        "type": "object",
+        "required": [
+          "type",
+          "code",
+          "detail"
+        ],
+        "properties": {
+          "type": {
+            "const": "error"
+          },
+          "code": {
+            "type": "string",
+            "enum": [
+              "AUTH_INVALID",
+              "HOST_OFFLINE",
+              "SESSION_LIMIT_REACHED"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

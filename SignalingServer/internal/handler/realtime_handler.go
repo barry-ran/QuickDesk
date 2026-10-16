@@ -39,14 +39,16 @@ import (
 type RealtimeHandler struct {
 	upgrader websocket.Upgrader
 
-	tokens    *service.TokenService
-	bus       *service.EventBus
-	presence  *service.PresenceService
-	db        *gorm.DB
-	devices   *service.DeviceService
-	favorites *service.FavoriteService
-	metrics   *service.MetricsService
-	rdb       *redis.Client
+	tokens       *service.TokenService
+	bus          *service.EventBus
+	presence     *service.PresenceService
+	db           *gorm.DB
+	devices      *service.DeviceService
+	favorites    *service.FavoriteService
+	metrics      *service.MetricsService
+	access       *service.DeviceAccessService
+	accessPolicy *service.DeviceAccessPolicyService
+	rdb          *redis.Client
 
 	// Per-user fan-out for realtime events.
 	eventsMu sync.RWMutex
@@ -67,17 +69,21 @@ func NewRealtimeHandler(
 	devices *service.DeviceService,
 	favorites *service.FavoriteService,
 	metrics *service.MetricsService,
+	access *service.DeviceAccessService,
+	accessPolicy *service.DeviceAccessPolicyService,
 	rdb *redis.Client,
 ) *RealtimeHandler {
 	h := &RealtimeHandler{
-		tokens:    tokens,
-		bus:       bus,
-		presence:  presence,
-		db:        db,
-		devices:   devices,
-		favorites: favorites,
-		metrics:   metrics,
-		rdb:       rdb,
+		tokens:       tokens,
+		bus:          bus,
+		presence:     presence,
+		db:           db,
+		devices:      devices,
+		favorites:    favorites,
+		metrics:      metrics,
+		access:       access,
+		accessPolicy: accessPolicy,
+		rdb:          rdb,
 		upgrader: websocket.Upgrader{
 			ReadBufferSize:  4096,
 			WriteBufferSize: 4096,
@@ -667,6 +673,33 @@ func (h *RealtimeHandler) HandleSignal(c *gin.Context) {
 		out:      make(chan []byte, 64),
 		done:     make(chan struct{}),
 	}
+
+	// Per-device concurrency cap from the access policy, checked *before*
+	// auth_ok: the client must never be told the session is up and then be
+	// dropped a microsecond later. The access code was already accepted (the
+	// verify step wrote a `granted` row), so a refusal here is recorded as
+	// `denied_session_limit`: the timeline then reads "code ok, but the
+	// device already had as many controllers as allowed".
+	if sc.role == service.SignalRoleClient && h.accessPolicy != nil {
+		policy, err := h.accessPolicy.Get(c.Request.Context(), sc.deviceID)
+		if err != nil {
+			log.Printf("[realtime/signal] policy lookup failed device=%s: %v", sc.deviceID, err)
+		} else if policy != nil {
+			active := h.activeClientCount(sc.deviceID)
+			if service.SessionLimitReached(policy.MaxSessions, active) {
+				reason := fmt.Sprintf("device allows at most %d concurrent controller(s)",
+					policy.MaxSessions)
+				log.Printf("[realtime/signal] session limit reached device=%s max=%d active=%d client_id=%s session=%s",
+					sc.deviceID, policy.MaxSessions, active, sc.clientID, sessionID)
+				h.recordAccessEvent(c, sc, "", service.DeviceAccessDeniedSessionLimit,
+					reason, service.EventDeviceAccessDenied)
+				writeSignalError(conn, "SESSION_LIMIT_REACHED", reason)
+				_ = conn.Close()
+				return
+			}
+		}
+	}
+
 	log.Printf("[realtime/signal] auth_ok role=%s device=%s client_id=%s session=%s remote=%s",
 		sc.role, sc.deviceID, sc.clientID, sessionID, c.ClientIP())
 	if err := conn.WriteJSON(map[string]interface{}{
@@ -685,6 +718,15 @@ func (h *RealtimeHandler) HandleSignal(c *gin.Context) {
 		return
 	}
 	defer h.unregisterSignalConn(sc)
+
+	// Reaching auth_ok means the controller presented a valid signal token,
+	// i.e. it already passed an access-code check: this is the moment an
+	// attempt turns into a real control session. Record it on the device's
+	// access timeline so the owner can tell "someone tried" from "someone
+	// actually connected".
+	if sc.role == service.SignalRoleClient {
+		h.recordSessionStart(c, sc, sessionID)
+	}
 
 	if sc.role == service.SignalRoleHost {
 		if err := h.presence.MarkWSConnected(c.Request.Context(), sc.deviceID); err == nil {
@@ -722,6 +764,60 @@ func (h *RealtimeHandler) HandleSignal(c *gin.Context) {
 
 	go sc.writer()
 	sc.reader()
+}
+
+// recordSessionStart appends a session_started row to the device's access
+// timeline and fans it out to the owner.
+func (h *RealtimeHandler) recordSessionStart(c *gin.Context, sc *signalConn, sessionID string) {
+	h.recordAccessEvent(c, sc, sessionID, service.DeviceAccessSessionStarted, "",
+		service.EventDeviceAccessSession)
+}
+
+// recordAccessEvent appends one row to the device's access timeline and fans
+// it out to the owner. Audit writes must never break the signaling
+// handshake, so failures are logged and swallowed.
+func (h *RealtimeHandler) recordAccessEvent(c *gin.Context, sc *signalConn, sessionID, result, reason, eventType string) {
+	if h.access == nil {
+		return
+	}
+	row, err := h.access.Record(c.Request.Context(), service.RecordDeviceAccessInput{
+		DeviceID:  sc.deviceID,
+		ClientID:  sc.clientID,
+		SessionID: sessionID,
+		IP:        c.ClientIP(),
+		Result:    result,
+		Reason:    reason,
+	})
+	if err != nil {
+		log.Printf("[device-access] record %s device=%s failed: %v", result, sc.deviceID, err)
+		return
+	}
+	if row.OwnerID == 0 || h.bus == nil {
+		return
+	}
+	h.bus.Publish(c.Request.Context(), service.Event{
+		Type:     eventType,
+		UserID:   row.OwnerID,
+		DeviceID: sc.deviceID,
+		Data: map[string]interface{}{
+			"device_id":  sc.deviceID,
+			"client_id":  row.ClientID,
+			"session_id": sessionID,
+			"ip":         row.IP,
+			"result":     row.Result,
+			"reason":     row.Reason,
+			"log_id":     row.ID,
+		},
+	})
+}
+
+// activeClientCount returns how many controllers currently hold a signaling
+// socket for the device. The host socket is not counted: the cap is about
+// how many people may watch/control the machine at once.
+func (h *RealtimeHandler) activeClientCount(deviceID string) int {
+	h.signalMu.RLock()
+	defer h.signalMu.RUnlock()
+	return len(h.signalClient[deviceID])
 }
 
 // registerSignalConn places sc into the topology maps. For host role,

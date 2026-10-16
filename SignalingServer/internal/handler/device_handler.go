@@ -23,6 +23,7 @@ import (
 //	DELETE /v1/me/devices/:device_id/session (clear logged_in)
 //	GET    /v1/me/connections
 //	POST   /v1/me/connections
+//	GET    /v1/me/devices/:device_id/access-logs
 //	GET    /v1/me/favorites
 //	POST   /v1/me/favorites
 //	PATCH  /v1/me/favorites/:device_id
@@ -36,6 +37,7 @@ type DeviceHandler struct {
 	favorites   *service.FavoriteService
 	connections *service.ConnectionService
 	presence    *service.PresenceService
+	access      *service.DeviceAccessService
 	bus         *service.EventBus
 	db          *gorm.DB // for UserDevice remark lookups alongside devices
 }
@@ -45,6 +47,7 @@ func NewDeviceHandler(
 	favorites *service.FavoriteService,
 	connections *service.ConnectionService,
 	presence *service.PresenceService,
+	access *service.DeviceAccessService,
 	bus *service.EventBus,
 	db *gorm.DB,
 ) *DeviceHandler {
@@ -53,6 +56,7 @@ func NewDeviceHandler(
 		favorites:   favorites,
 		connections: connections,
 		presence:    presence,
+		access:      access,
 		bus:         bus,
 		db:          db,
 	}
@@ -444,6 +448,50 @@ func (h *DeviceHandler) ListConnections(c *gin.Context) {
 	if len(rows) > p.Limit {
 		last := rows[p.Limit-1]
 		next = EncodeCursor(CursorPayload{OffsetAt: last.CreatedAt.UTC().Format("2006-01-02T15:04:05.000Z")})
+		rows = rows[:p.Limit]
+	}
+	c.JSON(http.StatusOK, gin.H{"items": rows, "next_cursor": next})
+}
+
+// ListAccessLogs handles GET /v1/me/devices/:device_id/access-logs — the
+// device owner's view of incoming session attempts (who tried, from which
+// IP, and whether the access code worked). Rows are written server-side at
+// verification time, so a controller cannot hide an attempt.
+func (h *DeviceHandler) ListAccessLogs(c *gin.Context) {
+	uid := middleware.MustUserID(c)
+	deviceID := c.Param("device_id")
+
+	d, err := h.devices.GetByDeviceID(c.Request.Context(), deviceID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			ProblemNotFound(c, ProblemCodeDeviceNotFound, "Device not found")
+			return
+		}
+		ProblemInternal(c, err.Error())
+		return
+	}
+	if d.UserID == nil || *d.UserID != uid {
+		ProblemForbidden(c, ProblemCodeForbidden, "Device is not owned by this user")
+		return
+	}
+
+	p := ParseCursor(c)
+	cur, err := DecodeCursor(p.Cursor)
+	if err != nil {
+		ProblemBadRequest(c, ProblemCodeInvalidRequest, err.Error())
+		return
+	}
+	rows, err := h.access.List(c.Request.Context(), deviceID, service.DeviceAccessListParams{
+		BeforeID: cur.OffsetID,
+		Limit:    p.Limit + 1,
+	})
+	if err != nil {
+		ProblemInternal(c, err.Error())
+		return
+	}
+	var next string
+	if len(rows) > p.Limit {
+		next = EncodeCursor(CursorPayload{OffsetID: rows[p.Limit-1].ID})
 		rows = rows[:p.Limit]
 	}
 	c.JSON(http.StatusOK, gin.H{"items": rows, "next_cursor": next})
