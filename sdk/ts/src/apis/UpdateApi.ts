@@ -32,13 +32,17 @@ export interface CheckForUpdateRequest {
     currentVersion?: string;
 }
 
+export interface DownloadUpdateArtifactRequest {
+    releaseId: number;
+}
+
 /**
  * 
  */
 export class UpdateApi extends runtime.BaseAPI {
 
     /**
-     * The client-facing half of the self-hosted update channel. It is API-key gated but not user-authenticated: a controlled machine checks for updates before anyone logs in.  The server owns the index of published releases; the artifact itself lives at `download_url` on whatever host the operator controls. The index is managed through the admin API (`POST /v1/admin/update-releases` and friends), which stays outside this business contract.  `current_version` is optional. Without it the newest release is returned and `update_available` is true whenever one exists; with it, `update_available` is true only when the published version is strictly newer, and `mandatory` mirrors the release flag once an update is available. `latest` is always present and is `null` when the channel has no release for that platform/arch. 
+     * The client-facing half of the self-hosted update channel. It is API-key gated but not user-authenticated: a controlled machine checks for updates before anyone logs in.  The server owns the index of published releases. The artifact lives at `download_url`: normally a host the operator controls, or this server itself when the installer was uploaded to it (then `download_url` is `GET /v1/update-releases/{release_id}/artifact` and `hosted_here` is true). The index is managed through the admin API (`POST /v1/admin/update-releases` and friends), which stays outside this business contract.  `current_version` is optional. Without it the newest release is returned and `update_available` is true whenever one exists; with it, `update_available` is true only when the published version is strictly newer, and `mandatory` mirrors the release flag once an update is available. `latest` is always present and is `null` when the channel has no release for that platform/arch. 
      * Check the self-hosted update channel for a newer build
      */
     async checkForUpdateRaw(requestParameters: CheckForUpdateRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<UpdateCheckResult>> {
@@ -102,11 +106,62 @@ export class UpdateApi extends runtime.BaseAPI {
     }
 
     /**
-     * The client-facing half of the self-hosted update channel. It is API-key gated but not user-authenticated: a controlled machine checks for updates before anyone logs in.  The server owns the index of published releases; the artifact itself lives at `download_url` on whatever host the operator controls. The index is managed through the admin API (`POST /v1/admin/update-releases` and friends), which stays outside this business contract.  `current_version` is optional. Without it the newest release is returned and `update_available` is true whenever one exists; with it, `update_available` is true only when the published version is strictly newer, and `mandatory` mirrors the release flag once an update is available. `latest` is always present and is `null` when the channel has no release for that platform/arch. 
+     * The client-facing half of the self-hosted update channel. It is API-key gated but not user-authenticated: a controlled machine checks for updates before anyone logs in.  The server owns the index of published releases. The artifact lives at `download_url`: normally a host the operator controls, or this server itself when the installer was uploaded to it (then `download_url` is `GET /v1/update-releases/{release_id}/artifact` and `hosted_here` is true). The index is managed through the admin API (`POST /v1/admin/update-releases` and friends), which stays outside this business contract.  `current_version` is optional. Without it the newest release is returned and `update_available` is true whenever one exists; with it, `update_available` is true only when the published version is strictly newer, and `mandatory` mirrors the release flag once an update is available. `latest` is always present and is `null` when the channel has no release for that platform/arch. 
      * Check the self-hosted update channel for a newer build
      */
     async checkForUpdate(requestParameters: CheckForUpdateRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<UpdateCheckResult> {
         const response = await this.checkForUpdateRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * The other half of a re-hosted release. `GET /v1/update:check` returns the `download_url` of the newest build, and for a release whose bytes were uploaded to this server that URL is this route, under the same API key the client already used for the check.  API-key gated but not user-authenticated, like the check itself. The response supports range requests, so a transfer that drops can resume.  A release whose bytes live on an external static host is not served here: fetching its route is a `404`, and the client should use the `download_url` from the check response instead. 
+     * Download an installer this server hosts itself
+     */
+    async downloadUpdateArtifactRaw(requestParameters: DownloadUpdateArtifactRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Blob>> {
+        if (requestParameters['releaseId'] == null) {
+            throw new runtime.RequiredError(
+                'releaseId',
+                'Required parameter "releaseId" was null or undefined when calling downloadUpdateArtifact().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        if (this.configuration && this.configuration.apiKey) {
+            headerParameters["X-API-Key"] = await this.configuration.apiKey("X-API-Key"); // ApiKeyAuth authentication
+        }
+
+        if (this.configuration && this.configuration.accessToken) {
+            const token = this.configuration.accessToken;
+            const tokenString = await token("BearerAuth", []);
+
+            if (tokenString) {
+                headerParameters["Authorization"] = `Bearer ${tokenString}`;
+            }
+        }
+
+        let urlPath = `/v1/update-releases/{release_id}/artifact`;
+        urlPath = urlPath.replace(`{${"release_id"}}`, encodeURIComponent(String(requestParameters['releaseId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'GET',
+            headers: headerParameters,
+            query: queryParameters,
+        }, initOverrides);
+
+        return new runtime.BlobApiResponse(response);
+    }
+
+    /**
+     * The other half of a re-hosted release. `GET /v1/update:check` returns the `download_url` of the newest build, and for a release whose bytes were uploaded to this server that URL is this route, under the same API key the client already used for the check.  API-key gated but not user-authenticated, like the check itself. The response supports range requests, so a transfer that drops can resume.  A release whose bytes live on an external static host is not served here: fetching its route is a `404`, and the client should use the `download_url` from the check response instead. 
+     * Download an installer this server hosts itself
+     */
+    async downloadUpdateArtifact(requestParameters: DownloadUpdateArtifactRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Blob> {
+        const response = await this.downloadUpdateArtifactRaw(requestParameters, initOverrides);
         return await response.value();
     }
 

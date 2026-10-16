@@ -398,9 +398,15 @@ export default {
     mandatoryHint: 'Clients older than this release must update',
     publishedAt: 'Published',
     requiredTag: 'Required',
-    fillRequired: 'Please fill in version, download URL and SHA-256',
+    fillRequired: 'Please fill in at least the version and SHA-256',
     confirmDelete: 'Remove this version from the index? Download URLs already handed out keep working.',
-    empty: 'No release published yet'
+    empty: 'No release published yet',
+    upload: 'Upload installer',
+    uploading: 'Uploading...',
+    hostedHere: 'Hosted here',
+    pendingArtifact: 'Not uploaded yet',
+    downloadUrlHint: 'Optional: leave empty to upload the installer here later',
+    uploadHint: 'The file must hash to the SHA-256 above, otherwise the server refuses it'
   },
   batch: {
     selected: '{count} selected',

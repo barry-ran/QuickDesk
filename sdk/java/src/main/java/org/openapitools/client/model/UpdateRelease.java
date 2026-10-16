@@ -48,7 +48,7 @@ import java.util.Set;
 import org.openapitools.client.JSON;
 
 /**
- * One build published to the self-hosted update channel. The artifact itself lives at &#x60;download_url&#x60;.
+ * One build published to the self-hosted update channel. The artifact itself is always fetchable at &#x60;download_url&#x60;: either an absolute URL on a host the operator controls, or this server&#39;s own &#x60;GET /v1/update-releases/{release_id}/artifact&#x60; when the installer was uploaded here (&#x60;hosted_here&#x60; is true). A release with no fetchable bytes is a placeholder and is never returned to a client. 
  */
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.14.0")
 public class UpdateRelease {
@@ -244,6 +244,11 @@ public class UpdateRelease {
   @javax.annotation.Nonnull
   private URI downloadUrl;
 
+  public static final String SERIALIZED_NAME_HOSTED_HERE = "hosted_here";
+  @SerializedName(SERIALIZED_NAME_HOSTED_HERE)
+  @javax.annotation.Nonnull
+  private Boolean hostedHere;
+
   public static final String SERIALIZED_NAME_SHA256 = "sha256";
   @SerializedName(SERIALIZED_NAME_SHA256)
   @javax.annotation.Nonnull
@@ -386,6 +391,25 @@ public class UpdateRelease {
   }
 
 
+  public UpdateRelease hostedHere(@javax.annotation.Nonnull Boolean hostedHere) {
+    this.hostedHere = hostedHere;
+    return this;
+  }
+
+  /**
+   * True when this server stores and serves the bytes (so &#x60;download_url&#x60; points at &#x60;GET /v1/update-releases/{release_id}/artifact&#x60;), false when the installer lives on a host the operator manages.
+   * @return hostedHere
+   */
+  @javax.annotation.Nonnull
+  public Boolean getHostedHere() {
+    return hostedHere;
+  }
+
+  public void setHostedHere(@javax.annotation.Nonnull Boolean hostedHere) {
+    this.hostedHere = hostedHere;
+  }
+
+
   public UpdateRelease sha256(@javax.annotation.Nonnull String sha256) {
     this.sha256 = sha256;
     return this;
@@ -497,6 +521,7 @@ public class UpdateRelease {
         Objects.equals(this.arch, updateRelease.arch) &&
         Objects.equals(this.version, updateRelease.version) &&
         Objects.equals(this.downloadUrl, updateRelease.downloadUrl) &&
+        Objects.equals(this.hostedHere, updateRelease.hostedHere) &&
         Objects.equals(this.sha256, updateRelease.sha256) &&
         Objects.equals(this.sizeBytes, updateRelease.sizeBytes) &&
         Objects.equals(this.notes, updateRelease.notes) &&
@@ -506,7 +531,7 @@ public class UpdateRelease {
 
   @Override
   public int hashCode() {
-    return Objects.hash(id, channel, platform, arch, version, downloadUrl, sha256, sizeBytes, notes, mandatory, publishedAt);
+    return Objects.hash(id, channel, platform, arch, version, downloadUrl, hostedHere, sha256, sizeBytes, notes, mandatory, publishedAt);
   }
 
   @Override
@@ -519,6 +544,7 @@ public class UpdateRelease {
     sb.append("    arch: ").append(toIndentedString(arch)).append("\n");
     sb.append("    version: ").append(toIndentedString(version)).append("\n");
     sb.append("    downloadUrl: ").append(toIndentedString(downloadUrl)).append("\n");
+    sb.append("    hostedHere: ").append(toIndentedString(hostedHere)).append("\n");
     sb.append("    sha256: ").append(toIndentedString(sha256)).append("\n");
     sb.append("    sizeBytes: ").append(toIndentedString(sizeBytes)).append("\n");
     sb.append("    notes: ").append(toIndentedString(notes)).append("\n");
@@ -545,10 +571,10 @@ public class UpdateRelease {
 
   static {
     // a set of all properties/fields (JSON key names)
-    openapiFields = new HashSet<String>(Arrays.asList("id", "channel", "platform", "arch", "version", "download_url", "sha256", "size_bytes", "notes", "mandatory", "published_at"));
+    openapiFields = new HashSet<String>(Arrays.asList("id", "channel", "platform", "arch", "version", "download_url", "hosted_here", "sha256", "size_bytes", "notes", "mandatory", "published_at"));
 
     // a set of required properties/fields (JSON key names)
-    openapiRequiredFields = new HashSet<String>(Arrays.asList("id", "channel", "platform", "arch", "version", "download_url", "sha256", "size_bytes", "mandatory", "published_at"));
+    openapiRequiredFields = new HashSet<String>(Arrays.asList("id", "channel", "platform", "arch", "version", "download_url", "hosted_here", "sha256", "size_bytes", "mandatory", "published_at"));
   }
 
   /**

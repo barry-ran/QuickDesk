@@ -401,9 +401,15 @@ export default {
     mandatoryHint: '低于该版本且检测到更新的客户端必须升级',
     publishedAt: '发布时间',
     requiredTag: '强制',
-    fillRequired: '请填写版本、下载地址与 SHA-256',
+    fillRequired: '请至少填写版本与 SHA-256',
     confirmDelete: '确定要把该版本从索引里移除吗？已经发出的下载地址仍可用。',
-    empty: '还没有发布任何版本'
+    empty: '还没有发布任何版本',
+    upload: '上传安装包',
+    uploading: '上传中...',
+    hostedHere: '本机托管',
+    pendingArtifact: '尚未上传',
+    downloadUrlHint: '可留空：稍后在上传安装包里补齐',
+    uploadHint: '文件必须与上面的 SHA-256 一致，否则服务器会拒绝'
   },
   batch: {
     selected: '已选择 {count} 项',

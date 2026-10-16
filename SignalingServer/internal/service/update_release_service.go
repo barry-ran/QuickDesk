@@ -19,10 +19,13 @@ import (
 // to and whether the update is mandatory - and answers the one question a
 // deployed client asks: "is there something newer than me?".
 //
-// The bytes themselves are not re-hosted here: DownloadURL is an absolute
-// http(s) URL the operator controls (a CDN, object storage, or the same
-// reverse proxy in front of this server). That keeps the channel a metadata
-// service and leaves artifact storage to whatever already serves the installs.
+// DownloadURL is normally an absolute http(s) URL the operator controls (a CDN,
+// object storage, or the reverse proxy in front of this server), which keeps the
+// channel a metadata service. A release may instead be published with no URL at
+// all - a placeholder waiting for the installer to be uploaded to this server
+// (see SetArtifact) - and such a release is invisible to clients until the bytes
+// exist, because telling an installed client there is an update it cannot
+// download is worse than telling it nothing.
 
 const (
 	UpdateChannelStable  = "stable"
@@ -223,9 +226,14 @@ func (s *UpdateReleaseService) Publish(ctx context.Context, in PublishUpdateRele
 		return nil, err
 	}
 	downloadURL := strings.TrimSpace(in.DownloadURL)
-	parsed, err := url.Parse(downloadURL)
-	if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
-		return nil, updateInvalid("download_url must be an absolute http(s) URL")
+	// An empty download_url is allowed on purpose: it marks a release whose
+	// installer has not been stored yet. A non-empty one still has to be usable,
+	// so a typo cannot publish a URL that merely looks like one.
+	if downloadURL != "" {
+		parsed, err := url.Parse(downloadURL)
+		if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+			return nil, updateInvalid("download_url must be an absolute http(s) URL")
+		}
 	}
 	sha := strings.ToLower(strings.TrimSpace(in.SHA256))
 	if !sha256HexPattern(sha) {
@@ -257,6 +265,7 @@ func (s *UpdateReleaseService) Publish(ctx context.Context, in PublishUpdateRele
 		}
 		return nil, err
 	}
+	release.Decorate()
 	return &release, nil
 }
 
@@ -290,26 +299,84 @@ func (s *UpdateReleaseService) List(ctx context.Context, filter UpdateReleaseFil
 	if out == nil {
 		out = []models.UpdateRelease{}
 	}
+	for i := range out {
+		out[i].Decorate()
+	}
 	return out, nil
 }
 
-// Delete removes one release. A missing id is reported so an operator does not
-// think a typo deleted something.
-func (s *UpdateReleaseService) Delete(ctx context.Context, id uint) error {
+// Get loads one release by id.
+func (s *UpdateReleaseService) Get(ctx context.Context, id uint) (*models.UpdateRelease, error) {
 	if s == nil || s.db == nil {
-		return errors.New("update release service is not configured")
+		return nil, errors.New("update release service is not configured")
 	}
-	result := s.db.WithContext(ctx).Delete(&models.UpdateRelease{}, id)
-	if result.Error != nil {
-		return result.Error
+	var release models.UpdateRelease
+	if err := s.db.WithContext(ctx).First(&release, id).Error; err != nil {
+		return nil, err
 	}
-	if result.RowsAffected == 0 {
-		return gorm.ErrRecordNotFound
-	}
-	return nil
+	release.Decorate()
+	return &release, nil
 }
 
-// Latest resolves the newest release for one channel/platform/arch.
+// SetArtifact records that the server now hosts this release's bytes. It is the
+// second half of a publish that had no download_url: the digest must be the one
+// the channel already advertises, so re-hosting cannot quietly swap the bytes an
+// installed client was told to expect.
+func (s *UpdateReleaseService) SetArtifact(
+	ctx context.Context,
+	id uint,
+	artifactPath string,
+	sha256 string,
+	downloadURL string,
+	sizeBytes int64,
+) (*models.UpdateRelease, error) {
+	if s == nil || s.db == nil {
+		return nil, errors.New("update release service is not configured")
+	}
+	release, err := s.Get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.db.WithContext(ctx).Model(&models.UpdateRelease{}).
+		Where("id = ?", id).
+		Updates(map[string]interface{}{
+			"artifact_path": artifactPath,
+			"sha256":        sha256,
+			"download_url":  downloadURL,
+			"size_bytes":    sizeBytes,
+			"updated_at":    time.Now().UTC(),
+		}).Error; err != nil {
+		return nil, err
+	}
+	release.ArtifactPath = artifactPath
+	release.SHA256 = sha256
+	release.DownloadURL = downloadURL
+	release.SizeBytes = sizeBytes
+	release.Decorate()
+	return release, nil
+}
+
+// Delete removes one release and hands the row back so the caller can drop the
+// stored file with it. A missing id is reported so an operator does not think a
+// typo deleted something.
+func (s *UpdateReleaseService) Delete(ctx context.Context, id uint) (*models.UpdateRelease, error) {
+	if s == nil || s.db == nil {
+		return nil, errors.New("update release service is not configured")
+	}
+	var release models.UpdateRelease
+	if err := s.db.WithContext(ctx).First(&release, id).Error; err != nil {
+		return nil, err
+	}
+	if err := s.db.WithContext(ctx).Delete(&models.UpdateRelease{}, id).Error; err != nil {
+		return nil, err
+	}
+	release.Decorate()
+	return &release, nil
+}
+
+// Latest resolves the newest release for one channel/platform/arch. Releases
+// with no fetchable bytes are skipped: a placeholder waiting for its installer
+// must never reach a client.
 func (s *UpdateReleaseService) Latest(ctx context.Context, platform, arch, channel string) (*models.UpdateRelease, error) {
 	if s == nil || s.db == nil {
 		return nil, errors.New("update release service is not configured")
@@ -328,7 +395,8 @@ func (s *UpdateReleaseService) Latest(ctx context.Context, platform, arch, chann
 	}
 	var release models.UpdateRelease
 	err = s.db.WithContext(ctx).
-		Where("channel = ? AND platform = ? AND arch = ?", normalizedChannel, normalizedPlatform, normalizedArch).
+		Where("channel = ? AND platform = ? AND arch = ? AND download_url <> ''",
+			normalizedChannel, normalizedPlatform, normalizedArch).
 		Order("published_at DESC, id DESC").
 		First(&release).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -337,6 +405,7 @@ func (s *UpdateReleaseService) Latest(ctx context.Context, platform, arch, chann
 	if err != nil {
 		return nil, err
 	}
+	release.Decorate()
 	return &release, nil
 }
 

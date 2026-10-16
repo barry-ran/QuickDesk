@@ -110,6 +110,25 @@ type SmsConfig struct {
 	Enabled         bool // true when all required fields are configured
 }
 
+// UpdateConfig controls the self-hosted update channel's optional artifact
+// re-hosting. The index works without it - a release can point at a URL the
+// operator hosts - but when Dir is set the server can hold the installer itself
+// and hand out its own download URL.
+type UpdateConfig struct {
+	// ArtifactDir is where re-hosted installers land. Like the recording store
+	// it is never mounted as a static site; bytes only leave through the
+	// API-key-gated download route.
+	ArtifactDir string
+	// MaxUploadMB caps a single installer upload.
+	MaxUploadMB int
+	// PublicBaseURL is the absolute prefix used to build the client-facing
+	// download_url for a re-hosted artifact, e.g. https://updates.example.com.
+	// Empty falls back to the scheme and Host of the admin upload request, which
+	// is only right for a deployment reached at one name without TLS
+	// termination in front of it.
+	PublicBaseURL string
+}
+
 type Config struct {
 	Server        ServerConfig   `mapstructure:"server"`
 	Database      DatabaseConfig `mapstructure:"database"`
@@ -127,6 +146,7 @@ type Config struct {
 	Approval      ApprovalConfig
 	Holiday       HolidayConfig
 	Sms           SmsConfig
+	Update        UpdateConfig
 	Runtime       RuntimeConfig
 }
 
@@ -338,6 +358,12 @@ func Load() *Config {
 	viper.SetDefault("RECORDING_RETENTION_DAYS", 0)
 	viper.SetDefault("RECORDING_SWEEP_INTERVAL_MINUTES", 30)
 
+	// Self-hosted update channel: where re-hosted installers land, how large one
+	// may be, and the absolute prefix used to build their download URLs.
+	viper.SetDefault("UPDATE_ARTIFACT_DIR", "data/updates")
+	viper.SetDefault("UPDATE_MAX_UPLOAD_MB", 4096)
+	viper.SetDefault("UPDATE_PUBLIC_BASE_URL", "")
+
 	// Notification outbox retention. 0 keeps terminal delivery rows forever;
 	// any positive value deletes delivered/failed rows older than the window
 	// (pending/delivering rows are never touched).
@@ -494,6 +520,11 @@ func Load() *Config {
 		StaleMinutes:     viper.GetInt("RECORDING_STALE_MINUTES"),
 		RetentionDays:    viper.GetInt("RECORDING_RETENTION_DAYS"),
 		SweepIntervalMin: viper.GetInt("RECORDING_SWEEP_INTERVAL_MINUTES"),
+	}
+	cfg.Update = UpdateConfig{
+		ArtifactDir:   viper.GetString("UPDATE_ARTIFACT_DIR"),
+		MaxUploadMB:   viper.GetInt("UPDATE_MAX_UPLOAD_MB"),
+		PublicBaseURL: viper.GetString("UPDATE_PUBLIC_BASE_URL"),
 	}
 	cfg.Notification = NotificationConfig{
 		RetentionDays:        viper.GetInt("NOTIFICATION_RETENTION_DAYS"),

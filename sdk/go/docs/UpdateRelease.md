@@ -10,6 +10,7 @@ Name | Type | Description | Notes
 **Arch** | **string** |  | 
 **Version** | **string** | Dotted numeric version, e.g. &#x60;4.2.5.0&#x60;. | 
 **DownloadUrl** | **string** | Absolute http(s) URL of the installer or archive. | 
+**HostedHere** | **bool** | True when this server stores and serves the bytes (so &#x60;download_url&#x60; points at &#x60;GET /v1/update-releases/{release_id}/artifact&#x60;), false when the installer lives on a host the operator manages. | 
 **Sha256** | **string** | Lowercase hex SHA-256 of the artifact; clients verify what they downloaded. | 
 **SizeBytes** | **int64** |  | 
 **Notes** | Pointer to **string** |  | [optional] 
@@ -20,7 +21,7 @@ Name | Type | Description | Notes
 
 ### NewUpdateRelease
 
-`func NewUpdateRelease(id int64, channel string, platform string, arch string, version string, downloadUrl string, sha256 string, sizeBytes int64, mandatory bool, publishedAt time.Time, ) *UpdateRelease`
+`func NewUpdateRelease(id int64, channel string, platform string, arch string, version string, downloadUrl string, hostedHere bool, sha256 string, sizeBytes int64, mandatory bool, publishedAt time.Time, ) *UpdateRelease`
 
 NewUpdateRelease instantiates a new UpdateRelease object
 This constructor will assign default values to properties that have it defined,
@@ -153,6 +154,26 @@ and a boolean to check if the value has been set.
 `func (o *UpdateRelease) SetDownloadUrl(v string)`
 
 SetDownloadUrl sets DownloadUrl field to given value.
+
+
+### GetHostedHere
+
+`func (o *UpdateRelease) GetHostedHere() bool`
+
+GetHostedHere returns the HostedHere field if non-nil, zero value otherwise.
+
+### GetHostedHereOk
+
+`func (o *UpdateRelease) GetHostedHereOk() (*bool, bool)`
+
+GetHostedHereOk returns a tuple with the HostedHere field if it's non-nil, zero value otherwise
+and a boolean to check if the value has been set.
+
+### SetHostedHere
+
+`func (o *UpdateRelease) SetHostedHere(v bool)`
+
+SetHostedHere sets HostedHere field to given value.
 
 
 ### GetSha256

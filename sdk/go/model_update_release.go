@@ -20,7 +20,7 @@ import (
 // checks if the UpdateRelease type satisfies the MappedNullable interface at compile time
 var _ MappedNullable = &UpdateRelease{}
 
-// UpdateRelease One build published to the self-hosted update channel. The artifact itself lives at `download_url`.
+// UpdateRelease One build published to the self-hosted update channel. The artifact itself is always fetchable at `download_url`: either an absolute URL on a host the operator controls, or this server's own `GET /v1/update-releases/{release_id}/artifact` when the installer was uploaded here (`hosted_here` is true). A release with no fetchable bytes is a placeholder and is never returned to a client. 
 type UpdateRelease struct {
 	Id int64 `json:"id"`
 	Channel string `json:"channel"`
@@ -30,6 +30,8 @@ type UpdateRelease struct {
 	Version string `json:"version"`
 	// Absolute http(s) URL of the installer or archive.
 	DownloadUrl string `json:"download_url"`
+	// True when this server stores and serves the bytes (so `download_url` points at `GET /v1/update-releases/{release_id}/artifact`), false when the installer lives on a host the operator manages.
+	HostedHere bool `json:"hosted_here"`
 	// Lowercase hex SHA-256 of the artifact; clients verify what they downloaded.
 	Sha256 string `json:"sha256"`
 	SizeBytes int64 `json:"size_bytes"`
@@ -45,7 +47,7 @@ type _UpdateRelease UpdateRelease
 // This constructor will assign default values to properties that have it defined,
 // and makes sure properties required by API are set, but the set of arguments
 // will change when the set of required properties is changed
-func NewUpdateRelease(id int64, channel string, platform string, arch string, version string, downloadUrl string, sha256 string, sizeBytes int64, mandatory bool, publishedAt time.Time) *UpdateRelease {
+func NewUpdateRelease(id int64, channel string, platform string, arch string, version string, downloadUrl string, hostedHere bool, sha256 string, sizeBytes int64, mandatory bool, publishedAt time.Time) *UpdateRelease {
 	this := UpdateRelease{}
 	this.Id = id
 	this.Channel = channel
@@ -53,6 +55,7 @@ func NewUpdateRelease(id int64, channel string, platform string, arch string, ve
 	this.Arch = arch
 	this.Version = version
 	this.DownloadUrl = downloadUrl
+	this.HostedHere = hostedHere
 	this.Sha256 = sha256
 	this.SizeBytes = sizeBytes
 	this.Mandatory = mandatory
@@ -212,6 +215,30 @@ func (o *UpdateRelease) SetDownloadUrl(v string) {
 	o.DownloadUrl = v
 }
 
+// GetHostedHere returns the HostedHere field value
+func (o *UpdateRelease) GetHostedHere() bool {
+	if o == nil {
+		var ret bool
+		return ret
+	}
+
+	return o.HostedHere
+}
+
+// GetHostedHereOk returns a tuple with the HostedHere field value
+// and a boolean to check if the value has been set.
+func (o *UpdateRelease) GetHostedHereOk() (*bool, bool) {
+	if o == nil {
+		return nil, false
+	}
+	return &o.HostedHere, true
+}
+
+// SetHostedHere sets field value
+func (o *UpdateRelease) SetHostedHere(v bool) {
+	o.HostedHere = v
+}
+
 // GetSha256 returns the Sha256 field value
 func (o *UpdateRelease) GetSha256() string {
 	if o == nil {
@@ -356,6 +383,7 @@ func (o UpdateRelease) ToMap() (map[string]interface{}, error) {
 	toSerialize["arch"] = o.Arch
 	toSerialize["version"] = o.Version
 	toSerialize["download_url"] = o.DownloadUrl
+	toSerialize["hosted_here"] = o.HostedHere
 	toSerialize["sha256"] = o.Sha256
 	toSerialize["size_bytes"] = o.SizeBytes
 	if !IsNil(o.Notes) {
@@ -377,6 +405,7 @@ func (o *UpdateRelease) UnmarshalJSON(data []byte) (err error) {
 		"arch",
 		"version",
 		"download_url",
+		"hosted_here",
 		"sha256",
 		"size_bytes",
 		"mandatory",

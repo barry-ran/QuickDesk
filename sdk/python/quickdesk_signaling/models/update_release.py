@@ -25,7 +25,7 @@ from typing_extensions import Self
 
 class UpdateRelease(BaseModel):
     """
-    One build published to the self-hosted update channel. The artifact itself lives at `download_url`.
+    One build published to the self-hosted update channel. The artifact itself is always fetchable at `download_url`: either an absolute URL on a host the operator controls, or this server's own `GET /v1/update-releases/{release_id}/artifact` when the installer was uploaded here (`hosted_here` is true). A release with no fetchable bytes is a placeholder and is never returned to a client. 
     """ # noqa: E501
     id: StrictInt
     channel: StrictStr
@@ -33,12 +33,13 @@ class UpdateRelease(BaseModel):
     arch: StrictStr
     version: StrictStr = Field(description="Dotted numeric version, e.g. `4.2.5.0`.")
     download_url: StrictStr = Field(description="Absolute http(s) URL of the installer or archive.")
+    hosted_here: StrictBool = Field(description="True when this server stores and serves the bytes (so `download_url` points at `GET /v1/update-releases/{release_id}/artifact`), false when the installer lives on a host the operator manages.")
     sha256: StrictStr = Field(description="Lowercase hex SHA-256 of the artifact; clients verify what they downloaded.")
     size_bytes: StrictInt
     notes: Optional[StrictStr] = None
     mandatory: StrictBool = Field(description="When true, the update is not optional for older clients.")
     published_at: datetime
-    __properties: ClassVar[List[str]] = ["id", "channel", "platform", "arch", "version", "download_url", "sha256", "size_bytes", "notes", "mandatory", "published_at"]
+    __properties: ClassVar[List[str]] = ["id", "channel", "platform", "arch", "version", "download_url", "hosted_here", "sha256", "size_bytes", "notes", "mandatory", "published_at"]
 
     @field_validator('channel')
     def channel_validate_enum(cls, value):
@@ -118,6 +119,7 @@ class UpdateRelease(BaseModel):
             "arch": obj.get("arch"),
             "version": obj.get("version"),
             "download_url": obj.get("download_url"),
+            "hosted_here": obj.get("hosted_here"),
             "sha256": obj.get("sha256"),
             "size_bytes": obj.get("size_bytes"),
             "notes": obj.get("notes"),

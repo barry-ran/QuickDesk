@@ -140,10 +140,10 @@ func TestUpdateReleasePublishListDelete(t *testing.T) {
 		t.Fatalf("windows listing = %+v, want the one release", items)
 	}
 
-	if err := svc.Delete(ctx, items[0].ID); err != nil {
+	if _, err := svc.Delete(ctx, items[0].ID); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
-	if err := svc.Delete(ctx, items[0].ID); !errors.Is(err, gorm.ErrRecordNotFound) {
+	if _, err := svc.Delete(ctx, items[0].ID); !errors.Is(err, gorm.ErrRecordNotFound) {
 		t.Fatalf("second delete error = %v, want record not found", err)
 	}
 }
@@ -221,5 +221,87 @@ func TestUpdateReleaseCheck(t *testing.T) {
 	}
 	if _, err := svc.Check(ctx, "windows", "x64", "stable", "not-a-version"); err == nil {
 		t.Fatal("check accepted an invalid current_version")
+	}
+}
+
+// A release published without a download_url is a placeholder: the operator has
+// decided the version exists but has not stored the bytes yet. Clients must not
+// be told about an update they cannot fetch, so the check skips it even though
+// the admin index still lists it.
+func TestUpdateReleaseWithoutArtifactIsHiddenFromClients(t *testing.T) {
+	svc := NewUpdateReleaseService(newUpdateReleaseTestDB(t))
+	ctx := context.Background()
+
+	pending := sampleRelease("4.2.3.0")
+	pending.DownloadURL = ""
+	published, err := svc.Publish(ctx, pending)
+	if err != nil {
+		t.Fatalf("publish a placeholder release: %v", err)
+	}
+	if published.HostedHere {
+		t.Fatalf("a release with no artifact reported hosted_here: %+v", published)
+	}
+
+	check, err := svc.Check(ctx, "windows", "x64", "stable", "4.2.0.0")
+	if err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	if check.UpdateAvailable || check.Latest != nil {
+		t.Fatalf("a placeholder release reached the client: %+v", check)
+	}
+
+	items, err := svc.List(ctx, UpdateReleaseFilter{})
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(items) != 1 || items[0].DownloadURL != "" {
+		t.Fatalf("the admin index hid the placeholder: %+v", items)
+	}
+}
+
+// Uploading the installer is what turns a placeholder into a release clients can
+// actually install: the download_url starts pointing at this server and the
+// digest and size become the ones measured from the stored bytes.
+func TestUpdateReleaseSetArtifactPublishesTheRelease(t *testing.T) {
+	db := newUpdateReleaseTestDB(t)
+	svc := NewUpdateReleaseService(db)
+	ctx := context.Background()
+
+	pending := sampleRelease("4.2.3.0")
+	pending.DownloadURL = ""
+	published, err := svc.Publish(ctx, pending)
+	if err != nil {
+		t.Fatalf("publish a placeholder release: %v", err)
+	}
+
+	const digest = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	updated, err := svc.SetArtifact(ctx, published.ID, "/tmp/quickdesk-setup.exe", digest,
+		"http://127.0.0.1:8000/v1/update-releases/1/artifact", 4096)
+	if err != nil {
+		t.Fatalf("set artifact: %v", err)
+	}
+	if !updated.HostedHere || updated.SHA256 != digest || updated.SizeBytes != 4096 {
+		t.Fatalf("artifact update = %+v, want the stored digest, size and hosted flag", updated)
+	}
+
+	check, err := svc.Check(ctx, "windows", "x64", "stable", "4.2.0.0")
+	if err != nil {
+		t.Fatalf("check after upload: %v", err)
+	}
+	if !check.UpdateAvailable || check.Latest == nil || check.Latest.DownloadURL == "" {
+		t.Fatalf("the uploaded release is still not offered: %+v", check)
+	}
+	if !check.Latest.HostedHere {
+		t.Fatalf("the client-facing release forgot it is hosted here: %+v", check.Latest)
+	}
+
+	// The row is what the download route resolves, so the path has to survive the
+	// round trip through the database rather than only living on the return value.
+	reloaded, err := svc.Get(ctx, published.ID)
+	if err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	if reloaded.ArtifactPath != "/tmp/quickdesk-setup.exe" {
+		t.Fatalf("artifact path = %q, want the stored path", reloaded.ArtifactPath)
 	}
 }

@@ -203,6 +203,7 @@ Class | Method | HTTP request | Description
 *RecordingsApi* | [**uploadRecordingArtifact**](docs/RecordingsApi.md#uploadRecordingArtifact) | **POST** /v1/me/recordings/{recording_id}/artifact | Upload a recording&#39;s media bytes
 *RecordingsApi* | [**uploadRecordingThumbnail**](docs/RecordingsApi.md#uploadRecordingThumbnail) | **POST** /v1/me/recordings/{recording_id}/thumbnail | Upload a recording&#39;s preview image
 *UpdateApi* | [**checkForUpdate**](docs/UpdateApi.md#checkForUpdate) | **GET** /v1/update:check | Check the self-hosted update channel for a newer build
+*UpdateApi* | [**downloadUpdateArtifact**](docs/UpdateApi.md#downloadUpdateArtifact) | **GET** /v1/update-releases/{release_id}/artifact | Download an installer this server hosts itself
 
 
 ## Documentation for Models

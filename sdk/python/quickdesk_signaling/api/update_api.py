@@ -16,8 +16,8 @@ from pydantic import validate_call, Field, StrictFloat, StrictStr, StrictInt
 from typing import Any, Dict, List, Optional, Tuple, Union
 from typing_extensions import Annotated
 
-from pydantic import Field, StrictStr, field_validator
-from typing import Optional
+from pydantic import Field, StrictBytes, StrictStr, field_validator
+from typing import Optional, Tuple, Union
 from typing_extensions import Annotated
 from quickdesk_signaling.models.update_check_result import UpdateCheckResult
 
@@ -61,7 +61,7 @@ class UpdateApi:
     ) -> UpdateCheckResult:
         """Check the self-hosted update channel for a newer build
 
-        The client-facing half of the self-hosted update channel. It is API-key gated but not user-authenticated: a controlled machine checks for updates before anyone logs in.  The server owns the index of published releases; the artifact itself lives at `download_url` on whatever host the operator controls. The index is managed through the admin API (`POST /v1/admin/update-releases` and friends), which stays outside this business contract.  `current_version` is optional. Without it the newest release is returned and `update_available` is true whenever one exists; with it, `update_available` is true only when the published version is strictly newer, and `mandatory` mirrors the release flag once an update is available. `latest` is always present and is `null` when the channel has no release for that platform/arch. 
+        The client-facing half of the self-hosted update channel. It is API-key gated but not user-authenticated: a controlled machine checks for updates before anyone logs in.  The server owns the index of published releases. The artifact lives at `download_url`: normally a host the operator controls, or this server itself when the installer was uploaded to it (then `download_url` is `GET /v1/update-releases/{release_id}/artifact` and `hosted_here` is true). The index is managed through the admin API (`POST /v1/admin/update-releases` and friends), which stays outside this business contract.  `current_version` is optional. Without it the newest release is returned and `update_available` is true whenever one exists; with it, `update_available` is true only when the published version is strictly newer, and `mandatory` mirrors the release flag once an update is available. `latest` is always present and is `null` when the channel has no release for that platform/arch. 
 
         :param platform: Which operating system the caller is running. (required)
         :type platform: str
@@ -141,7 +141,7 @@ class UpdateApi:
     ) -> ApiResponse[UpdateCheckResult]:
         """Check the self-hosted update channel for a newer build
 
-        The client-facing half of the self-hosted update channel. It is API-key gated but not user-authenticated: a controlled machine checks for updates before anyone logs in.  The server owns the index of published releases; the artifact itself lives at `download_url` on whatever host the operator controls. The index is managed through the admin API (`POST /v1/admin/update-releases` and friends), which stays outside this business contract.  `current_version` is optional. Without it the newest release is returned and `update_available` is true whenever one exists; with it, `update_available` is true only when the published version is strictly newer, and `mandatory` mirrors the release flag once an update is available. `latest` is always present and is `null` when the channel has no release for that platform/arch. 
+        The client-facing half of the self-hosted update channel. It is API-key gated but not user-authenticated: a controlled machine checks for updates before anyone logs in.  The server owns the index of published releases. The artifact lives at `download_url`: normally a host the operator controls, or this server itself when the installer was uploaded to it (then `download_url` is `GET /v1/update-releases/{release_id}/artifact` and `hosted_here` is true). The index is managed through the admin API (`POST /v1/admin/update-releases` and friends), which stays outside this business contract.  `current_version` is optional. Without it the newest release is returned and `update_available` is true whenever one exists; with it, `update_available` is true only when the published version is strictly newer, and `mandatory` mirrors the release flag once an update is available. `latest` is always present and is `null` when the channel has no release for that platform/arch. 
 
         :param platform: Which operating system the caller is running. (required)
         :type platform: str
@@ -221,7 +221,7 @@ class UpdateApi:
     ) -> RESTResponseType:
         """Check the self-hosted update channel for a newer build
 
-        The client-facing half of the self-hosted update channel. It is API-key gated but not user-authenticated: a controlled machine checks for updates before anyone logs in.  The server owns the index of published releases; the artifact itself lives at `download_url` on whatever host the operator controls. The index is managed through the admin API (`POST /v1/admin/update-releases` and friends), which stays outside this business contract.  `current_version` is optional. Without it the newest release is returned and `update_available` is true whenever one exists; with it, `update_available` is true only when the published version is strictly newer, and `mandatory` mirrors the release flag once an update is available. `latest` is always present and is `null` when the channel has no release for that platform/arch. 
+        The client-facing half of the self-hosted update channel. It is API-key gated but not user-authenticated: a controlled machine checks for updates before anyone logs in.  The server owns the index of published releases. The artifact lives at `download_url`: normally a host the operator controls, or this server itself when the installer was uploaded to it (then `download_url` is `GET /v1/update-releases/{release_id}/artifact` and `hosted_here` is true). The index is managed through the admin API (`POST /v1/admin/update-releases` and friends), which stays outside this business contract.  `current_version` is optional. Without it the newest release is returned and `update_available` is true whenever one exists; with it, `update_available` is true only when the published version is strictly newer, and `mandatory` mirrors the release flag once an update is available. `latest` is always present and is `null` when the channel has no release for that platform/arch. 
 
         :param platform: Which operating system the caller is running. (required)
         :type platform: str
@@ -343,6 +343,275 @@ class UpdateApi:
         return self.api_client.param_serialize(
             method='GET',
             resource_path='/v1/update:check',
+            path_params=_path_params,
+            query_params=_query_params,
+            header_params=_header_params,
+            body=_body_params,
+            post_params=_form_params,
+            files=_files,
+            auth_settings=_auth_settings,
+            collection_formats=_collection_formats,
+            _host=_host,
+            _request_auth=_request_auth
+        )
+
+
+
+
+    @validate_call
+    def download_update_artifact(
+        self,
+        release_id: Annotated[int, Field(strict=True, ge=1, description="The `id` of the release from the check response.")],
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> bytearray:
+        """Download an installer this server hosts itself
+
+        The other half of a re-hosted release. `GET /v1/update:check` returns the `download_url` of the newest build, and for a release whose bytes were uploaded to this server that URL is this route, under the same API key the client already used for the check.  API-key gated but not user-authenticated, like the check itself. The response supports range requests, so a transfer that drops can resume.  A release whose bytes live on an external static host is not served here: fetching its route is a `404`, and the client should use the `download_url` from the check response instead. 
+
+        :param release_id: The `id` of the release from the check response. (required)
+        :type release_id: int
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._download_update_artifact_serialize(
+            release_id=release_id,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "bytearray",
+            '400': "Problem",
+            '404': "Problem",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        ).data
+
+
+    @validate_call
+    def download_update_artifact_with_http_info(
+        self,
+        release_id: Annotated[int, Field(strict=True, ge=1, description="The `id` of the release from the check response.")],
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> ApiResponse[bytearray]:
+        """Download an installer this server hosts itself
+
+        The other half of a re-hosted release. `GET /v1/update:check` returns the `download_url` of the newest build, and for a release whose bytes were uploaded to this server that URL is this route, under the same API key the client already used for the check.  API-key gated but not user-authenticated, like the check itself. The response supports range requests, so a transfer that drops can resume.  A release whose bytes live on an external static host is not served here: fetching its route is a `404`, and the client should use the `download_url` from the check response instead. 
+
+        :param release_id: The `id` of the release from the check response. (required)
+        :type release_id: int
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._download_update_artifact_serialize(
+            release_id=release_id,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "bytearray",
+            '400': "Problem",
+            '404': "Problem",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        )
+
+
+    @validate_call
+    def download_update_artifact_without_preload_content(
+        self,
+        release_id: Annotated[int, Field(strict=True, ge=1, description="The `id` of the release from the check response.")],
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> RESTResponseType:
+        """Download an installer this server hosts itself
+
+        The other half of a re-hosted release. `GET /v1/update:check` returns the `download_url` of the newest build, and for a release whose bytes were uploaded to this server that URL is this route, under the same API key the client already used for the check.  API-key gated but not user-authenticated, like the check itself. The response supports range requests, so a transfer that drops can resume.  A release whose bytes live on an external static host is not served here: fetching its route is a `404`, and the client should use the `download_url` from the check response instead. 
+
+        :param release_id: The `id` of the release from the check response. (required)
+        :type release_id: int
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._download_update_artifact_serialize(
+            release_id=release_id,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "bytearray",
+            '400': "Problem",
+            '404': "Problem",
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        return response_data.response
+
+
+    def _download_update_artifact_serialize(
+        self,
+        release_id,
+        _request_auth,
+        _content_type,
+        _headers,
+        _host_index,
+    ) -> RequestSerialized:
+
+        _host = None
+
+        _collection_formats: Dict[str, str] = {
+        }
+
+        _path_params: Dict[str, str] = {}
+        _query_params: List[Tuple[str, str]] = []
+        _header_params: Dict[str, Optional[str]] = _headers or {}
+        _form_params: List[Tuple[str, str]] = []
+        _files: Dict[
+            str, Union[str, bytes, List[str], List[bytes], List[Tuple[str, bytes]]]
+        ] = {}
+        _body_params: Optional[bytes] = None
+
+        # process the path parameters
+        if release_id is not None:
+            _path_params['release_id'] = release_id
+        # process the query parameters
+        # process the header parameters
+        # process the form parameters
+        # process the body parameter
+
+
+        # set the HTTP header `Accept`
+        if 'Accept' not in _header_params:
+            _header_params['Accept'] = self.api_client.select_header_accept(
+                [
+                    'application/octet-stream', 
+                    'application/problem+json'
+                ]
+            )
+
+
+        # authentication setting
+        _auth_settings: List[str] = [
+            'ApiKeyAuth', 
+            'BearerAuth'
+        ]
+
+        return self.api_client.param_serialize(
+            method='GET',
+            resource_path='/v1/update-releases/{release_id}/artifact',
             path_params=_path_params,
             query_params=_query_params,
             header_params=_header_params,

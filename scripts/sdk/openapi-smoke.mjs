@@ -403,9 +403,18 @@ if (updateCheck.json.latest === null) {
   for (const name of ['id', 'channel', 'platform', 'arch', 'version', 'download_url', 'sha256', 'size_bytes', 'mandatory', 'published_at']) {
     field(latest, name, undefined, 'GET update:check (latest)');
   }
+  // hosted_here tells the client whether the download_url is this server's own
+  // artifact route or somebody else's static host, so its type is contractual.
+  field(latest, 'hosted_here', 'boolean', 'GET update:check (latest)');
   check(updateCheck.json.update_available === true,
     'a published release did not report update_available');
 }
+
+// The client-facing artifact route. A run with no admin token cannot publish a
+// release to download, so this pins the documented failure: an id that cannot
+// exist is a Problem-shaped 404 rather than an empty 200.
+const updateArtifactMiss = await call('GET', '/v1/update-releases/2147483647/artifact', { expect: 404 });
+problemShape(updateArtifactMiss.json, 'GET update-releases/{id}/artifact (unknown release)', 'NOT_FOUND');
 
 const updateDefaultChannel = await call('GET',
   '/v1/update:check?platform=macos&arch=arm64&current_version=4.2.0.0',

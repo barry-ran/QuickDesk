@@ -419,7 +419,12 @@ func main() {
 	deviceOfflineAlertHandler := handler.NewDeviceOfflineAlertHandler(deviceService, deviceOfflineAlertService)
 	updateReleaseService := service.NewUpdateReleaseService(db)
 	updateReleaseHandler := handler.NewUpdateReleaseHandler(updateReleaseService)
-	adminUpdateReleaseHandler := handler.NewAdminUpdateReleaseHandler(updateReleaseService, auditService)
+	adminUpdateReleaseHandler := handler.NewAdminUpdateReleaseHandler(updateReleaseService, auditService,
+		handler.UpdateArtifactStore{
+			Dir:           cfg.Update.ArtifactDir,
+			MaxBytes:      int64(cfg.Update.MaxUploadMB) * 1024 * 1024,
+			PublicBaseURL: cfg.Update.PublicBaseURL,
+		})
 	scheduledTaskHandler := handler.NewScheduledTaskHandler(scheduledTaskService)
 	deviceAccessGrantHandler := handler.NewDeviceAccessGrantHandler(deviceService, deviceAccessGrantService, bus)
 	deviceAccessApprovalHandler := handler.NewDeviceAccessApprovalHandler(
@@ -531,6 +536,10 @@ func main() {
 		// API-key gated like every other v1 route, but not user-authenticated -
 		// a controlled machine checks for updates before anyone logs in.
 		v1.GET("/update:check", updateReleaseHandler.Check)
+		// Installers this server hosts itself. Same gate as the check: the
+		// client already holds the API key by the time it downloads a build,
+		// so no ticket or browser navigation is involved.
+		v1.GET("/update-releases/:id/artifact", updateReleaseHandler.DownloadArtifact)
 
 		// Auth (public; no user token yet, but API key still required
 		// when configured — see note above).
@@ -799,6 +808,7 @@ func main() {
 		// Self-hosted update channel index.
 		adminGuarded.GET("/update-releases", adminUpdateReleaseHandler.List)
 		adminGuarded.POST("/update-releases", adminUpdateReleaseHandler.Publish)
+		adminGuarded.POST("/update-releases/:id/artifact", adminUpdateReleaseHandler.UploadArtifact)
 		adminGuarded.DELETE("/update-releases/:id", adminUpdateReleaseHandler.Delete)
 
 		// Device groups.

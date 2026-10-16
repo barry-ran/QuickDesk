@@ -177,6 +177,7 @@ Class | Method | HTTP request | Description
 *RecordingsApi* | [**upload_recording_artifact**](docs/RecordingsApi.md#upload_recording_artifact) | **POST** /v1/me/recordings/{recording_id}/artifact | Upload a recording&#39;s media bytes
 *RecordingsApi* | [**upload_recording_thumbnail**](docs/RecordingsApi.md#upload_recording_thumbnail) | **POST** /v1/me/recordings/{recording_id}/thumbnail | Upload a recording&#39;s preview image
 *UpdateApi* | [**check_for_update**](docs/UpdateApi.md#check_for_update) | **GET** /v1/update:check | Check the self-hosted update channel for a newer build
+*UpdateApi* | [**download_update_artifact**](docs/UpdateApi.md#download_update_artifact) | **GET** /v1/update-releases/{release_id}/artifact | Download an installer this server hosts itself
 
 
 ## Documentation For Models

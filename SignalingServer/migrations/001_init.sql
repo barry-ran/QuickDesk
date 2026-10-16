@@ -663,6 +663,10 @@ CREATE TABLE IF NOT EXISTS update_releases (
     size_bytes   BIGINT        NOT NULL DEFAULT 0,
     notes        TEXT          NOT NULL DEFAULT '',
     mandatory    BOOLEAN       NOT NULL DEFAULT FALSE,
+    -- Empty unless the installer was uploaded to this server; see
+    -- POST /v1/admin/update-releases/:id/artifact. A release with no
+    -- download_url and no artifact is not offered to clients.
+    artifact_path VARCHAR(1024) NOT NULL DEFAULT '',
     published_at TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
     created_at   TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
     updated_at   TIMESTAMPTZ   NOT NULL DEFAULT NOW()

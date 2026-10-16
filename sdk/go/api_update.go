@@ -16,6 +16,8 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
+	"os"
 )
 
 
@@ -66,10 +68,13 @@ The client-facing half of the self-hosted update channel. It is API-key
 gated but not user-authenticated: a controlled machine checks for
 updates before anyone logs in.
 
-The server owns the index of published releases; the artifact itself
-lives at `download_url` on whatever host the operator controls. The
-index is managed through the admin API (`POST /v1/admin/update-releases`
-and friends), which stays outside this business contract.
+The server owns the index of published releases. The artifact lives at
+`download_url`: normally a host the operator controls, or this server
+itself when the installer was uploaded to it (then `download_url` is
+`GET /v1/update-releases/{release_id}/artifact` and `hosted_here` is
+true). The index is managed through the admin API
+(`POST /v1/admin/update-releases` and friends), which stays outside this
+business contract.
 
 `current_version` is optional. Without it the newest release is returned
 and `update_available` is true whenever one exists; with it,
@@ -178,6 +183,158 @@ func (a *UpdateAPIService) CheckForUpdateExecute(r ApiCheckForUpdateRequest) (*U
 			error: localVarHTTPResponse.Status,
 		}
 		if localVarHTTPResponse.StatusCode == 400 {
+			var v Problem
+			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
+			if err != nil {
+				newErr.error = err.Error()
+				return localVarReturnValue, localVarHTTPResponse, newErr
+			}
+					newErr.error = formatErrorMessage(localVarHTTPResponse.Status, &v)
+					newErr.model = v
+		}
+		return localVarReturnValue, localVarHTTPResponse, newErr
+	}
+
+	err = a.client.decode(&localVarReturnValue, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
+	if err != nil {
+		newErr := &GenericOpenAPIError{
+			body:  localVarBody,
+			error: err.Error(),
+		}
+		return localVarReturnValue, localVarHTTPResponse, newErr
+	}
+
+	return localVarReturnValue, localVarHTTPResponse, nil
+}
+
+type ApiDownloadUpdateArtifactRequest struct {
+	ctx context.Context
+	ApiService *UpdateAPIService
+	releaseId int64
+}
+
+func (r ApiDownloadUpdateArtifactRequest) Execute() (*os.File, *http.Response, error) {
+	return r.ApiService.DownloadUpdateArtifactExecute(r)
+}
+
+/*
+DownloadUpdateArtifact Download an installer this server hosts itself
+
+The other half of a re-hosted release. `GET /v1/update:check` returns the
+`download_url` of the newest build, and for a release whose bytes were
+uploaded to this server that URL is this route, under the same API key
+the client already used for the check.
+
+API-key gated but not user-authenticated, like the check itself. The
+response supports range requests, so a transfer that drops can resume.
+
+A release whose bytes live on an external static host is not served here:
+fetching its route is a `404`, and the client should use the
+`download_url` from the check response instead.
+
+
+ @param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
+ @param releaseId The `id` of the release from the check response.
+ @return ApiDownloadUpdateArtifactRequest
+*/
+func (a *UpdateAPIService) DownloadUpdateArtifact(ctx context.Context, releaseId int64) ApiDownloadUpdateArtifactRequest {
+	return ApiDownloadUpdateArtifactRequest{
+		ApiService: a,
+		ctx: ctx,
+		releaseId: releaseId,
+	}
+}
+
+// Execute executes the request
+//  @return *os.File
+func (a *UpdateAPIService) DownloadUpdateArtifactExecute(r ApiDownloadUpdateArtifactRequest) (*os.File, *http.Response, error) {
+	var (
+		localVarHTTPMethod   = http.MethodGet
+		localVarPostBody     interface{}
+		formFiles            []formFile
+		localVarReturnValue  *os.File
+	)
+
+	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "UpdateAPIService.DownloadUpdateArtifact")
+	if err != nil {
+		return localVarReturnValue, nil, &GenericOpenAPIError{error: err.Error()}
+	}
+
+	localVarPath := localBasePath + "/v1/update-releases/{release_id}/artifact"
+	localVarPath = strings.Replace(localVarPath, "{"+"release_id"+"}", url.PathEscape(parameterValueToString(r.releaseId, "releaseId")), -1)
+
+	localVarHeaderParams := make(map[string]string)
+	localVarQueryParams := url.Values{}
+	localVarFormParams := url.Values{}
+	if r.releaseId < 1 {
+		return localVarReturnValue, nil, reportError("releaseId must be greater than 1")
+	}
+
+	// to determine the Content-Type header
+	localVarHTTPContentTypes := []string{}
+
+	// set Content-Type header
+	localVarHTTPContentType := selectHeaderContentType(localVarHTTPContentTypes)
+	if localVarHTTPContentType != "" {
+		localVarHeaderParams["Content-Type"] = localVarHTTPContentType
+	}
+
+	// to determine the Accept header
+	localVarHTTPHeaderAccepts := []string{"application/octet-stream", "application/problem+json"}
+
+	// set Accept header
+	localVarHTTPHeaderAccept := selectHeaderAccept(localVarHTTPHeaderAccepts)
+	if localVarHTTPHeaderAccept != "" {
+		localVarHeaderParams["Accept"] = localVarHTTPHeaderAccept
+	}
+	if r.ctx != nil {
+		// API Key Authentication
+		if auth, ok := r.ctx.Value(ContextAPIKeys).(map[string]APIKey); ok {
+			if apiKey, ok := auth["ApiKeyAuth"]; ok {
+				var key string
+				if apiKey.Prefix != "" {
+					key = apiKey.Prefix + " " + apiKey.Key
+				} else {
+					key = apiKey.Key
+				}
+				localVarHeaderParams["X-API-Key"] = key
+			}
+		}
+	}
+	req, err := a.client.prepareRequest(r.ctx, localVarPath, localVarHTTPMethod, localVarPostBody, localVarHeaderParams, localVarQueryParams, localVarFormParams, formFiles)
+	if err != nil {
+		return localVarReturnValue, nil, err
+	}
+
+	localVarHTTPResponse, err := a.client.callAPI(req)
+	if err != nil || localVarHTTPResponse == nil {
+		return localVarReturnValue, localVarHTTPResponse, err
+	}
+
+	localVarBody, err := io.ReadAll(localVarHTTPResponse.Body)
+	localVarHTTPResponse.Body.Close()
+	localVarHTTPResponse.Body = io.NopCloser(bytes.NewBuffer(localVarBody))
+	if err != nil {
+		return localVarReturnValue, localVarHTTPResponse, err
+	}
+
+	if localVarHTTPResponse.StatusCode >= 300 {
+		newErr := &GenericOpenAPIError{
+			body:  localVarBody,
+			error: localVarHTTPResponse.Status,
+		}
+		if localVarHTTPResponse.StatusCode == 400 {
+			var v Problem
+			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
+			if err != nil {
+				newErr.error = err.Error()
+				return localVarReturnValue, localVarHTTPResponse, newErr
+			}
+					newErr.error = formatErrorMessage(localVarHTTPResponse.Status, &v)
+					newErr.model = v
+			return localVarReturnValue, localVarHTTPResponse, newErr
+		}
+		if localVarHTTPResponse.StatusCode == 404 {
 			var v Problem
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {

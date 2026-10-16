@@ -27,6 +27,7 @@ import com.google.gson.reflect.TypeToken;
 import java.io.IOException;
 
 
+import java.io.File;
 import org.openapitools.client.model.Problem;
 import org.openapitools.client.model.UpdateCheckResult;
 
@@ -169,7 +170,7 @@ public class UpdateApi {
 
     /**
      * Check the self-hosted update channel for a newer build
-     * The client-facing half of the self-hosted update channel. It is API-key gated but not user-authenticated: a controlled machine checks for updates before anyone logs in.  The server owns the index of published releases; the artifact itself lives at &#x60;download_url&#x60; on whatever host the operator controls. The index is managed through the admin API (&#x60;POST /v1/admin/update-releases&#x60; and friends), which stays outside this business contract.  &#x60;current_version&#x60; is optional. Without it the newest release is returned and &#x60;update_available&#x60; is true whenever one exists; with it, &#x60;update_available&#x60; is true only when the published version is strictly newer, and &#x60;mandatory&#x60; mirrors the release flag once an update is available. &#x60;latest&#x60; is always present and is &#x60;null&#x60; when the channel has no release for that platform/arch. 
+     * The client-facing half of the self-hosted update channel. It is API-key gated but not user-authenticated: a controlled machine checks for updates before anyone logs in.  The server owns the index of published releases. The artifact lives at &#x60;download_url&#x60;: normally a host the operator controls, or this server itself when the installer was uploaded to it (then &#x60;download_url&#x60; is &#x60;GET /v1/update-releases/{release_id}/artifact&#x60; and &#x60;hosted_here&#x60; is true). The index is managed through the admin API (&#x60;POST /v1/admin/update-releases&#x60; and friends), which stays outside this business contract.  &#x60;current_version&#x60; is optional. Without it the newest release is returned and &#x60;update_available&#x60; is true whenever one exists; with it, &#x60;update_available&#x60; is true only when the published version is strictly newer, and &#x60;mandatory&#x60; mirrors the release flag once an update is available. &#x60;latest&#x60; is always present and is &#x60;null&#x60; when the channel has no release for that platform/arch. 
      * @param platform Which operating system the caller is running. (required)
      * @param arch Which architecture the caller is running. (required)
      * @param channel Defaults to &#x60;stable&#x60;. (optional)
@@ -191,7 +192,7 @@ public class UpdateApi {
 
     /**
      * Check the self-hosted update channel for a newer build
-     * The client-facing half of the self-hosted update channel. It is API-key gated but not user-authenticated: a controlled machine checks for updates before anyone logs in.  The server owns the index of published releases; the artifact itself lives at &#x60;download_url&#x60; on whatever host the operator controls. The index is managed through the admin API (&#x60;POST /v1/admin/update-releases&#x60; and friends), which stays outside this business contract.  &#x60;current_version&#x60; is optional. Without it the newest release is returned and &#x60;update_available&#x60; is true whenever one exists; with it, &#x60;update_available&#x60; is true only when the published version is strictly newer, and &#x60;mandatory&#x60; mirrors the release flag once an update is available. &#x60;latest&#x60; is always present and is &#x60;null&#x60; when the channel has no release for that platform/arch. 
+     * The client-facing half of the self-hosted update channel. It is API-key gated but not user-authenticated: a controlled machine checks for updates before anyone logs in.  The server owns the index of published releases. The artifact lives at &#x60;download_url&#x60;: normally a host the operator controls, or this server itself when the installer was uploaded to it (then &#x60;download_url&#x60; is &#x60;GET /v1/update-releases/{release_id}/artifact&#x60; and &#x60;hosted_here&#x60; is true). The index is managed through the admin API (&#x60;POST /v1/admin/update-releases&#x60; and friends), which stays outside this business contract.  &#x60;current_version&#x60; is optional. Without it the newest release is returned and &#x60;update_available&#x60; is true whenever one exists; with it, &#x60;update_available&#x60; is true only when the published version is strictly newer, and &#x60;mandatory&#x60; mirrors the release flag once an update is available. &#x60;latest&#x60; is always present and is &#x60;null&#x60; when the channel has no release for that platform/arch. 
      * @param platform Which operating system the caller is running. (required)
      * @param arch Which architecture the caller is running. (required)
      * @param channel Defaults to &#x60;stable&#x60;. (optional)
@@ -214,7 +215,7 @@ public class UpdateApi {
 
     /**
      * Check the self-hosted update channel for a newer build (asynchronously)
-     * The client-facing half of the self-hosted update channel. It is API-key gated but not user-authenticated: a controlled machine checks for updates before anyone logs in.  The server owns the index of published releases; the artifact itself lives at &#x60;download_url&#x60; on whatever host the operator controls. The index is managed through the admin API (&#x60;POST /v1/admin/update-releases&#x60; and friends), which stays outside this business contract.  &#x60;current_version&#x60; is optional. Without it the newest release is returned and &#x60;update_available&#x60; is true whenever one exists; with it, &#x60;update_available&#x60; is true only when the published version is strictly newer, and &#x60;mandatory&#x60; mirrors the release flag once an update is available. &#x60;latest&#x60; is always present and is &#x60;null&#x60; when the channel has no release for that platform/arch. 
+     * The client-facing half of the self-hosted update channel. It is API-key gated but not user-authenticated: a controlled machine checks for updates before anyone logs in.  The server owns the index of published releases. The artifact lives at &#x60;download_url&#x60;: normally a host the operator controls, or this server itself when the installer was uploaded to it (then &#x60;download_url&#x60; is &#x60;GET /v1/update-releases/{release_id}/artifact&#x60; and &#x60;hosted_here&#x60; is true). The index is managed through the admin API (&#x60;POST /v1/admin/update-releases&#x60; and friends), which stays outside this business contract.  &#x60;current_version&#x60; is optional. Without it the newest release is returned and &#x60;update_available&#x60; is true whenever one exists; with it, &#x60;update_available&#x60; is true only when the published version is strictly newer, and &#x60;mandatory&#x60; mirrors the release flag once an update is available. &#x60;latest&#x60; is always present and is &#x60;null&#x60; when the channel has no release for that platform/arch. 
      * @param platform Which operating system the caller is running. (required)
      * @param arch Which architecture the caller is running. (required)
      * @param channel Defaults to &#x60;stable&#x60;. (optional)
@@ -234,6 +235,142 @@ public class UpdateApi {
 
         okhttp3.Call localVarCall = checkForUpdateValidateBeforeCall(platform, arch, channel, currentVersion, _callback);
         Type localVarReturnType = new TypeToken<UpdateCheckResult>(){}.getType();
+        localVarApiClient.executeAsync(localVarCall, localVarReturnType, _callback);
+        return localVarCall;
+    }
+    /**
+     * Build call for downloadUpdateArtifact
+     * @param releaseId The &#x60;id&#x60; of the release from the check response. (required)
+     * @param _callback Callback for upload/download progress
+     * @return Call to execute
+     * @throws ApiException If fail to serialize the request body object
+     * @http.response.details
+     <table border="1">
+       <caption>Response Details</caption>
+        <tr><td> Status Code </td><td> Description </td><td> Response Headers </td></tr>
+        <tr><td> 200 </td><td> The installer bytes. </td><td>  * Content-Disposition - The stored file name, as an attachment. <br>  * Accept-Ranges - Present because range requests are supported. <br>  </td></tr>
+        <tr><td> 400 </td><td> The request was malformed or failed validation. </td><td>  -  </td></tr>
+        <tr><td> 404 </td><td> The addressed resource does not exist. </td><td>  -  </td></tr>
+     </table>
+     */
+    public okhttp3.Call downloadUpdateArtifactCall(@javax.annotation.Nonnull Long releaseId, final ApiCallback _callback) throws ApiException {
+        String basePath = null;
+        // Operation Servers
+        String[] localBasePaths = new String[] {  };
+
+        // Determine Base Path to Use
+        if (localCustomBaseUrl != null){
+            basePath = localCustomBaseUrl;
+        } else if ( localBasePaths.length > 0 ) {
+            basePath = localBasePaths[localHostIndex];
+        } else {
+            basePath = null;
+        }
+
+        Object localVarPostBody = null;
+
+        // create path and map variables
+        String localVarPath = "/v1/update-releases/{release_id}/artifact"
+            .replace("{" + "release_id" + "}", localVarApiClient.escapeString(releaseId.toString()));
+
+        List<Pair> localVarQueryParams = new ArrayList<Pair>();
+        List<Pair> localVarCollectionQueryParams = new ArrayList<Pair>();
+        Map<String, String> localVarHeaderParams = new HashMap<String, String>();
+        Map<String, String> localVarCookieParams = new HashMap<String, String>();
+        Map<String, Object> localVarFormParams = new HashMap<String, Object>();
+
+        final String[] localVarAccepts = {
+            "application/octet-stream",
+            "application/problem+json"
+        };
+        final String localVarAccept = localVarApiClient.selectHeaderAccept(localVarAccepts);
+        if (localVarAccept != null) {
+            localVarHeaderParams.put("Accept", localVarAccept);
+        }
+
+        final String[] localVarContentTypes = {
+        };
+        final String localVarContentType = localVarApiClient.selectHeaderContentType(localVarContentTypes);
+        if (localVarContentType != null) {
+            localVarHeaderParams.put("Content-Type", localVarContentType);
+        }
+
+        String[] localVarAuthNames = new String[] { "ApiKeyAuth", "BearerAuth" };
+        return localVarApiClient.buildCall(basePath, localVarPath, "GET", localVarQueryParams, localVarCollectionQueryParams, localVarPostBody, localVarHeaderParams, localVarCookieParams, localVarFormParams, localVarAuthNames, _callback);
+    }
+
+    @SuppressWarnings("rawtypes")
+    private okhttp3.Call downloadUpdateArtifactValidateBeforeCall(@javax.annotation.Nonnull Long releaseId, final ApiCallback _callback) throws ApiException {
+        // verify the required parameter 'releaseId' is set
+        if (releaseId == null) {
+            throw new ApiException("Missing the required parameter 'releaseId' when calling downloadUpdateArtifact(Async)");
+        }
+
+        return downloadUpdateArtifactCall(releaseId, _callback);
+
+    }
+
+    /**
+     * Download an installer this server hosts itself
+     * The other half of a re-hosted release. &#x60;GET /v1/update:check&#x60; returns the &#x60;download_url&#x60; of the newest build, and for a release whose bytes were uploaded to this server that URL is this route, under the same API key the client already used for the check.  API-key gated but not user-authenticated, like the check itself. The response supports range requests, so a transfer that drops can resume.  A release whose bytes live on an external static host is not served here: fetching its route is a &#x60;404&#x60;, and the client should use the &#x60;download_url&#x60; from the check response instead. 
+     * @param releaseId The &#x60;id&#x60; of the release from the check response. (required)
+     * @return File
+     * @throws ApiException If fail to call the API, e.g. server error or cannot deserialize the response body
+     * @http.response.details
+     <table border="1">
+       <caption>Response Details</caption>
+        <tr><td> Status Code </td><td> Description </td><td> Response Headers </td></tr>
+        <tr><td> 200 </td><td> The installer bytes. </td><td>  * Content-Disposition - The stored file name, as an attachment. <br>  * Accept-Ranges - Present because range requests are supported. <br>  </td></tr>
+        <tr><td> 400 </td><td> The request was malformed or failed validation. </td><td>  -  </td></tr>
+        <tr><td> 404 </td><td> The addressed resource does not exist. </td><td>  -  </td></tr>
+     </table>
+     */
+    public File downloadUpdateArtifact(@javax.annotation.Nonnull Long releaseId) throws ApiException {
+        ApiResponse<File> localVarResp = downloadUpdateArtifactWithHttpInfo(releaseId);
+        return localVarResp.getData();
+    }
+
+    /**
+     * Download an installer this server hosts itself
+     * The other half of a re-hosted release. &#x60;GET /v1/update:check&#x60; returns the &#x60;download_url&#x60; of the newest build, and for a release whose bytes were uploaded to this server that URL is this route, under the same API key the client already used for the check.  API-key gated but not user-authenticated, like the check itself. The response supports range requests, so a transfer that drops can resume.  A release whose bytes live on an external static host is not served here: fetching its route is a &#x60;404&#x60;, and the client should use the &#x60;download_url&#x60; from the check response instead. 
+     * @param releaseId The &#x60;id&#x60; of the release from the check response. (required)
+     * @return ApiResponse&lt;File&gt;
+     * @throws ApiException If fail to call the API, e.g. server error or cannot deserialize the response body
+     * @http.response.details
+     <table border="1">
+       <caption>Response Details</caption>
+        <tr><td> Status Code </td><td> Description </td><td> Response Headers </td></tr>
+        <tr><td> 200 </td><td> The installer bytes. </td><td>  * Content-Disposition - The stored file name, as an attachment. <br>  * Accept-Ranges - Present because range requests are supported. <br>  </td></tr>
+        <tr><td> 400 </td><td> The request was malformed or failed validation. </td><td>  -  </td></tr>
+        <tr><td> 404 </td><td> The addressed resource does not exist. </td><td>  -  </td></tr>
+     </table>
+     */
+    public ApiResponse<File> downloadUpdateArtifactWithHttpInfo(@javax.annotation.Nonnull Long releaseId) throws ApiException {
+        okhttp3.Call localVarCall = downloadUpdateArtifactValidateBeforeCall(releaseId, null);
+        Type localVarReturnType = new TypeToken<File>(){}.getType();
+        return localVarApiClient.execute(localVarCall, localVarReturnType);
+    }
+
+    /**
+     * Download an installer this server hosts itself (asynchronously)
+     * The other half of a re-hosted release. &#x60;GET /v1/update:check&#x60; returns the &#x60;download_url&#x60; of the newest build, and for a release whose bytes were uploaded to this server that URL is this route, under the same API key the client already used for the check.  API-key gated but not user-authenticated, like the check itself. The response supports range requests, so a transfer that drops can resume.  A release whose bytes live on an external static host is not served here: fetching its route is a &#x60;404&#x60;, and the client should use the &#x60;download_url&#x60; from the check response instead. 
+     * @param releaseId The &#x60;id&#x60; of the release from the check response. (required)
+     * @param _callback The callback to be executed when the API call finishes
+     * @return The request call
+     * @throws ApiException If fail to process the API call, e.g. serializing the request body object
+     * @http.response.details
+     <table border="1">
+       <caption>Response Details</caption>
+        <tr><td> Status Code </td><td> Description </td><td> Response Headers </td></tr>
+        <tr><td> 200 </td><td> The installer bytes. </td><td>  * Content-Disposition - The stored file name, as an attachment. <br>  * Accept-Ranges - Present because range requests are supported. <br>  </td></tr>
+        <tr><td> 400 </td><td> The request was malformed or failed validation. </td><td>  -  </td></tr>
+        <tr><td> 404 </td><td> The addressed resource does not exist. </td><td>  -  </td></tr>
+     </table>
+     */
+    public okhttp3.Call downloadUpdateArtifactAsync(@javax.annotation.Nonnull Long releaseId, final ApiCallback<File> _callback) throws ApiException {
+
+        okhttp3.Call localVarCall = downloadUpdateArtifactValidateBeforeCall(releaseId, _callback);
+        Type localVarReturnType = new TypeToken<File>(){}.getType();
         localVarApiClient.executeAsync(localVarCall, localVarReturnType, _callback);
         return localVarCall;
     }
