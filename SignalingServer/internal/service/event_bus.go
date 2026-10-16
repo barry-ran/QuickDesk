@@ -67,6 +67,13 @@ const (
 	EventDeviceAccessApprovalRequested = "device.access_approval.requested"
 	EventDeviceAccessApprovalDecided   = "device.access_approval.decided"
 
+	// Control-plane session lifecycle. `device.access.session_started` says a
+	// controller got in; these two say whether they are still in it and when the
+	// signaling channel went away. Deliberately not `session.*` - that namespace
+	// is the caller's own login session (`session.revoked`).
+	EventRemoteSessionStarted = "remote_session.started"
+	EventRemoteSessionEnded   = "remote_session.ended"
+
 	EventFavoriteAdded   = "favorite.added"
 	EventFavoriteUpdated = "favorite.updated"
 	EventFavoriteRemoved = "favorite.removed"

@@ -42,6 +42,9 @@ docs/OfflineAlertRule.md
 docs/PlaybackTicket.md
 docs/Problem.md
 docs/RecordingsApi.md
+docs/RemoteSession.md
+docs/RemoteSessionList.md
+docs/RemoteSessionsApi.md
 docs/RevokeAccessGrant200Response.md
 docs/SessionRecording.md
 docs/SessionRecordingInput.md
@@ -78,6 +81,7 @@ src/main/java/org/openapitools/client/api/DevicesApi.java
 src/main/java/org/openapitools/client/api/MeApi.java
 src/main/java/org/openapitools/client/api/NotificationsApi.java
 src/main/java/org/openapitools/client/api/RecordingsApi.java
+src/main/java/org/openapitools/client/api/RemoteSessionsApi.java
 src/main/java/org/openapitools/client/api/UpdateApi.java
 src/main/java/org/openapitools/client/auth/ApiKeyAuth.java
 src/main/java/org/openapitools/client/auth/Authentication.java
@@ -115,6 +119,8 @@ src/main/java/org/openapitools/client/model/OfflineAlertInput.java
 src/main/java/org/openapitools/client/model/OfflineAlertRule.java
 src/main/java/org/openapitools/client/model/PlaybackTicket.java
 src/main/java/org/openapitools/client/model/Problem.java
+src/main/java/org/openapitools/client/model/RemoteSession.java
+src/main/java/org/openapitools/client/model/RemoteSessionList.java
 src/main/java/org/openapitools/client/model/RevokeAccessGrant200Response.java
 src/main/java/org/openapitools/client/model/SessionRecording.java
 src/main/java/org/openapitools/client/model/SessionRecordingInput.java
@@ -128,6 +134,7 @@ src/test/java/org/openapitools/client/api/DevicesApiTest.java
 src/test/java/org/openapitools/client/api/MeApiTest.java
 src/test/java/org/openapitools/client/api/NotificationsApiTest.java
 src/test/java/org/openapitools/client/api/RecordingsApiTest.java
+src/test/java/org/openapitools/client/api/RemoteSessionsApiTest.java
 src/test/java/org/openapitools/client/api/UpdateApiTest.java
 src/test/java/org/openapitools/client/model/AccessApprovalTest.java
 src/test/java/org/openapitools/client/model/AccessCodeApprovalPendingTest.java
@@ -160,6 +167,8 @@ src/test/java/org/openapitools/client/model/OfflineAlertInputTest.java
 src/test/java/org/openapitools/client/model/OfflineAlertRuleTest.java
 src/test/java/org/openapitools/client/model/PlaybackTicketTest.java
 src/test/java/org/openapitools/client/model/ProblemTest.java
+src/test/java/org/openapitools/client/model/RemoteSessionListTest.java
+src/test/java/org/openapitools/client/model/RemoteSessionTest.java
 src/test/java/org/openapitools/client/model/RevokeAccessGrant200ResponseTest.java
 src/test/java/org/openapitools/client/model/SessionRecordingInputTest.java
 src/test/java/org/openapitools/client/model/SessionRecordingListTest.java

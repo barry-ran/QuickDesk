@@ -1118,6 +1118,58 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
+  /v1/me/remote-sessions:
+    get:
+      tags: [remoteSessions]
+      summary: The caller's control sessions, open and finished
+      operationId: listRemoteSessions
+      description: |
+        Who is in the caller's machines right now, and who has been.
+
+        A remote session is one controller holding a signaling session against a
+        device. It is opened when that controller's signaling socket completes
+        authentication and closed when that socket ends, which is the whole
+        lifetime this server can observe: the media path is peer to peer, so a
+        session whose signaling channel is gone is over as far as the control
+        plane is concerned.
+
+        `status=active` answers "who is in right now", `ended` is history, and
+        the default lists both. `device_id` narrows to one machine.
+        Cursor-paginated, newest first, `next_cursor` absent on the last page.
+      parameters:
+        - name: status
+          in: query
+          required: false
+          description: Defaults to `all`.
+          schema:
+            type: string
+            enum: [active, ended, all]
+        - name: device_id
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: One page of the caller's control sessions, newest first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteSessionList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
   /v1/update:check:
     get:
       tags: [update]
@@ -1842,6 +1894,69 @@ components:
         denial_cooldown_max_seconds:
           type: integer
           description: The live APPROVAL_DENIAL_COOLDOWN_MAX_SECONDS, the ceiling the escalation cannot pass; 0 means uncapped.
+    RemoteSession:
+      type: object
+      description: |
+        One controller holding, or having held, a signaling session against a
+        device. `active` and `duration_seconds` are derived: the first from
+        `ended_at`, the second is the run length so far while the session is
+        still open, so a client never has to pick its own notion of "now".
+      required: [id, session_id, user_id, device_id, client_id, client_ip, started_at, ended_at, end_reason, active, duration_seconds, created_at, updated_at]
+      properties:
+        id:
+          type: integer
+          format: int64
+        session_id:
+          type: string
+          description: The signaling session id the server assigned; unique per session.
+        user_id:
+          type: integer
+          format: int64
+          description: The device's owner. 0 when the device was unbound at the time.
+        device_id:
+          type: string
+        client_id:
+          type: string
+          description: The controller-declared client id, the same value the device access log records.
+        client_ip:
+          type: string
+        started_at:
+          type: string
+          format: date-time
+        ended_at:
+          description: Null while the signaling channel is still up.
+          oneOf:
+            - type: string
+              format: date-time
+            - type: 'null'
+        end_reason:
+          type: string
+          description: Empty while the session is open; `disconnected` when the signaling socket went away, `server_restart` for rows a restart found still open.
+        active:
+          type: boolean
+        duration_seconds:
+          type: integer
+          format: int64
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    RemoteSessionList:
+      type: object
+      description: |
+        Cursor page of control sessions. `next_cursor` is absent on the last page
+        and `total` is deliberately absent, the same as every other paginated
+        list here: the endpoint does not count the whole set per page.
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/RemoteSession'
+        next_cursor:
+          type: string
     UpdateRelease:
       type: object
       description: |

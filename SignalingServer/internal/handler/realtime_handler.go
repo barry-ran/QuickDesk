@@ -48,7 +48,10 @@ type RealtimeHandler struct {
 	metrics      *service.MetricsService
 	access       *service.DeviceAccessService
 	accessPolicy *service.DeviceAccessPolicyService
-	rdb          *redis.Client
+	// remoteSessions is the queryable lifecycle record on top of the access
+	// timeline; nil turns the hooks into no-ops rather than breaking signaling.
+	remoteSessions *service.RemoteSessionService
+	rdb            *redis.Client
 
 	// Per-user fan-out for realtime events.
 	eventsMu sync.RWMutex
@@ -71,19 +74,21 @@ func NewRealtimeHandler(
 	metrics *service.MetricsService,
 	access *service.DeviceAccessService,
 	accessPolicy *service.DeviceAccessPolicyService,
+	remoteSessions *service.RemoteSessionService,
 	rdb *redis.Client,
 ) *RealtimeHandler {
 	h := &RealtimeHandler{
-		tokens:       tokens,
-		bus:          bus,
-		presence:     presence,
-		db:           db,
-		devices:      devices,
-		favorites:    favorites,
-		metrics:      metrics,
-		access:       access,
-		accessPolicy: accessPolicy,
-		rdb:          rdb,
+		tokens:         tokens,
+		bus:            bus,
+		presence:       presence,
+		db:             db,
+		devices:        devices,
+		favorites:      favorites,
+		metrics:        metrics,
+		access:         access,
+		accessPolicy:   accessPolicy,
+		remoteSessions: remoteSessions,
+		rdb:            rdb,
 		upgrader: websocket.Upgrader{
 			ReadBufferSize:  4096,
 			WriteBufferSize: 4096,
@@ -726,6 +731,13 @@ func (h *RealtimeHandler) HandleSignal(c *gin.Context) {
 	// actually connected".
 	if sc.role == service.SignalRoleClient {
 		h.recordSessionStart(c, sc, sessionID)
+		// The close has to be deferred by *this* function: the session lasts as
+		// long as the socket, and this is the function that outlives the
+		// handshake. Deferring inside a helper would close the session as soon as
+		// the helper returned - which is exactly the bug the end-to-end test
+		// caught the first time this was written.
+		defer h.closeRemoteSession(sessionID, sc.deviceID)
+		h.openRemoteSession(c, sc, sessionID)
 	}
 
 	if sc.role == service.SignalRoleHost {
@@ -771,6 +783,87 @@ func (h *RealtimeHandler) HandleSignal(c *gin.Context) {
 func (h *RealtimeHandler) recordSessionStart(c *gin.Context, sc *signalConn, sessionID string) {
 	h.recordAccessEvent(c, sc, sessionID, service.DeviceAccessSessionStarted, "",
 		service.EventDeviceAccessSession)
+}
+
+// openRemoteSession records a controller session that just authenticated, and
+// tells the owner. It is deliberately bookkeeping-only: a failure is logged and
+// the socket carries on, the same way the access-log write does, because
+// signaling must never depend on the control plane keeping notes.
+//
+// The matching close is deferred by HandleSignal rather than here - see the call
+// site - because the session lasts as long as the socket.
+func (h *RealtimeHandler) openRemoteSession(c *gin.Context, sc *signalConn, sessionID string) {
+	if h.remoteSessions == nil {
+		return
+	}
+	row, err := h.remoteSessions.Open(c.Request.Context(), service.OpenRemoteSessionInput{
+		SessionID: sessionID,
+		DeviceID:  sc.deviceID,
+		ClientID:  sc.clientID,
+		ClientIP:  c.ClientIP(),
+	})
+	if err != nil {
+		log.Printf("[realtime/signal] remote session open failed device=%s session=%s: %v",
+			sc.deviceID, sessionID, err)
+		return
+	}
+	h.publishRemoteSessionEvent(c.Request.Context(), service.EventRemoteSessionStarted, row)
+}
+
+// closeRemoteSession stamps the end of a session whose socket has gone away.
+//
+// The signaling channel is the only lifetime this server can observe (the media
+// path is peer to peer), so "the socket ended" is what "the session ended" means
+// here, whatever the peers do with their RTP afterwards.
+func (h *RealtimeHandler) closeRemoteSession(sessionID, deviceID string) {
+	if h.remoteSessions == nil {
+		return
+	}
+	// The request context is already cancelled by now - it is the socket's - so
+	// the closing write gets a fresh one with its own deadline.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	closed, changed, err := h.remoteSessions.Close(ctx, sessionID, models.RemoteSessionEndDisconnected)
+	if err != nil {
+		log.Printf("[realtime/signal] remote session close failed device=%s session=%s: %v",
+			deviceID, sessionID, err)
+		return
+	}
+	if !changed {
+		// Somebody else closed it first (a restart sweep, or a duplicate
+		// teardown) and already published the event. Reporting the end twice
+		// would make an owner's "session ended" count wrong.
+		return
+	}
+	h.publishRemoteSessionEvent(ctx, service.EventRemoteSessionEnded, closed)
+}
+
+// publishRemoteSessionEvent fans one lifecycle transition out to the owner's
+// realtime stream. An unbound device has no owner to tell, so the row is still
+// recorded but nothing is published.
+func (h *RealtimeHandler) publishRemoteSessionEvent(ctx context.Context, eventType string, row *models.RemoteSession) {
+	if h.bus == nil || row == nil || row.UserID == 0 {
+		return
+	}
+	data := map[string]interface{}{
+		"session_id":       row.SessionID,
+		"device_id":        row.DeviceID,
+		"client_id":        row.ClientID,
+		"client_ip":        row.ClientIP,
+		"started_at":       row.StartedAt,
+		"active":           row.Active,
+		"duration_seconds": row.DurationSeconds,
+	}
+	if row.EndedAt != nil {
+		data["ended_at"] = *row.EndedAt
+		data["end_reason"] = row.EndReason
+	}
+	h.bus.Publish(ctx, service.Event{
+		Type:     eventType,
+		UserID:   row.UserID,
+		DeviceID: row.DeviceID,
+		Data:     data,
+	})
 }
 
 // recordAccessEvent appends one row to the device's access timeline and fans

@@ -31,6 +31,8 @@ export * from './OfflineAlertInput';
 export * from './OfflineAlertRule';
 export * from './PlaybackTicket';
 export * from './Problem';
+export * from './RemoteSession';
+export * from './RemoteSessionList';
 export * from './RevokeAccessGrant200Response';
 export * from './SessionRecording';
 export * from './SessionRecordingInput';

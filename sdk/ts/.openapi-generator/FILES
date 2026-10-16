@@ -8,6 +8,7 @@ src/apis/DevicesApi.ts
 src/apis/MeApi.ts
 src/apis/NotificationsApi.ts
 src/apis/RecordingsApi.ts
+src/apis/RemoteSessionsApi.ts
 src/apis/UpdateApi.ts
 src/apis/index.ts
 src/index.ts
@@ -42,6 +43,8 @@ src/models/OfflineAlertInput.ts
 src/models/OfflineAlertRule.ts
 src/models/PlaybackTicket.ts
 src/models/Problem.ts
+src/models/RemoteSession.ts
+src/models/RemoteSessionList.ts
 src/models/RevokeAccessGrant200Response.ts
 src/models/SessionRecording.ts
 src/models/SessionRecordingInput.ts

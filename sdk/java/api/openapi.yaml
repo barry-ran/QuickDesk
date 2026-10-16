@@ -1328,6 +1328,73 @@ paths:
       x-accepts:
       - application/json
       - application/problem+json
+  /v1/me/remote-sessions:
+    get:
+      description: |
+        Who is in the caller's machines right now, and who has been.
+
+        A remote session is one controller holding a signaling session against a
+        device. It is opened when that controller's signaling socket completes
+        authentication and closed when that socket ends, which is the whole
+        lifetime this server can observe: the media path is peer to peer, so a
+        session whose signaling channel is gone is over as far as the control
+        plane is concerned.
+
+        `status=active` answers "who is in right now", `ended` is history, and
+        the default lists both. `device_id` narrows to one machine.
+        Cursor-paginated, newest first, `next_cursor` absent on the last page.
+      operationId: listRemoteSessions
+      parameters:
+      - description: Defaults to `all`.
+        explode: true
+        in: query
+        name: status
+        required: false
+        schema:
+          enum:
+          - active
+          - ended
+          - all
+          type: string
+        style: form
+      - explode: true
+        in: query
+        name: device_id
+        required: false
+        schema:
+          type: string
+        style: form
+      - explode: true
+        in: query
+        name: cursor
+        required: false
+        schema:
+          type: string
+        style: form
+      - explode: true
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RemoteSessionList"
+          description: "One page of the caller's control sessions, newest first."
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+      summary: "The caller's control sessions, open and finished"
+      tags:
+      - remoteSessions
+      x-accepts:
+      - application/json
+      - application/problem+json
   /v1/update:check:
     get:
       description: |
@@ -2460,6 +2527,124 @@ components:
       - denied_sources
       - since
       - total
+    RemoteSession:
+      description: |
+        One controller holding, or having held, a signaling session against a
+        device. `active` and `duration_seconds` are derived: the first from
+        `ended_at`, the second is the run length so far while the session is
+        still open, so a client never has to pick its own notion of "now".
+      example:
+        duration_seconds: 1
+        device_id: device_id
+        end_reason: end_reason
+        session_id: session_id
+        active: true
+        created_at: 2000-01-23T04:56:07.000+00:00
+        client_id: client_id
+        updated_at: 2000-01-23T04:56:07.000+00:00
+        user_id: 6
+        started_at: 2000-01-23T04:56:07.000+00:00
+        client_ip: client_ip
+        id: 0
+        ended_at: 2000-01-23T04:56:07.000+00:00
+      properties:
+        id:
+          format: int64
+          type: integer
+        session_id:
+          description: The signaling session id the server assigned; unique per session.
+          type: string
+        user_id:
+          description: The device's owner. 0 when the device was unbound at the time.
+          format: int64
+          type: integer
+        device_id:
+          type: string
+        client_id:
+          description: "The controller-declared client id, the same value the device\
+            \ access log records."
+          type: string
+        client_ip:
+          type: string
+        started_at:
+          format: date-time
+          type: string
+        ended_at:
+          format: date-time
+          nullable: true
+          type: string
+        end_reason:
+          description: "Empty while the session is open; `disconnected` when the signaling\
+            \ socket went away, `server_restart` for rows a restart found still open."
+          type: string
+        active:
+          type: boolean
+        duration_seconds:
+          format: int64
+          type: integer
+        created_at:
+          format: date-time
+          type: string
+        updated_at:
+          format: date-time
+          type: string
+      required:
+      - active
+      - client_id
+      - client_ip
+      - created_at
+      - device_id
+      - duration_seconds
+      - end_reason
+      - ended_at
+      - id
+      - session_id
+      - started_at
+      - updated_at
+      - user_id
+    RemoteSessionList:
+      description: |
+        Cursor page of control sessions. `next_cursor` is absent on the last page
+        and `total` is deliberately absent, the same as every other paginated
+        list here: the endpoint does not count the whole set per page.
+      example:
+        next_cursor: next_cursor
+        items:
+        - duration_seconds: 1
+          device_id: device_id
+          end_reason: end_reason
+          session_id: session_id
+          active: true
+          created_at: 2000-01-23T04:56:07.000+00:00
+          client_id: client_id
+          updated_at: 2000-01-23T04:56:07.000+00:00
+          user_id: 6
+          started_at: 2000-01-23T04:56:07.000+00:00
+          client_ip: client_ip
+          id: 0
+          ended_at: 2000-01-23T04:56:07.000+00:00
+        - duration_seconds: 1
+          device_id: device_id
+          end_reason: end_reason
+          session_id: session_id
+          active: true
+          created_at: 2000-01-23T04:56:07.000+00:00
+          client_id: client_id
+          updated_at: 2000-01-23T04:56:07.000+00:00
+          user_id: 6
+          started_at: 2000-01-23T04:56:07.000+00:00
+          client_ip: client_ip
+          id: 0
+          ended_at: 2000-01-23T04:56:07.000+00:00
+      properties:
+        items:
+          items:
+            $ref: "#/components/schemas/RemoteSession"
+          type: array
+        next_cursor:
+          type: string
+      required:
+      - items
     UpdateRelease:
       description: |
         One build published to the self-hosted update channel. The artifact

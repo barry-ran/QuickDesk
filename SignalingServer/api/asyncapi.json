@@ -471,6 +471,8 @@
           "device.access_grant.used",
           "device.access_approval.requested",
           "device.access_approval.decided",
+          "remote_session.started",
+          "remote_session.ended",
           "favorite.added",
           "favorite.updated",
           "favorite.removed",

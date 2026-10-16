@@ -85,6 +85,7 @@ func main() {
 			&models.ConnectionHistory{},
 			&models.UserFavorite{},
 			&models.SessionRecording{},
+			&models.RemoteSession{},
 			&models.AdminUser{},
 			&models.AuditLog{},
 			&models.Settings{},
@@ -239,6 +240,16 @@ func main() {
 	}
 	notificationChannelService := service.NewNotificationChannelService(db, notificationDeliveryService)
 	sessionRecordingService := service.NewSessionRecordingService(db)
+	remoteSessionService := service.NewRemoteSessionService(db)
+	// A signaling socket cannot outlive the process that held it, so anything
+	// still open at boot ended with the previous process, without the handler's
+	// deferred close ever running. Stamping those rows is what keeps "who is in
+	// this machine right now" honest across a restart.
+	if closed, err := remoteSessionService.CloseOpenSessions(context.Background(), models.RemoteSessionEndServerRestart); err != nil {
+		log.Printf("Warning: closing remote sessions left open by the previous process failed: %v", err)
+	} else if closed > 0 {
+		log.Printf("Remote sessions: closed %d left open by the previous process", closed)
+	}
 	recordingLifecycle := service.NewRecordingLifecycle(
 		sessionRecordingService,
 		cfg.Recording.Dir,
@@ -448,7 +459,8 @@ func main() {
 		TicketTTL: time.Duration(cfg.Recording.TicketTTLSeconds) * time.Second,
 	}, auditService)
 	hostHandler := handler.NewHostHandler(deviceService, tokenService, presenceService, settingsService, rateLimitService, deviceAccessService, deviceAccessPolicyService, deviceAccessGrantService, deviceAccessApprovalService, bus, cfg)
-	realtimeHandler := handler.NewRealtimeHandler(tokenService, bus, presenceService, db, deviceService, favoriteService, metricsService, deviceAccessService, deviceAccessPolicyService, redisClient)
+	remoteSessionHandler := handler.NewRemoteSessionHandler(remoteSessionService)
+	realtimeHandler := handler.NewRealtimeHandler(tokenService, bus, presenceService, db, deviceService, favoriteService, metricsService, deviceAccessService, deviceAccessPolicyService, remoteSessionService, redisClient)
 
 	adminAuthHandler := handler.NewAdminAuthHandler(adminUserService, tokenService, auditService)
 	adminTOTPHandler := handler.NewAdminTOTPHandler(adminUserService, db)
@@ -600,6 +612,11 @@ func main() {
 
 			me.GET("/connections", deviceHandler.ListConnections)
 			me.POST("/connections", deviceHandler.RecordConnection)
+
+			// Who is in the caller's machines right now (status=active) and who
+			// has been. Deliberately not /sessions, which is the caller's own
+			// login sessions.
+			me.GET("/remote-sessions", remoteSessionHandler.List)
 
 			me.GET("/notification-channels", notificationChannelHandler.List)
 			me.POST("/notification-channels", notificationChannelHandler.Create)

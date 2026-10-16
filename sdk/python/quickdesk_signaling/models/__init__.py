@@ -45,6 +45,8 @@ from quickdesk_signaling.models.offline_alert_input import OfflineAlertInput
 from quickdesk_signaling.models.offline_alert_rule import OfflineAlertRule
 from quickdesk_signaling.models.playback_ticket import PlaybackTicket
 from quickdesk_signaling.models.problem import Problem
+from quickdesk_signaling.models.remote_session import RemoteSession
+from quickdesk_signaling.models.remote_session_list import RemoteSessionList
 from quickdesk_signaling.models.revoke_access_grant200_response import RevokeAccessGrant200Response
 from quickdesk_signaling.models.session_recording import SessionRecording
 from quickdesk_signaling.models.session_recording_input import SessionRecordingInput

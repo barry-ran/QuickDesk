@@ -176,6 +176,7 @@ Class | Method | HTTP request | Description
 *RecordingsApi* | [**update_session_recording**](docs/RecordingsApi.md#update_session_recording) | **PATCH** /v1/me/recordings/{recording_id} | Update a recording&#39;s lifecycle metadata
 *RecordingsApi* | [**upload_recording_artifact**](docs/RecordingsApi.md#upload_recording_artifact) | **POST** /v1/me/recordings/{recording_id}/artifact | Upload a recording&#39;s media bytes
 *RecordingsApi* | [**upload_recording_thumbnail**](docs/RecordingsApi.md#upload_recording_thumbnail) | **POST** /v1/me/recordings/{recording_id}/thumbnail | Upload a recording&#39;s preview image
+*RemoteSessionsApi* | [**list_remote_sessions**](docs/RemoteSessionsApi.md#list_remote_sessions) | **GET** /v1/me/remote-sessions | The caller&#39;s control sessions, open and finished
 *UpdateApi* | [**check_for_update**](docs/UpdateApi.md#check_for_update) | **GET** /v1/update:check | Check the self-hosted update channel for a newer build
 *UpdateApi* | [**download_update_artifact**](docs/UpdateApi.md#download_update_artifact) | **GET** /v1/update-releases/{release_id}/artifact | Download an installer this server hosts itself
 
@@ -213,6 +214,8 @@ Class | Method | HTTP request | Description
  - [OfflineAlertRule](docs/OfflineAlertRule.md)
  - [PlaybackTicket](docs/PlaybackTicket.md)
  - [Problem](docs/Problem.md)
+ - [RemoteSession](docs/RemoteSession.md)
+ - [RemoteSessionList](docs/RemoteSessionList.md)
  - [RevokeAccessGrant200Response](docs/RevokeAccessGrant200Response.md)
  - [SessionRecording](docs/SessionRecording.md)
  - [SessionRecordingInput](docs/SessionRecordingInput.md)

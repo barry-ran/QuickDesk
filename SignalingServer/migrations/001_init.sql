@@ -674,3 +674,31 @@ CREATE TABLE IF NOT EXISTS update_releases (
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_update_release_version
     ON update_releases (channel, platform, arch, version);
+
+-- Control sessions: one controller holding a signaling session against a
+-- device. Opened when that socket authenticates, closed when it ends (or
+-- stamped `server_restart` by the startup sweep if it outlived the process).
+-- The device access log stays the timeline; this is the entity it could not
+-- express, so "who is in this machine right now" has an answer.
+CREATE TABLE IF NOT EXISTS remote_sessions (
+    id          BIGSERIAL     PRIMARY KEY,
+    session_id  VARCHAR(64)   NOT NULL,
+    user_id     BIGINT        NOT NULL DEFAULT 0,
+    device_id   VARCHAR(9)    NOT NULL,
+    client_id   VARCHAR(64)   NOT NULL DEFAULT '',
+    client_ip   VARCHAR(50)   NOT NULL DEFAULT '',
+    started_at  TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+    ended_at    TIMESTAMPTZ,
+    end_reason  VARCHAR(32)   NOT NULL DEFAULT '',
+    created_at  TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+    updated_at  TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_remote_sessions_session_id
+    ON remote_sessions (session_id);
+CREATE INDEX IF NOT EXISTS idx_remote_sessions_user_id
+    ON remote_sessions (user_id);
+CREATE INDEX IF NOT EXISTS idx_remote_sessions_device_id
+    ON remote_sessions (device_id);
+CREATE INDEX IF NOT EXISTS idx_remote_sessions_ended_at
+    ON remote_sessions (ended_at);

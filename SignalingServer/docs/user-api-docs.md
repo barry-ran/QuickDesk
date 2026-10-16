@@ -1199,6 +1199,45 @@ or `linux`; `arch` is `x64`, `arm64` or `universal`. `mandatory` is echoed only
 when an update is actually available, so a client can tell "this update is
 required" from "there is nothing to do".
 
+### 5.3.8 Remote sessions (who is in my machine right now)
+
+A **remote session** is one controller holding a signaling session against a
+device. It is opened when that controller's signaling socket completes
+authentication, and closed when that socket ends - which is the whole lifetime
+this server can observe, because the media path is peer to peer. A session whose
+signaling channel is gone is over as far as the control plane is concerned,
+whatever the peers do with their RTP afterwards.
+
+This is the queryable half of what the device access log already records: the
+log says "someone got in" and never says when they left, so `status=active`
+could not be answered from it.
+
+| Method | Path | Notes |
+|---|---|---|
+| `GET` | `/v1/me/remote-sessions?status=&device_id=&cursor=&limit=` | Owner only. `status` is `active` (who is in right now), `ended` (history) or omitted/`all` for both; anything else is a `400`. Cursor-paginated, newest first, `next_cursor` absent on the last page. |
+
+Each row carries `session_id` (the signaling id the server assigned),
+`device_id`, `client_id` (the controller-declared identifier, the same value the
+access log records, which is what lets the two be read together), `client_ip`,
+`started_at`, and - once it is over - `ended_at` and `end_reason`. Two derived
+fields save every client from inventing its own answer: `active` is
+`ended_at == null`, and `duration_seconds` is the run length so far for a session
+that is still counting and the total once it has stopped.
+
+`end_reason` is `disconnected` in the ordinary case (the controller closed, the
+client crashed, or the network dropped - the server cannot tell those apart and
+does not pretend to) and `server_restart` for rows a restart found still open: a
+signaling socket cannot outlive the process that held it, so those sessions
+really did end, they just ended without the handler's close running. Unbound
+devices are recorded with `user_id: 0` and never appear in an owner's list.
+
+The owner's realtime stream (`/v1/realtime/events`, §6) carries the transitions
+as `remote_session.started` and `remote_session.ended`, both with the same fields
+the list returns, so a client can keep a live view without polling. This is
+deliberately not the `session.*` namespace, which is the caller's own login
+sessions (`GET /v1/me/sessions`, `session.revoked`); those are a different
+resource with a different lifetime.
+
 ### 5.4 Connections (history)
 
 | Method | Path | Body |
@@ -2115,6 +2154,8 @@ include access-code plaintext, `device_secret`, or `refresh_token`.
 | `device.access_grant.used` | a grant just admitted a session | `{grant_id, label, uses, max_uses, client_id}` |
 | `device.access_approval.requested` | a correct code is waiting for the owner's yes/no (§5.3.5) | `{approval_id, client_id, client_ip, source, trigger, expires_at}`, where `trigger` is `always` / `grant` / `untrusted_ip` (never the secret) |
 | `device.access_approval.decided` | owner approved or denied a waiting session | `{approval_id, status: "approved"\|"denied", source, client_id, reason?}` |
+| `remote_session.started` | a controller's signaling socket authenticated against this user's device (§5.3.8) | `{session_id, device_id, client_id, client_ip, started_at, active, duration_seconds}` |
+| `remote_session.ended` | that signaling socket went away | `{session_id, device_id, client_id, client_ip, started_at, ended_at, end_reason, active, duration_seconds}` |
 
 Event envelope (always present):
 

@@ -23,6 +23,7 @@ __all__ = [
     "MeApi",
     "NotificationsApi",
     "RecordingsApi",
+    "RemoteSessionsApi",
     "UpdateApi",
     "ApiResponse",
     "ApiClient",
@@ -64,6 +65,8 @@ __all__ = [
     "OfflineAlertRule",
     "PlaybackTicket",
     "Problem",
+    "RemoteSession",
+    "RemoteSessionList",
     "RevokeAccessGrant200Response",
     "SessionRecording",
     "SessionRecordingInput",
@@ -80,6 +83,7 @@ from quickdesk_signaling.api.devices_api import DevicesApi as DevicesApi
 from quickdesk_signaling.api.me_api import MeApi as MeApi
 from quickdesk_signaling.api.notifications_api import NotificationsApi as NotificationsApi
 from quickdesk_signaling.api.recordings_api import RecordingsApi as RecordingsApi
+from quickdesk_signaling.api.remote_sessions_api import RemoteSessionsApi as RemoteSessionsApi
 from quickdesk_signaling.api.update_api import UpdateApi as UpdateApi
 
 # import ApiClient
@@ -125,6 +129,8 @@ from quickdesk_signaling.models.offline_alert_input import OfflineAlertInput as 
 from quickdesk_signaling.models.offline_alert_rule import OfflineAlertRule as OfflineAlertRule
 from quickdesk_signaling.models.playback_ticket import PlaybackTicket as PlaybackTicket
 from quickdesk_signaling.models.problem import Problem as Problem
+from quickdesk_signaling.models.remote_session import RemoteSession as RemoteSession
+from quickdesk_signaling.models.remote_session_list import RemoteSessionList as RemoteSessionList
 from quickdesk_signaling.models.revoke_access_grant200_response import RevokeAccessGrant200Response as RevokeAccessGrant200Response
 from quickdesk_signaling.models.session_recording import SessionRecording as SessionRecording
 from quickdesk_signaling.models.session_recording_input import SessionRecordingInput as SessionRecordingInput

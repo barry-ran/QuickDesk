@@ -432,6 +432,31 @@ const updateBadVersion = await call('GET',
   { expect: 400 });
 problemShape(updateBadVersion.json, 'GET update:check (invalid version)');
 
+// 14. GET /v1/me/remote-sessions - the control plane's own session records.
+//
+// A read-only run cannot open a controller signaling socket (that needs an
+// access code and a live host), so this pins the documented envelope and the
+// documented failure; a row, when the database has one, additionally has to
+// carry the documented fields and agree with its own `active` flag.
+const remoteSessions = await call('GET', '/v1/me/remote-sessions?limit=5', { token, expect: 200 });
+check(Array.isArray(remoteSessions.json?.items),
+  `GET remote-sessions: items is ${typeof remoteSessions.json?.items}, spec says an array`);
+for (const row of remoteSessions.json?.items ?? []) {
+  for (const name of ['id', 'session_id', 'user_id', 'device_id', 'client_id', 'client_ip', 'started_at', 'ended_at', 'end_reason', 'duration_seconds', 'created_at', 'updated_at']) {
+    field(row, name, undefined, 'GET remote-sessions (row)');
+  }
+  field(row, 'active', 'boolean', 'GET remote-sessions (row)');
+  check(row.active === (row.ended_at === null || row.ended_at === undefined),
+    `GET remote-sessions: active=${row.active} but ended_at=${row.ended_at}`);
+}
+
+const remoteSessionsActive = await call('GET', '/v1/me/remote-sessions?status=active&limit=5', { token, expect: 200 });
+check((remoteSessionsActive.json?.items ?? []).every((row) => row.active === true),
+  'GET remote-sessions?status=active returned a session that is not active');
+
+const remoteSessionsBadStatus = await call('GET', '/v1/me/remote-sessions?status=soon', { token, expect: 400 });
+problemShape(remoteSessionsBadStatus.json, 'GET remote-sessions (unknown status)');
+
 if (smokeDevice) {
   // 6. PUT the rule back unchanged, then restore the prior state exactly.
   const putBody = {

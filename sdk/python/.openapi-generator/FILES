@@ -40,6 +40,9 @@ docs/OfflineAlertRule.md
 docs/PlaybackTicket.md
 docs/Problem.md
 docs/RecordingsApi.md
+docs/RemoteSession.md
+docs/RemoteSessionList.md
+docs/RemoteSessionsApi.md
 docs/RevokeAccessGrant200Response.md
 docs/SessionRecording.md
 docs/SessionRecordingInput.md
@@ -58,6 +61,7 @@ quickdesk_signaling/api/devices_api.py
 quickdesk_signaling/api/me_api.py
 quickdesk_signaling/api/notifications_api.py
 quickdesk_signaling/api/recordings_api.py
+quickdesk_signaling/api/remote_sessions_api.py
 quickdesk_signaling/api/update_api.py
 quickdesk_signaling/api_client.py
 quickdesk_signaling/api_response.py
@@ -95,6 +99,8 @@ quickdesk_signaling/models/offline_alert_input.py
 quickdesk_signaling/models/offline_alert_rule.py
 quickdesk_signaling/models/playback_ticket.py
 quickdesk_signaling/models/problem.py
+quickdesk_signaling/models/remote_session.py
+quickdesk_signaling/models/remote_session_list.py
 quickdesk_signaling/models/revoke_access_grant200_response.py
 quickdesk_signaling/models/session_recording.py
 quickdesk_signaling/models/session_recording_input.py
@@ -146,6 +152,9 @@ test/test_offline_alert_rule.py
 test/test_playback_ticket.py
 test/test_problem.py
 test/test_recordings_api.py
+test/test_remote_session.py
+test/test_remote_session_list.py
+test/test_remote_sessions_api.py
 test/test_revoke_access_grant200_response.py
 test/test_session_recording.py
 test/test_session_recording_input.py

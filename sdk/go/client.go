@@ -59,6 +59,8 @@ type APIClient struct {
 
 	RecordingsAPI *RecordingsAPIService
 
+	RemoteSessionsAPI *RemoteSessionsAPIService
+
 	UpdateAPI *UpdateAPIService
 }
 
@@ -83,6 +85,7 @@ func NewAPIClient(cfg *Configuration) *APIClient {
 	c.MeAPI = (*MeAPIService)(&c.common)
 	c.NotificationsAPI = (*NotificationsAPIService)(&c.common)
 	c.RecordingsAPI = (*RecordingsAPIService)(&c.common)
+	c.RemoteSessionsAPI = (*RemoteSessionsAPIService)(&c.common)
 	c.UpdateAPI = (*UpdateAPIService)(&c.common)
 
 	return c
