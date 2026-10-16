@@ -44,6 +44,7 @@ export default {
     auditLogs: 'Audit Logs',
     systemLogs: 'System Logs',
     webhooks: 'Webhooks',
+    updateReleases: 'Update Channel',
     settings: 'Settings',
     logout: 'Logout'
   },
@@ -380,6 +381,26 @@ export default {
     testSent: 'Test event sent',
     fillRequired: 'Please fill in name, URL and select at least one event',
     confirmDelete: 'Are you sure you want to delete this webhook?'
+  },
+  updateReleases: {
+    title: 'Update Channel',
+    publish: 'Publish Release',
+    channel: 'Channel',
+    allChannels: 'All channels',
+    platform: 'Platform',
+    arch: 'Arch',
+    version: 'Version',
+    downloadUrl: 'Download URL',
+    sha256: 'SHA-256',
+    size: 'Size',
+    notes: 'Release notes',
+    mandatory: 'Mandatory',
+    mandatoryHint: 'Clients older than this release must update',
+    publishedAt: 'Published',
+    requiredTag: 'Required',
+    fillRequired: 'Please fill in version, download URL and SHA-256',
+    confirmDelete: 'Remove this version from the index? Download URLs already handed out keep working.',
+    empty: 'No release published yet'
   },
   batch: {
     selected: '{count} selected',

@@ -44,6 +44,7 @@ export default {
     auditLogs: '审计日志',
     systemLogs: '系统日志',
     webhooks: 'Webhooks',
+    updateReleases: '升级通道',
     settings: '系统设置',
     logout: '退出登录'
   },
@@ -383,6 +384,26 @@ export default {
     testSent: '测试事件已发送',
     fillRequired: '请填写名称、URL，并选择至少一个事件',
     confirmDelete: '确定要删除该 Webhook 吗？'
+  },
+  updateReleases: {
+    title: '升级通道',
+    publish: '发布版本',
+    channel: '通道',
+    allChannels: '全部通道',
+    platform: '平台',
+    arch: '架构',
+    version: '版本',
+    downloadUrl: '下载地址',
+    sha256: 'SHA-256',
+    size: '大小',
+    notes: '发布说明',
+    mandatory: '强制更新',
+    mandatoryHint: '低于该版本且检测到更新的客户端必须升级',
+    publishedAt: '发布时间',
+    requiredTag: '强制',
+    fillRequired: '请填写版本、下载地址与 SHA-256',
+    confirmDelete: '确定要把该版本从索引里移除吗？已经发出的下载地址仍可用。',
+    empty: '还没有发布任何版本'
   },
   batch: {
     selected: '已选择 {count} 项',
