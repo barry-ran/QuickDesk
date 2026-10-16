@@ -127,6 +127,13 @@ type UpdateConfig struct {
 	// is only right for a deployment reached at one name without TLS
 	// termination in front of it.
 	PublicBaseURL string
+	// StaleUploadMinutes is how long an abandoned resumable-upload staging file
+	// (`.part`) may sit before the sweep deletes it. A paused upload older than
+	// this has to restart from zero, which is the visible cost of the window.
+	StaleUploadMinutes int
+	// SweepIntervalMin is how often the cleanup pass runs. 0 disables the worker;
+	// the admin trigger still works.
+	SweepIntervalMin int
 }
 
 type Config struct {
@@ -363,6 +370,10 @@ func Load() *Config {
 	viper.SetDefault("UPDATE_ARTIFACT_DIR", "data/updates")
 	viper.SetDefault("UPDATE_MAX_UPLOAD_MB", 4096)
 	viper.SetDefault("UPDATE_PUBLIC_BASE_URL", "")
+	// Abandoned staging files: the same 6h window the recording store uses, and
+	// an hourly pass. 0 minutes of interval disables the worker.
+	viper.SetDefault("UPDATE_STALE_UPLOAD_MINUTES", 360)
+	viper.SetDefault("UPDATE_SWEEP_INTERVAL_MINUTES", 60)
 
 	// Notification outbox retention. 0 keeps terminal delivery rows forever;
 	// any positive value deletes delivered/failed rows older than the window
@@ -522,9 +533,11 @@ func Load() *Config {
 		SweepIntervalMin: viper.GetInt("RECORDING_SWEEP_INTERVAL_MINUTES"),
 	}
 	cfg.Update = UpdateConfig{
-		ArtifactDir:   viper.GetString("UPDATE_ARTIFACT_DIR"),
-		MaxUploadMB:   viper.GetInt("UPDATE_MAX_UPLOAD_MB"),
-		PublicBaseURL: viper.GetString("UPDATE_PUBLIC_BASE_URL"),
+		ArtifactDir:        viper.GetString("UPDATE_ARTIFACT_DIR"),
+		MaxUploadMB:        viper.GetInt("UPDATE_MAX_UPLOAD_MB"),
+		PublicBaseURL:      viper.GetString("UPDATE_PUBLIC_BASE_URL"),
+		StaleUploadMinutes: viper.GetInt("UPDATE_STALE_UPLOAD_MINUTES"),
+		SweepIntervalMin:   viper.GetInt("UPDATE_SWEEP_INTERVAL_MINUTES"),
 	}
 	cfg.Notification = NotificationConfig{
 		RetentionDays:        viper.GetInt("NOTIFICATION_RETENTION_DAYS"),

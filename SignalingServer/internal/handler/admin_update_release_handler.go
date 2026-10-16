@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -24,6 +25,7 @@ import (
 //
 //	GET    /v1/admin/update-releases
 //	POST   /v1/admin/update-releases
+//	POST   /v1/admin/update-releases:sweep
 //	DELETE /v1/admin/update-releases/:id
 //	POST   /v1/admin/update-releases/:id/artifact
 //	PATCH  /v1/admin/update-releases/:id/artifact
@@ -33,9 +35,10 @@ import (
 // UploadArtifact (one request) and AppendArtifact (one chunk per request) are
 // the optional paths that let this server hold them instead.
 type AdminUpdateReleaseHandler struct {
-	releases *service.UpdateReleaseService
-	audit    *service.AuditService
-	store    UpdateArtifactStore
+	releases  *service.UpdateReleaseService
+	audit     *service.AuditService
+	store     UpdateArtifactStore
+	lifecycle *service.UpdateArtifactLifecycle
 }
 
 // UpdateArtifactStore describes where re-hosted installers land and how large
@@ -57,6 +60,14 @@ func NewAdminUpdateReleaseHandler(
 	store UpdateArtifactStore,
 ) *AdminUpdateReleaseHandler {
 	return &AdminUpdateReleaseHandler{releases: releases, audit: audit, store: store}
+}
+
+// WithLifecycle attaches the cleanup pass. It is optional so a handler can be
+// built without one (tests, or a deployment that manages the directory itself);
+// Sweep then answers 400 instead of panicking.
+func (h *AdminUpdateReleaseHandler) WithLifecycle(l *service.UpdateArtifactLifecycle) *AdminUpdateReleaseHandler {
+	h.lifecycle = l
+	return h
 }
 
 func (h *AdminUpdateReleaseHandler) List(c *gin.Context) {
@@ -153,6 +164,34 @@ func (h *AdminUpdateReleaseHandler) Delete(c *gin.Context) {
 	h.audit.Log(c.Request.Context(), middleware.MustAdminID(c), "",
 		"update_release.delete", "update_release", c.Param("id"), "", c.ClientIP())
 	c.Status(http.StatusNoContent)
+}
+
+// Sweep runs the artifact-store cleanup on demand: abandoned resumable-upload
+// staging files and files no release row claims, in one pass. The periodic
+// runner calls the same code path, so an admin can see what a sweep would do
+// without waiting for a tick.
+func (h *AdminUpdateReleaseHandler) Sweep(c *gin.Context) {
+	if h.lifecycle == nil {
+		ProblemBadRequest(c, ProblemCodeInvalidRequest, "update artifact lifecycle is not configured")
+		return
+	}
+	result, err := h.lifecycle.SweepOnce(c.Request.Context())
+	if err != nil {
+		ProblemInternal(c, err.Error())
+		return
+	}
+	details := fmt.Sprintf("uploads=%d freed_bytes=%d orphans=%d orphan_bytes=%d",
+		result.UploadsReaped, result.BytesReaped, result.OrphansRemoved, result.OrphanBytes)
+	if h.audit != nil {
+		h.audit.Log(c.Request.Context(), middleware.MustAdminID(c), "",
+			"update_release.sweep", "update_release", "", details, c.ClientIP())
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"uploads_reaped":  result.UploadsReaped,
+		"bytes_reaped":    result.BytesReaped,
+		"orphans_removed": result.OrphansRemoved,
+		"orphan_bytes":    result.OrphanBytes,
+	})
 }
 
 // UploadArtifact handles POST /v1/admin/update-releases/:id/artifact.

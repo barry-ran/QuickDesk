@@ -419,12 +419,23 @@ func main() {
 	deviceOfflineAlertHandler := handler.NewDeviceOfflineAlertHandler(deviceService, deviceOfflineAlertService)
 	updateReleaseService := service.NewUpdateReleaseService(db)
 	updateReleaseHandler := handler.NewUpdateReleaseHandler(updateReleaseService)
+	updateArtifactLifecycle := service.NewUpdateArtifactLifecycle(
+		updateReleaseService,
+		cfg.Update.ArtifactDir,
+		time.Duration(cfg.Update.StaleUploadMinutes)*time.Minute,
+		time.Duration(cfg.Update.SweepIntervalMin)*time.Minute,
+	)
+	if cfg.Update.SweepIntervalMin > 0 {
+		go updateArtifactLifecycle.Run(context.Background())
+		log.Printf("Update artifacts: stale_upload_after=%dm sweep_interval=%dm dir=%s",
+			cfg.Update.StaleUploadMinutes, cfg.Update.SweepIntervalMin, cfg.Update.ArtifactDir)
+	}
 	adminUpdateReleaseHandler := handler.NewAdminUpdateReleaseHandler(updateReleaseService, auditService,
 		handler.UpdateArtifactStore{
 			Dir:           cfg.Update.ArtifactDir,
 			MaxBytes:      int64(cfg.Update.MaxUploadMB) * 1024 * 1024,
 			PublicBaseURL: cfg.Update.PublicBaseURL,
-		})
+		}).WithLifecycle(updateArtifactLifecycle)
 	scheduledTaskHandler := handler.NewScheduledTaskHandler(scheduledTaskService)
 	deviceAccessGrantHandler := handler.NewDeviceAccessGrantHandler(deviceService, deviceAccessGrantService, bus)
 	deviceAccessApprovalHandler := handler.NewDeviceAccessApprovalHandler(
@@ -808,6 +819,7 @@ func main() {
 		// Self-hosted update channel index.
 		adminGuarded.GET("/update-releases", adminUpdateReleaseHandler.List)
 		adminGuarded.POST("/update-releases", adminUpdateReleaseHandler.Publish)
+		adminGuarded.POST("/update-releases:sweep", adminUpdateReleaseHandler.Sweep)
 		adminGuarded.POST("/update-releases/:id/artifact", adminUpdateReleaseHandler.UploadArtifact)
 		adminGuarded.PATCH("/update-releases/:id/artifact", adminUpdateReleaseHandler.AppendArtifact)
 		adminGuarded.DELETE("/update-releases/:id", adminUpdateReleaseHandler.Delete)

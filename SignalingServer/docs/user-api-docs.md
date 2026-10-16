@@ -1151,6 +1151,7 @@ super-admin operation.
 | `POST` | `/v1/admin/update-releases` | `{channel?, platform, arch, version, download_url?, sha256, size_bytes?, notes?, mandatory?, published_at?}` | Super-admin. `channel` defaults to `stable`; a non-empty `download_url` must be absolute http(s); `sha256` must be the 64-character hex digest of the artifact. Publishing the same channel/platform/arch/version twice is `409` rather than a silent replacement. Audited as `update_release.publish`. |
 | `POST` | `/v1/admin/update-releases/:id/artifact` | Installer bytes. `multipart/form-data` with a `file` part, or a raw body plus `?filename=`. | Super-admin. Re-hosting: stores the bytes under `UPDATE_ARTIFACT_DIR` and points `download_url` at `GET /v1/update-releases/:id/artifact`. The upload is refused with `400` unless it hashes to the `sha256` the release already advertises, so re-hosting can never swap the bytes clients were told to expect. Audited as `update_release.artifact.upload`. |
 | `PATCH` | `/v1/admin/update-releases/:id/artifact?filename=` | One chunk (raw body). | Super-admin. Resumable upload, same protocol as the recording artifact: `Upload-Offset` (required) is where this chunk starts, `Upload-Length` (optional, `*` while unknown) declares the total, `Upload-Complete: 1` ends the upload when no total was declared and `Upload-Probe: 1` asks where the upload stands without staging bytes. `202` stages the chunk and returns the release row with the authoritative offset in the `Upload-Offset` response header; `200` means this chunk finished the upload and the digest matched; `409` means the offset did not match and that same header carries the offset the server actually holds. The digest is only knowable once the last chunk lands, so a mismatch is reported then (`400`) and the staged bytes are discarded rather than hosted. |
+| `POST` | `/v1/admin/update-releases:sweep` | — | Super-admin. Runs the artifact-store cleanup once and returns `{uploads_reaped, bytes_reaped, orphans_removed, orphan_bytes}`. The periodic worker calls the same pass. Audited as `update_release.sweep`. |
 | `DELETE` | `/v1/admin/update-releases/:id` | — | Super-admin. Deletes the row **and** any stored installer. `404` for an unknown id. Audited as `update_release.delete`. |
 
 A release published without a `download_url` is a **placeholder**: the operator
@@ -1174,6 +1175,22 @@ different name while one is staged is a `400` that names the staged file, so a
 typo cannot silently abandon hundreds of megabytes. A single-shot `POST` to the
 same release starts over from zero, which is what "here is the whole file"
 means.
+
+The store is cleaned by a periodic pass (`UPDATE_SWEEP_INTERVAL_MINUTES`, default
+60; `0` disables the worker but keeps the manual trigger) with two rules, which
+is also what `POST /v1/admin/update-releases:sweep` reports separately:
+
+- a staging file (`<name>.part`) untouched for `UPDATE_STALE_UPLOAD_MINUTES`
+  (default 360) is an upload nobody came back to and is deleted. Age alone
+  decides: a half-finished upload legitimately belongs to a live release. The
+  trade-off is visible to clients — a paused upload older than the window has to
+  restart from zero, which is the operation a resumable upload exists to make
+  cheap;
+- a stored artifact that is old enough (one hour) and that no release row claims
+  is an orphan and is deleted. Every write path removes its own file on failure,
+  so this is the crash-shaped case: a rename that happened, a database write that
+  did not. The row is compared by path, so re-uploading a release under a new
+  name leaves the old file reclaimable.
 
 Versions are dotted numbers (`4.2.5.0`); a leading `v` is accepted and missing
 trailing parts count as zero, so `4.2` and `4.2.0.0` are equal. `channel` is
