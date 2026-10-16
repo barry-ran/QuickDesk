@@ -496,6 +496,10 @@ func main() {
 	}, auditService)
 	hostHandler := handler.NewHostHandler(deviceService, tokenService, presenceService, settingsService, rateLimitService, deviceAccessService, deviceAccessPolicyService, deviceAccessGrantService, deviceAccessApprovalService, bus, cfg)
 	realtimeHandler := handler.NewRealtimeHandler(tokenService, bus, presenceService, db, deviceService, favoriteService, metricsService, deviceAccessService, deviceAccessPolicyService, remoteSessionService, redisClient)
+	// A revoke arrives at whichever instance the operator is talking to, but the
+	// socket lives on the one that admitted it. Subscribe to this instance's own
+	// channel so the other instance can hand the close over.
+	realtimeHandler.StartSessionRevokeBus(context.Background())
 	// realtimeHandler is built first because the session surfaces use it to close
 	// a live socket: a revoke has to reach the connection, not just the row.
 	remoteSessionHandler := handler.NewRemoteSessionHandler(remoteSessionService, sessionRecordingService, deviceAccessService, deviceService, realtimeHandler, auditService)

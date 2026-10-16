@@ -1515,10 +1515,14 @@ paths:
         session stops counting against the access policy's `max_sessions`.
 
         Owner only, with the same concealment as the detail read: a session that
-        belongs to another account is a `404`, not a `403`. A session that exists
-        but is already over - or is live on a different server instance - is a
-        `409`, because the one thing worse than refusing a revoke is reporting a
-        success that did not happen.
+        belongs to another account is a `404`, not a `403`. The socket may be
+        held by a different server instance - the row records which one admitted
+        it - so the request is addressed at that instance and this call waits for
+        the session to actually close: a `200` means it happened, not that a
+        command was merely published. A session that is already over, or whose
+        owning instance did not close it in time, is a `409`, because the one
+        thing worse than refusing a revoke is reporting a success that did not
+        happen.
       operationId: revokeRemoteSession
       parameters:
       - description: The signaling session id from the list.

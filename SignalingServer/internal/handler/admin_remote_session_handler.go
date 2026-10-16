@@ -160,7 +160,7 @@ func (h *AdminRemoteSessionHandler) Revoke(c *gin.Context) {
 		ProblemInternal(c, err.Error())
 		return
 	}
-	if !revokeSessionSocket(c, h.revoker, row) {
+	if !revokeSessionSocket(c, h.sessions, h.revoker, row) {
 		return
 	}
 	if h.audit != nil {

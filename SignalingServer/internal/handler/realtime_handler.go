@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -52,6 +53,10 @@ type RealtimeHandler struct {
 	// timeline; nil turns the hooks into no-ops rather than breaking signaling.
 	remoteSessions *service.RemoteSessionService
 	rdb            *redis.Client
+	// revokeBus addresses a "close this session" command at the instance that
+	// owns the socket. It is built by StartSessionRevokeBus; a nil bus means
+	// revokes only work on this instance.
+	revokeBus *SessionRevokeBus
 
 	// Per-user fan-out for realtime events.
 	eventsMu sync.RWMutex
@@ -923,6 +928,43 @@ func (h *RealtimeHandler) findSessionConn(sessionID string) *signalConn {
 		}
 	}
 	return nil
+}
+
+// InstanceID is this process's identity, the same value session rows record so
+// a revoke can be addressed at the instance that holds the socket.
+func (h *RealtimeHandler) InstanceID() string {
+	return h.presence.InstanceID()
+}
+
+// AskInstanceRevoke asks another instance to close one of its sessions. It only
+// publishes the command: whether the socket actually closed is decided by the
+// caller watching the session row, not by this call returning nil.
+func (h *RealtimeHandler) AskInstanceRevoke(ctx context.Context, instanceID, sessionID string) error {
+	if h.revokeBus == nil {
+		return errors.New("session revoke bus is not running")
+	}
+	return h.revokeBus.Publish(ctx, instanceID, sessionID)
+}
+
+// StartSessionRevokeBus subscribes this instance to its own revoke channel so
+// that a session it holds can be ended by an owner or an administrator talking
+// to a different instance. It returns immediately; the subscription runs in the
+// background until ctx ends.
+func (h *RealtimeHandler) StartSessionRevokeBus(ctx context.Context) {
+	if h.rdb == nil {
+		return
+	}
+	h.revokeBus = NewSessionRevokeBus(h.rdb, h.InstanceID(), func(sessionID string) {
+		if h.RevokeSession(sessionID) {
+			log.Printf("[session-revoke] closed session=%s on request from another instance", sessionID)
+			return
+		}
+		// Nothing to do: the socket is already gone (the row's own teardown or
+		// the orphan sweep covers it). Logged because a command that arrives for
+		// a session this instance does not hold is worth knowing about.
+		log.Printf("[session-revoke] session=%s is not connected here; ignoring the request", sessionID)
+	})
+	go h.revokeBus.Run(ctx)
 }
 
 // publishRemoteSessionEvent fans one lifecycle transition out to the owner's

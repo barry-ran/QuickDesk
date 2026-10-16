@@ -1,9 +1,11 @@
 package handler
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	"quickdesk/signaling/internal/middleware"
 	"quickdesk/signaling/internal/models"
@@ -42,20 +44,38 @@ func NewRemoteSessionHandler(
 	}
 }
 
-// SessionRevoker closes the live signaling socket behind a session id. It is
-// implemented by RealtimeHandler, which is the only thing that knows the socket
-// topology; the read paths depend on the narrow interface so they can be built
-// and tested without a live WebSocket.
+// SessionRevoker closes the live signaling socket behind a session id, wherever
+// in the fleet it happens to live. It is implemented by RealtimeHandler, which
+// is the only thing that knows the socket topology; the read paths depend on the
+// narrow interface so they can be built and tested without a live WebSocket.
 type SessionRevoker interface {
+	// RevokeSession closes the socket on this instance and reports whether it
+	// found one.
 	RevokeSession(sessionID string) bool
+	// AskInstanceRevoke asks the instance that owns a session to close it. It
+	// only publishes the request; the caller confirms by watching the row.
+	AskInstanceRevoke(ctx context.Context, instanceID, sessionID string) error
+	// InstanceID is this process's identity, the value session rows record.
+	InstanceID() string
 }
+
+// sessionRevokeTimeout bounds how long a cross-instance revoke waits for the
+// owning instance to actually close the socket. Generous for one round trip and
+// a socket teardown; short enough that an operator is not left waiting when the
+// owning instance is gone.
+const sessionRevokeTimeout = 3 * time.Second
 
 // revokeSessionSocket is the shared body of the owner and administrator revoke
 // actions. Both callers have already loaded the row and established that the
 // caller may act on it, so the only work left is closing the socket - and
 // saying plainly when there was nothing to close, rather than reporting a
 // success that did not happen.
-func revokeSessionSocket(c *gin.Context, revoker SessionRevoker, row *models.RemoteSession) bool {
+func revokeSessionSocket(
+	c *gin.Context,
+	sessions *service.RemoteSessionService,
+	revoker SessionRevoker,
+	row *models.RemoteSession,
+) bool {
 	if revoker == nil {
 		ProblemInternal(c, "session revocation is not configured")
 		return false
@@ -64,14 +84,53 @@ func revokeSessionSocket(c *gin.Context, revoker SessionRevoker, row *models.Rem
 		ProblemConflict(c, ProblemCodeConflict, "Session is already over")
 		return false
 	}
-	// A live row whose socket is not on this instance cannot be closed from
-	// here. This is the single-instance assumption the session model already
-	// documents; say so instead of returning a no-op success.
-	if !revoker.RevokeSession(row.SessionID) {
+	// This instance first: it is the common case, and it costs nothing.
+	if revoker.RevokeSession(row.SessionID) {
+		return true
+	}
+	// The socket is elsewhere. If the row names its instance, ask that one and
+	// wait for the row to actually close: a published command that nobody acted
+	// on must not come back as a success. Rows with no instance id predate the
+	// column, and a row naming this instance that we could not find means the
+	// socket is already gone - both are "not connected here".
+	if row.InstanceID == "" || row.InstanceID == revoker.InstanceID() {
 		ProblemConflict(c, ProblemCodeConflict, "Session is not connected to this instance")
 		return false
 	}
-	return true
+	if err := revoker.AskInstanceRevoke(c.Request.Context(), row.InstanceID, row.SessionID); err != nil {
+		ProblemInternal(c, err.Error())
+		return false
+	}
+	if waitForSessionEnd(c.Request.Context(), sessions, row.SessionID, sessionRevokeTimeout) {
+		return true
+	}
+	ProblemConflict(c, ProblemCodeConflict,
+		"The instance holding the session did not close it in time")
+	return false
+}
+
+// waitForSessionEnd polls the session row until it is no longer active. The
+// database is the only shared truth about whether a socket closed: the
+// instance that owns it stamps the row in its own teardown, and that stamp is
+// what turns "we asked politely" into "it happened".
+func waitForSessionEnd(ctx context.Context, sessions *service.RemoteSessionService, sessionID string, timeout time.Duration) bool {
+	if sessions == nil {
+		return false
+	}
+	deadline := time.Now().Add(timeout)
+	for {
+		if row, err := sessions.Get(ctx, sessionID); err == nil && !row.Active {
+			return true
+		}
+		if !time.Now().Before(deadline) {
+			return false
+		}
+		select {
+		case <-ctx.Done():
+			return false
+		case <-time.After(50 * time.Millisecond):
+		}
+	}
 }
 
 // maxSessionsPerDetailPage bounds how many joined rows one list page may carry.
@@ -351,7 +410,7 @@ func (h *RemoteSessionHandler) Revoke(c *gin.Context) {
 		ProblemInternal(c, err.Error())
 		return
 	}
-	if !revokeSessionSocket(c, h.revoker, row) {
+	if !revokeSessionSocket(c, h.sessions, h.revoker, row) {
 		return
 	}
 	if h.audit != nil {
