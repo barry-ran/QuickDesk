@@ -54,6 +54,14 @@ if not exist "%publish_path%" (
     goto return
 )
 
+echo [*] verifying Windows publish dependencies...
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%script_path%verify_qd_win_release.ps1" -PackageDir "%publish_path%"
+if not %errorlevel%==0 (
+    echo [!] error: Windows publish dependency verification failed
+    goto return
+)
+echo [*] Windows publish dependency verification passed
+
 echo=
 echo=
 echo ---------------------------------------------------------------

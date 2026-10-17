@@ -59,7 +59,8 @@ set publish_path=%script_path%..\publish\%build_mode%\
 set release_path=%script_path%..\output\x64\%build_mode%
 set src_out_path=%script_path%..\..\src\out\%build_mode%
 set vcvarsall="%ENV_VCVARSALL%"
-set "vcruntime_path=%ENV_VS_INSTALL%\VC\Redist\MSVC\%ENV_VCRUNTIME_VERSION%\x64\Microsoft.VC143.CRT"
+for %%I in ("%ENV_VS_INSTALL%") do set "vs_install_short=%%~sI"
+set "vcruntime_path=%vs_install_short%\VC\Redist\MSVC\%ENV_VCRUNTIME_VERSION%\x64\Microsoft.VC143.CRT"
 
 echo [*] Qt MSVC path: %qt_msvc_path%
 echo [*] publish path: %publish_path%
@@ -276,14 +277,25 @@ echo [*] copying VCRuntime DLLs...
 if not exist "%vcruntime_path%" (
     echo [!] warning: VCRuntime path does not exist: %vcruntime_path%
     echo [!] please check if ENV_VCRUNTIME_VERSION is correct
-) else (
-    copy /Y "%vcruntime_path%\msvcp140.dll" "%publish_path%\" >nul
-    copy /Y "%vcruntime_path%\msvcp140_1.dll" "%publish_path%\" >nul
-    copy /Y "%vcruntime_path%\msvcp140_2.dll" "%publish_path%\" >nul
-    copy /Y "%vcruntime_path%\vcruntime140.dll" "%publish_path%\" >nul
-    copy /Y "%vcruntime_path%\vcruntime140_1.dll" "%publish_path%\" >nul
-    echo [*] VCRuntime DLLs copied
+    goto return
 )
+set "verify_publish_path=%publish_path%"
+if "%verify_publish_path:~-1%"=="\" set "verify_publish_path=%verify_publish_path:~0,-1%"
+copy /Y "%vcruntime_path%\msvcp140.dll" "%publish_path%\" >nul
+copy /Y "%vcruntime_path%\msvcp140_1.dll" "%publish_path%\" >nul
+copy /Y "%vcruntime_path%\msvcp140_2.dll" "%publish_path%\" >nul
+copy /Y "%vcruntime_path%\vcruntime140.dll" "%publish_path%\" >nul
+copy /Y "%vcruntime_path%\vcruntime140_1.dll" "%publish_path%\" >nul
+echo [*] VCRuntime DLLs copied
+
+:: fail the publish if Qt plugins or their runtime dependencies are incomplete
+echo [*] verifying Windows publish dependencies...
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%script_path%verify_qd_win_release.ps1" -PackageDir "%verify_publish_path%"
+if not %errorlevel%==0 (
+    echo [!] error: Windows publish dependency verification failed
+    goto return
+)
+echo [*] Windows publish dependency verification passed
 
 echo=
 echo=
