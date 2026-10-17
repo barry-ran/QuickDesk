@@ -1,7 +1,10 @@
-const { cpSync, existsSync, mkdirSync } = require('fs');
-const { resolve } = require('path');
+import { cpSync, existsSync } from 'node:fs';
+import { resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const root = resolve(__dirname, '..');
+const here = dirname(fileURLToPath(import.meta.url));
+
+const root = resolve(here, '..');
 const dist = resolve(root, 'dist');
 
 if (!existsSync(dist)) {

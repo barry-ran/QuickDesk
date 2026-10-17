@@ -32,6 +32,7 @@ export class FloatingToolbar extends EventTarget {
         this._supportsSAS = false;
         this._supportsLock = false;
         this._supportsFileTransfer = false;
+        this._supportsFileManager = false;
         this._supportsPrivacyScreen = false;
         this._supportsVirtualDisplay = false;
         this._privacyScreenActive = false;
@@ -129,6 +130,7 @@ export class FloatingToolbar extends EventTarget {
             { textKey: 'menu.uploadFile', icon: '📤', action: 'uploadFile', id: 'uploadMenuItem', hidden: true },
             { textKey: 'menu.downloadFile', icon: '📥', action: 'downloadFile', id: 'downloadMenuItem', hidden: true },
             { textKey: 'menu.transfers', icon: '📊', action: 'showTransfers', id: 'transfersMenuItem', hidden: true },
+            { textKey: 'menu.fileManager', icon: '🗂', action: 'fileManager', id: 'fileManagerMenuItem', hidden: true },
             { type: 'separator', id: 'vdSeparator', hidden: true },
             { textKey: 'menu.virtualDisplay', icon: '🖥️', hasSubmenu: true, action: 'submenu-virtualDisplay', id: 'vdMenuItem', hidden: true },
             { type: 'separator' },
@@ -362,6 +364,10 @@ export class FloatingToolbar extends EventTarget {
                 break;
             case 'showTransfers':
                 this.dispatchEvent(new CustomEvent('action', { detail: { action: 'showTransfers' } }));
+                this._hideMenu();
+                break;
+            case 'fileManager':
+                this.dispatchEvent(new CustomEvent('action', { detail: { action: 'fileManager' } }));
                 this._hideMenu();
                 break;
         }
@@ -645,7 +651,8 @@ export class FloatingToolbar extends EventTarget {
         this._menuElement.style.display = 'none';
     }
 
-    setActionSupport(supportsSAS, supportsLock, supportsFileTransfer = false, supportsPrivacyScreen = false, supportsVirtualDisplay = false) {
+    setActionSupport(supportsSAS, supportsLock, supportsFileTransfer = false, supportsPrivacyScreen = false, supportsVirtualDisplay = false, supportsFileManager = false) {
+        this._supportsFileManager = supportsFileManager;
         this._supportsSAS = supportsSAS;
         this._supportsLock = supportsLock;
         this._supportsFileTransfer = supportsFileTransfer;
@@ -676,6 +683,9 @@ export class FloatingToolbar extends EventTarget {
 
         const transfersItem = this._menuElement.querySelector('#transfersMenuItem');
         if (transfersItem) transfersItem.style.display = supportsFileTransfer ? '' : 'none';
+
+        const fileManagerItem = this._menuElement.querySelector('#fileManagerMenuItem');
+        if (fileManagerItem) fileManagerItem.style.display = supportsFileManager ? '' : 'none';
     }
 
     updateTransferCount(count) {
