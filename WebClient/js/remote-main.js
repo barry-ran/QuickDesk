@@ -18,6 +18,9 @@ import { FloatingToolbar } from './ui/floating-toolbar.js';
 import { IceConfigFetcher } from './ice-config-fetcher.js';
 import { t, applyI18n, getLocale, setLocale } from './i18n.js';
 import { userApi } from './api/user-api.js';
+import { SkillBridgeClient } from './protocol/skill-bridge-client.js';
+import { RemoteFileManager } from './files/remote-file-manager.js';
+import { FileManagerPanel } from './files/file-manager-panel.js';
 
 class RemoteDesktopApp {
     constructor() {
@@ -34,6 +37,10 @@ class RemoteDesktopApp {
         this.cursorRenderer = null;
         this.videoStats = null;
         this.floatingToolbar = null;
+        this.skillBridge = null;
+        this.fileManager = null;
+        this.fileManagerPanel = null;
+        this._supportsFileManager = false;
 
         this._receivedStreams = null;
         this._selectedStreamId = null;
@@ -225,6 +232,7 @@ class RemoteDesktopApp {
             if (this.floatingToolbar) {
                 this.floatingToolbar.refreshI18n();
             }
+            this.fileManagerPanel?.refreshI18n();
         });
     }
 
@@ -248,6 +256,7 @@ class RemoteDesktopApp {
             });
 
             this.dcHandler = new DataChannelHandler();
+            this._setupSkillBridge();
 
             this.session.addEventListener('stateChange', (e) => {
                 this._onSessionStateChange(e.detail);
@@ -671,6 +680,9 @@ class RemoteDesktopApp {
             case 'downloadFile':
                 this._onDownloadFromHost();
                 break;
+            case 'fileManager':
+                this._openFileManager();
+                break;
             case 'showTransfers':
                 this._toggleTransferPanel();
                 break;
@@ -747,8 +759,70 @@ class RemoteDesktopApp {
         this.dcHandler.sendExtensionMessage('qd-virtual-display', JSON.stringify(command));
     }
 
+    _setupSkillBridge() {
+        if (this.skillBridge) return;
+        this.skillBridge = new SkillBridgeClient(
+            (data) => this.dcHandler?.sendExtensionMessage('qd-skill-bridge', data),
+            { idPrefix: `web-${this._deviceId || 'device'}` },
+        );
+        this.fileManager = new RemoteFileManager(this.skillBridge);
+    }
+
+    _updateFileManagerSupport() {
+        const requiredTools = [
+            'get_default_directory',
+            'list_directory',
+            'create_directory',
+            'move_file',
+            'trash_path',
+            'read_file_chunk',
+            'write_file_chunk',
+        ];
+        const supported = Boolean(
+            this.skillBridge
+            && requiredTools.every(tool => this.skillBridge.supportsTool(tool))
+        );
+        if (supported === this._supportsFileManager) return;
+        this._supportsFileManager = supported;
+        this.floatingToolbar?.setActionSupport(
+            this.floatingToolbar._supportsSAS,
+            this.floatingToolbar._supportsLock,
+            this.floatingToolbar._supportsFileTransfer,
+            this.floatingToolbar._supportsPrivacyScreen,
+            this.floatingToolbar._supportsVirtualDisplay,
+            supported,
+        );
+        this._log(supported
+            ? t('log.fileManagerReady')
+            : t('log.fileManagerUnavailable'), supported ? 'info' : 'warning');
+        if (!supported) this.fileManagerPanel?.close();
+    }
+
+    _openFileManager() {
+        if (!this._supportsFileManager) return;
+        if (!this.fileManagerPanel) {
+            const container = document.getElementById('remoteContainer');
+            if (!container || !this.fileManager) return;
+            this.fileManagerPanel = new FileManagerPanel(container, this.fileManager);
+        }
+        this.fileManagerPanel.open();
+    }
+
     _onExtensionMessage(msg) {
-        if (!msg || msg.type !== 'qd-virtual-display') return;
+        if (!msg) return;
+        if (msg.type === 'qd-skill-bridge') {
+            let skillMessage;
+            try {
+                skillMessage = JSON.parse(msg.data);
+            } catch {
+                this._log(t('log.skillBridgeInvalidJson'), 'warning');
+                return;
+            }
+            this.skillBridge?.handleMessage(skillMessage);
+            this._updateFileManagerSupport();
+            return;
+        }
+        if (msg.type !== 'qd-virtual-display') return;
 
         let state;
         try {
@@ -1129,6 +1203,7 @@ class RemoteDesktopApp {
     }
 
     _disconnect() {
+        this.skillBridge?.close();
         // Release held input while the event data channel is still writable.
         this._cleanupInputHandlers();
         if (this.session) {
