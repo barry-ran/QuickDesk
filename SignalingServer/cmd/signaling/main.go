@@ -13,6 +13,7 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 	"strings"
+	"time"
 
 	signaling "quickdesk/signaling"
 	"quickdesk/signaling/internal/config"
@@ -72,6 +73,7 @@ func main() {
 			&models.UserDevice{},
 			&models.ConnectionHistory{},
 			&models.UserFavorite{},
+			&models.SessionRecording{},
 			&models.AdminUser{},
 			&models.AuditLog{},
 			&models.Settings{},
@@ -115,6 +117,19 @@ func main() {
 	userService := service.NewUserService(db, service.UserServiceDeps{DeviceUnbinder: deviceRepo})
 	favoriteService := service.NewFavoriteService(db)
 	connectionService := service.NewConnectionService(db)
+	sessionRecordingService := service.NewSessionRecordingService(db)
+	recordingLifecycle := service.NewRecordingLifecycle(
+		sessionRecordingService,
+		cfg.Recording.Dir,
+		time.Duration(cfg.Recording.StaleMinutes)*time.Minute,
+		time.Duration(cfg.Recording.RetentionDays)*24*time.Hour,
+		time.Duration(cfg.Recording.SweepIntervalMin)*time.Minute,
+	)
+	if cfg.Recording.SweepIntervalMin > 0 {
+		go recordingLifecycle.Run(context.Background())
+		log.Printf("Recording lifecycle: stale_after=%dm retention_days=%d sweep_interval=%dm",
+			cfg.Recording.StaleMinutes, cfg.Recording.RetentionDays, cfg.Recording.SweepIntervalMin)
+	}
 	tokenService := service.NewTokenService(redisClient)
 	rateLimitService := service.NewRateLimitService(redisClient)
 	metricsService := service.NewMetricsService()
@@ -169,6 +184,12 @@ func main() {
 	authHandler := handler.NewAuthHandler(userService, tokenService, smsService, bus)
 	meHandler := handler.NewMeHandler(userService, tokenService, smsService, bus)
 	deviceHandler := handler.NewDeviceHandler(deviceService, favoriteService, connectionService, presenceService, bus, db)
+	sessionRecordingHandler := handler.NewSessionRecordingHandler(sessionRecordingService, bus, handler.SessionRecordingStore{
+		Dir:       cfg.Recording.Dir,
+		MaxBytes:  int64(cfg.Recording.MaxUploadMB) * 1024 * 1024,
+		URLSecret: cfg.Recording.URLSecret,
+		TicketTTL: time.Duration(cfg.Recording.TicketTTLSeconds) * time.Second,
+	})
 	hostHandler := handler.NewHostHandler(deviceService, tokenService, presenceService, settingsService, rateLimitService, bus, cfg)
 	realtimeHandler := handler.NewRealtimeHandler(tokenService, bus, presenceService, db, deviceService, favoriteService, metricsService, redisClient)
 
@@ -180,6 +201,9 @@ func main() {
 	adminSettingsHandler := handler.NewAdminSettingsHandler(settingsService, bus, auditService)
 	adminPresetHandler := handler.NewAdminPresetHandler(presetService, auditService)
 	adminAuditHandler := handler.NewAdminAuditHandler(auditService)
+	adminSessionRecordingHandler := handler.NewAdminSessionRecordingHandler(
+		sessionRecordingService, auditService, recordingLifecycle,
+		cfg.Recording.RetentionDays, cfg.Recording.StaleMinutes)
 	adminLogsHandler := handler.NewAdminLogsHandler(
 		auditService,
 		db,
@@ -266,6 +290,17 @@ func main() {
 
 			me.GET("/connections", deviceHandler.ListConnections)
 			me.POST("/connections", deviceHandler.RecordConnection)
+			me.GET("/recordings", sessionRecordingHandler.List)
+			me.POST("/recordings", sessionRecordingHandler.Create)
+			me.GET("/recordings/:id", sessionRecordingHandler.Get)
+			me.PATCH("/recordings/:id", sessionRecordingHandler.Update)
+			me.DELETE("/recordings/:id", sessionRecordingHandler.Delete)
+			me.POST("/recordings/:id/artifact", sessionRecordingHandler.UploadArtifact)
+			me.GET("/recordings/:id/artifact", sessionRecordingHandler.DownloadArtifact)
+			me.POST("/recordings/:id/artifact-ticket", sessionRecordingHandler.CreateArtifactTicket)
+			me.POST("/recordings/:id/thumbnail", sessionRecordingHandler.UploadThumbnail)
+			me.GET("/recordings/:id/thumbnail", sessionRecordingHandler.DownloadThumbnail)
+			me.POST("/recordings/:id/thumbnail-ticket", sessionRecordingHandler.CreateThumbnailTicket)
 
 			me.GET("/favorites", deviceHandler.ListFavorites)
 			me.POST("/favorites", deviceHandler.AddFavorite)
@@ -378,6 +413,17 @@ func main() {
 		adminGuarded.GET("/audit-logs", adminAuditHandler.List)
 		adminGuarded.GET("/audit-logs:export", adminLogsHandler.ExportAudit)
 
+		// Session recordings (cross-user index).
+		adminGuarded.GET("/recordings", adminSessionRecordingHandler.List)
+		adminGuarded.GET("/recordings/:id", adminSessionRecordingHandler.Get)
+		adminGuarded.DELETE("/recordings/:id", adminSessionRecordingHandler.Delete)
+		adminGuarded.GET("/recordings/:id/artifact", adminSessionRecordingHandler.DownloadArtifactAdmin)
+		adminGuarded.GET("/recordings/:id/thumbnail", adminSessionRecordingHandler.DownloadThumbnailAdmin)
+		// Action-style paths keep gin's router from having to disambiguate a
+		// literal segment against the ":id" wildcard above.
+		adminGuarded.GET("/recordings:storage", adminSessionRecordingHandler.Storage)
+		adminGuarded.POST("/recordings:sweep", adminSessionRecordingHandler.Sweep)
+
 		// Raw operational log downloads are intentionally restricted to
 		// super administrators and a fixed server-side file allow-list.
 		adminGuarded.GET("/system/logs", adminLogsHandler.List)
@@ -424,6 +470,17 @@ func main() {
 	// -------------------------------------------------------------------
 	router.GET("/v1/realtime/events", realtimeHandler.HandleEvents)
 	router.GET("/v1/realtime/signal", realtimeHandler.HandleSignal)
+
+	// -------------------------------------------------------------------
+	// Recording playback/download — also outside the v1 group. A top-level
+	// browser navigation (<video src>, window.open, <a download>) carries
+	// neither an X-API-Key nor an Origin header, so APIKeyAuth would reject it
+	// before any handler ran. The signed, short-lived ticket in ?t= is the
+	// credential instead; the Bearer-authenticated route under /v1/me stays
+	// available for API clients.
+	// -------------------------------------------------------------------
+	router.GET("/v1/recordings/:id/artifact", sessionRecordingHandler.DownloadArtifactByTicket)
+	router.GET("/v1/recordings/:id/thumbnail", sessionRecordingHandler.DownloadThumbnailByTicket)
 
 	// -------------------------------------------------------------------
 	// Admin web single-page app (served from embedded FS).

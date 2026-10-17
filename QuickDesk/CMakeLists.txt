@@ -15,6 +15,7 @@ set(MANAGER_SOURCES
     src/manager/TurnServerManager.cpp
     src/manager/HostManager.cpp
     src/manager/ClientManager.cpp
+    src/manager/DeviceRecorder.cpp
     src/manager/SharedMemoryManager.cpp
     src/manager/RemoteDeviceManager.cpp
     src/manager/PresetManager.cpp

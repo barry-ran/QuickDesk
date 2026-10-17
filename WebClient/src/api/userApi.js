@@ -393,6 +393,39 @@ class UserApi {
     })
   }
 
+  // ========================================================================
+  // Session recordings — user-owned index of recorded remote sessions.
+  // The control plane owns discovery/ownership/lifecycle metadata; media
+  // bytes are produced by the recording engine, so playback/download use
+  // the row's artifact_url (see resolveMediaUrl in RecordingsPage.vue).
+  // ========================================================================
+
+  fetchRecordings(cursor) {
+    const q = cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''
+    return this._req('GET', `/v1/me/recordings${q}`)
+  }
+
+  fetchRecording(id) {
+    return this._req('GET', `/v1/me/recordings/${encodeURIComponent(id)}`)
+  }
+
+  deleteRecording(id) {
+    return this._req('DELETE', `/v1/me/recordings/${encodeURIComponent(id)}`)
+  }
+
+  // Playback/download happen through a plain browser navigation (<video src>,
+  // window.open, <a download>) which cannot carry the Bearer token. The server
+  // mints a short-lived signed URL for exactly that case.
+  createRecordingTicket(id) {
+    return this._req('POST', `/v1/me/recordings/${encodeURIComponent(id)}/artifact-ticket`)
+  }
+
+  // The preview is rendered by an <img> tag, which has the same header problem
+  // as playback, so it gets its own kind-scoped ticket.
+  createRecordingThumbnailTicket(id) {
+    return this._req('POST', `/v1/me/recordings/${encodeURIComponent(id)}/thumbnail-ticket`)
+  }
+
   fetchFavorites() { return this._req('GET', '/v1/me/favorites') }
 
   addFavorite(deviceId, name, password) {

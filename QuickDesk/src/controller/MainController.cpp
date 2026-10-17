@@ -73,6 +73,11 @@ MainController::MainController(QObject* parent)
     m_cloudDeviceManager = std::make_unique<CloudDeviceManager>(
         m_serverManager.get(), m_authManager.get(), m_hostManager.get(), this);
 
+    // Control-side session recorder. It reads the same decoded frames the
+    // remote view renders and uploads the result through the authenticated API.
+    m_deviceRecorder = std::make_unique<DeviceRecorder>(
+        m_clientManager->sharedMemoryManager(), m_authManager.get(), m_serverManager.get(), this);
+
     // Create SkillHostManager and wire it to HostManager (host-side skill bridge)
     m_skillHostManager = std::make_unique<SkillHostManager>(this);
     m_skillHostManager->setHostManager(m_hostManager.get());
@@ -535,6 +540,11 @@ HostManager* MainController::hostManager() const
 ClientManager* MainController::clientManager() const
 {
     return m_clientManager.get();
+}
+
+DeviceRecorder* MainController::deviceRecorder() const
+{
+    return m_deviceRecorder.get();
 }
 
 TurnServerManager* MainController::turnServerManager() const
