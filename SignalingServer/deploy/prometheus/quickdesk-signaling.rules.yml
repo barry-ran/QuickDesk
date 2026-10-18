@@ -1,0 +1,71 @@
+# Alert rules for the signaling server's own /metrics endpoint.
+#
+# Scrape it with METRICS_TOKEN set (see docs/user-api-docs.md). Every metric
+# named here is exported by internal/handler/metrics_handler.go, and
+# TestAlertRulesReferenceExportedMetrics fails the build if that stops being
+# true - a rule for a metric nobody emits is worse than no rule, because it
+# looks like coverage.
+#
+# Counters here reset to zero when the process restarts. That is normal and
+# expected: Prometheus handles counter resets inside rate(), which is why every
+# rule below is a rate, a ratio or a gauge, and none of them is "counter > N".
+groups:
+  - name: quickdesk-signaling
+    rules:
+      - alert: QuickDeskSignalingServerErrorRatio
+        # The share of API requests failing, not the absolute count: an absolute
+        # threshold means something different at 10 requests/s and at 10k.
+        expr: |
+          sum(rate(quickdesk_signaling_http_requests_by_route_total{status=~"5.."}[5m]))
+            /
+          clamp_min(sum(rate(quickdesk_signaling_http_requests_by_route_total[5m])), 1e-9)
+            > 0.05
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: Signaling API error ratio above 5%
+          description: >-
+            More than 5% of /v1 requests have answered 5xx over the last 5
+            minutes, sustained for 10 minutes.
+      - alert: QuickDeskSignalingRouteErrorBurst
+        # Which endpoint, not just "something is wrong": the route label is the
+        # matched pattern, so this stays a handful of series.
+        expr: |
+          sum by (route) (
+            rate(quickdesk_signaling_http_requests_by_route_total{status=~"5.."}[5m])
+          ) > 0.2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Signaling route {{ $labels.route }} is returning server errors
+          description: >-
+            {{ $labels.route }} has answered 5xx at more than 0.2 requests per
+            second for 5 minutes.
+      - alert: QuickDeskSignalingGoroutineGrowth
+        # A leak shows up here before it shows up as memory pressure. The
+        # threshold is deliberately generous: this fires on a runaway, not on a
+        # busy machine.
+        expr: quickdesk_signaling_go_goroutines > 5000
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: Signaling server goroutine count above 5000
+          description: >-
+            quickdesk_signaling_go_goroutines has been above 5000 for 15
+            minutes, which usually means something is not releasing
+            connections.
+      - alert: QuickDeskSignalingNoSignalingHosts
+        # Every host disconnected: either the fleet is down or the presence
+        # bookkeeping is broken. Both are worth waking someone for.
+        expr: quickdesk_signaling_signal_hosts == 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: No signaling hosts are connected
+          description: >-
+            quickdesk_signaling_signal_hosts has been 0 for 10 minutes, so no
+            controlled machine is reachable for a new session.

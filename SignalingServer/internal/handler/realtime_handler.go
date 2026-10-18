@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -39,14 +40,26 @@ import (
 type RealtimeHandler struct {
 	upgrader websocket.Upgrader
 
-	tokens    *service.TokenService
-	bus       *service.EventBus
-	presence  *service.PresenceService
-	db        *gorm.DB
-	devices   *service.DeviceService
-	favorites *service.FavoriteService
-	metrics   *service.MetricsService
-	rdb       *redis.Client
+	tokens       *service.TokenService
+	bus          *service.EventBus
+	presence     *service.PresenceService
+	db           *gorm.DB
+	devices      *service.DeviceService
+	favorites    *service.FavoriteService
+	metrics      *service.MetricsService
+	access       *service.DeviceAccessService
+	accessPolicy *service.DeviceAccessPolicyService
+	// remoteSessions is the queryable lifecycle record on top of the access
+	// timeline; nil turns the hooks into no-ops rather than breaking signaling.
+	remoteSessions *service.RemoteSessionService
+	rdb            *redis.Client
+	// revokeBus addresses a "close this session" command at the instance that
+	// owns the socket. It is built by StartSessionRevokeBus; a nil bus means
+	// revokes only work on this instance.
+	revokeBus *SessionRevokeBus
+	// revokeCooldown refuses a controller that was just thrown out for a short
+	// window, so the kick is not cosmetic. Nil (or a zero TTL) disables it.
+	revokeCooldown *service.RevokeCooldown
 
 	// Per-user fan-out for realtime events.
 	eventsMu sync.RWMutex
@@ -67,17 +80,23 @@ func NewRealtimeHandler(
 	devices *service.DeviceService,
 	favorites *service.FavoriteService,
 	metrics *service.MetricsService,
+	access *service.DeviceAccessService,
+	accessPolicy *service.DeviceAccessPolicyService,
+	remoteSessions *service.RemoteSessionService,
 	rdb *redis.Client,
 ) *RealtimeHandler {
 	h := &RealtimeHandler{
-		tokens:    tokens,
-		bus:       bus,
-		presence:  presence,
-		db:        db,
-		devices:   devices,
-		favorites: favorites,
-		metrics:   metrics,
-		rdb:       rdb,
+		tokens:         tokens,
+		bus:            bus,
+		presence:       presence,
+		db:             db,
+		devices:        devices,
+		favorites:      favorites,
+		metrics:        metrics,
+		access:         access,
+		accessPolicy:   accessPolicy,
+		remoteSessions: remoteSessions,
+		rdb:            rdb,
 		upgrader: websocket.Upgrader{
 			ReadBufferSize:  4096,
 			WriteBufferSize: 4096,
@@ -568,9 +587,45 @@ type signalConn struct {
 	role     service.SignalRole
 	deviceID string
 	clientID string // empty for host role
-	out      chan []byte
-	done     chan struct{}
-	once     sync.Once
+	// sessionID is the signaling session id this socket was admitted under. It
+	// is what ties the socket back to the remote_sessions row, so a revoke by
+	// session id can find the connection that owns it.
+	sessionID string
+	out       chan []byte
+	done      chan struct{}
+	once      sync.Once
+	// endReason is why this socket is being closed, when the cause is not the
+	// socket simply going away. It is written once (first writer wins) and read
+	// by the deferred close that stamps the session row.
+	reasonMu  sync.Mutex
+	endReason string
+}
+
+// markEndReason records why a socket is being closed, if nobody raced in first.
+// A deliberate revoke loses to a disconnect that already happened: labelling a
+// session "revoked" when the network dropped it a moment earlier would be a lie
+// in the audit trail.
+func (sc *signalConn) markEndReason(reason string) {
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		return
+	}
+	sc.reasonMu.Lock()
+	if sc.endReason == "" {
+		sc.endReason = reason
+	}
+	sc.reasonMu.Unlock()
+}
+
+// endReasonOrDefault returns the recorded reason, or def when the socket ended
+// without one being set.
+func (sc *signalConn) endReasonOrDefault(def string) string {
+	sc.reasonMu.Lock()
+	defer sc.reasonMu.Unlock()
+	if sc.endReason == "" {
+		return def
+	}
+	return sc.endReason
 }
 
 // HandleSignal serves GET /v1/realtime/signal.
@@ -652,10 +707,11 @@ func (h *RealtimeHandler) HandleSignal(c *gin.Context) {
 	})
 
 	sc := &signalConn{
-		h:        h,
-		conn:     conn,
-		role:     payload.Role,
-		deviceID: payload.DeviceID,
+		h:         h,
+		conn:      conn,
+		role:      payload.Role,
+		deviceID:  payload.DeviceID,
+		sessionID: sessionID,
 		// R7: prefer the client_id declared by the caller in the auth
 		// frame (matches §2.26 "client_id 在首帧 auth 时声明"). Fall
 		// back to whatever the token was minted with (Qt today doesn't
@@ -667,6 +723,55 @@ func (h *RealtimeHandler) HandleSignal(c *gin.Context) {
 		out:      make(chan []byte, 64),
 		done:     make(chan struct{}),
 	}
+
+	// "You were just thrown out of this machine." Checked before auth_ok for the
+	// same reason as the cap: a controller must not be told the session is up
+	// and then dropped. The access code is still valid - that is exactly the
+	// hole this closes - so the refusal is keyed by the device and the observed
+	// source, the identity the approval cooldown also uses.
+	if sc.role == service.SignalRoleClient && h.revokeCooldown != nil && h.revokeCooldown.TTL() > 0 {
+		armed, err := h.revokeCooldown.Armed(c.Request.Context(), sc.deviceID, c.ClientIP())
+		if err != nil {
+			log.Printf("[realtime/signal] revoke cooldown lookup failed device=%s: %v", sc.deviceID, err)
+		} else if armed {
+			remaining, _ := h.revokeCooldown.Remaining(c.Request.Context(), sc.deviceID, c.ClientIP())
+			reason := fmt.Sprintf("this controller was removed from the device; try again in %ds",
+				int(remaining.Seconds())+1)
+			log.Printf("[realtime/signal] session revoked recently device=%s client_id=%s session=%s retry_after=%s",
+				sc.deviceID, sc.clientID, sessionID, remaining)
+			h.recordAccessEvent(c, sc, "", service.DeviceAccessDeniedRevoked, reason, service.EventDeviceAccessDenied)
+			writeSignalError(conn, "SESSION_REVOKED", reason)
+			_ = conn.Close()
+			return
+		}
+	}
+
+	// Per-device concurrency cap from the access policy, checked *before*
+	// auth_ok: the client must never be told the session is up and then be
+	// dropped a microsecond later. The access code was already accepted (the
+	// verify step wrote a `granted` row), so a refusal here is recorded as
+	// `denied_session_limit`: the timeline then reads "code ok, but the
+	// device already had as many controllers as allowed".
+	if sc.role == service.SignalRoleClient && h.accessPolicy != nil {
+		policy, err := h.accessPolicy.Get(c.Request.Context(), sc.deviceID)
+		if err != nil {
+			log.Printf("[realtime/signal] policy lookup failed device=%s: %v", sc.deviceID, err)
+		} else if policy != nil {
+			active := h.activeClientCount(sc.deviceID)
+			if service.SessionLimitReached(policy.MaxSessions, active) {
+				reason := fmt.Sprintf("device allows at most %d concurrent controller(s)",
+					policy.MaxSessions)
+				log.Printf("[realtime/signal] session limit reached device=%s max=%d active=%d client_id=%s session=%s",
+					sc.deviceID, policy.MaxSessions, active, sc.clientID, sessionID)
+				h.recordAccessEvent(c, sc, "", service.DeviceAccessDeniedSessionLimit,
+					reason, service.EventDeviceAccessDenied)
+				writeSignalError(conn, "SESSION_LIMIT_REACHED", reason)
+				_ = conn.Close()
+				return
+			}
+		}
+	}
+
 	log.Printf("[realtime/signal] auth_ok role=%s device=%s client_id=%s session=%s remote=%s",
 		sc.role, sc.deviceID, sc.clientID, sessionID, c.ClientIP())
 	if err := conn.WriteJSON(map[string]interface{}{
@@ -685,6 +790,23 @@ func (h *RealtimeHandler) HandleSignal(c *gin.Context) {
 		return
 	}
 	defer h.unregisterSignalConn(sc)
+
+	// Reaching auth_ok means the controller presented a valid signal token,
+	// i.e. it already passed an access-code check: this is the moment an
+	// attempt turns into a real control session. Record it on the device's
+	// access timeline so the owner can tell "someone tried" from "someone
+	// actually connected".
+	if sc.role == service.SignalRoleClient {
+		h.recordSessionStart(c, sc, sessionID)
+		// The close has to be deferred by *this* function: the session lasts as
+		// long as the socket, and this is the function that outlives the
+		// handshake. Deferring inside a helper would close the session as soon as
+		// the helper returned - which is exactly the bug the end-to-end test
+		// caught the first time this was written. Passing the connection (not a
+		// bare id) is what lets a deliberate revoke record its own end_reason.
+		defer h.closeRemoteSession(sc)
+		h.openRemoteSession(c, sc, sessionID)
+	}
 
 	if sc.role == service.SignalRoleHost {
 		if err := h.presence.MarkWSConnected(c.Request.Context(), sc.deviceID); err == nil {
@@ -722,6 +844,246 @@ func (h *RealtimeHandler) HandleSignal(c *gin.Context) {
 
 	go sc.writer()
 	sc.reader()
+}
+
+// recordSessionStart appends a session_started row to the device's access
+// timeline and fans it out to the owner.
+func (h *RealtimeHandler) recordSessionStart(c *gin.Context, sc *signalConn, sessionID string) {
+	h.recordAccessEvent(c, sc, sessionID, service.DeviceAccessSessionStarted, "",
+		service.EventDeviceAccessSession)
+}
+
+// openRemoteSession records a controller session that just authenticated, and
+// tells the owner. It is deliberately bookkeeping-only: a failure is logged and
+// the socket carries on, the same way the access-log write does, because
+// signaling must never depend on the control plane keeping notes.
+//
+// The matching close is deferred by HandleSignal rather than here - see the call
+// site - because the session lasts as long as the socket.
+func (h *RealtimeHandler) openRemoteSession(c *gin.Context, sc *signalConn, sessionID string) {
+	if h.remoteSessions == nil {
+		return
+	}
+	row, err := h.remoteSessions.Open(c.Request.Context(), service.OpenRemoteSessionInput{
+		SessionID: sessionID,
+		DeviceID:  sc.deviceID,
+		ClientID:  sc.clientID,
+		ClientIP:  c.ClientIP(),
+		// Recording the instance is what makes the startup sweep safe in a
+		// multi-instance deployment: a restart must not stamp another live
+		// instance's sessions as finished.
+		InstanceID: h.presence.InstanceID(),
+	})
+	if err != nil {
+		log.Printf("[realtime/signal] remote session open failed device=%s session=%s: %v",
+			sc.deviceID, sessionID, err)
+		return
+	}
+	h.publishRemoteSessionEvent(c.Request.Context(), service.EventRemoteSessionStarted, row)
+}
+
+// closeRemoteSession stamps the end of a session whose socket has gone away.
+//
+// The signaling channel is the only lifetime this server can observe (the media
+// path is peer to peer), so "the socket ended" is what "the session ended" means
+// here, whatever the peers do with their RTP afterwards.
+func (h *RealtimeHandler) closeRemoteSession(sc *signalConn) {
+	if h.remoteSessions == nil || sc == nil {
+		return
+	}
+	// The request context is already cancelled by now - it is the socket's - so
+	// the closing write gets a fresh one with its own deadline.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	// A deliberate revoke marks the connection before closing it; an ordinary
+	// disconnect leaves no mark and is stamped as such.
+	reason := sc.endReasonOrDefault(models.RemoteSessionEndDisconnected)
+	closed, changed, err := h.remoteSessions.Close(ctx, sc.sessionID, reason)
+	if err != nil {
+		log.Printf("[realtime/signal] remote session close failed device=%s session=%s: %v",
+			sc.deviceID, sc.sessionID, err)
+		return
+	}
+	if !changed {
+		// Somebody else closed it first (a restart sweep, or a duplicate
+		// teardown) and already published the event. Reporting the end twice
+		// would make an owner's "session ended" count wrong.
+		return
+	}
+	// A revoked session was ended on purpose, and the access code that admitted
+	// it is still valid - so open the window that keeps the same source out for a
+	// while. Armed here rather than by the caller because this is the moment the
+	// row is actually stamped, i.e. the only place that knows the revoke really
+	// happened. `server_restart` and ordinary disconnects do not arm it.
+	if closed.EndReason == models.RemoteSessionEndRevoked && h.revokeCooldown != nil {
+		if err := h.revokeCooldown.Arm(ctx, closed.DeviceID, closed.ClientIP); err != nil {
+			log.Printf("[realtime/signal] arming the revoke cooldown failed device=%s session=%s: %v",
+				closed.DeviceID, closed.SessionID, err)
+		}
+	}
+	h.publishRemoteSessionEvent(ctx, service.EventRemoteSessionEnded, closed)
+}
+
+// RevokeSession closes the live signaling socket behind one session id, if this
+// instance holds it, and returns whether it found one.
+//
+// The topology map is the one source of truth for "which sockets are live", so
+// the lookup walks it rather than keeping a second index that could drift. A
+// session that is not connected here - already over, or held by another
+// instance - reports false, and the caller answers honestly instead of
+// pretending something was closed.
+func (h *RealtimeHandler) RevokeSession(sessionID string) bool {
+	target := h.findSessionConn(sessionID)
+	if target == nil {
+		return false
+	}
+	// Mark before closing: the reader goroutine's deferred close reads the
+	// reason, and the socket will not be torn down until close() runs.
+	target.markEndReason(models.RemoteSessionEndRevoked)
+	target.close()
+	return true
+}
+
+// findSessionConn returns the live controller connection for a session id, or
+// nil. The topology map is the one source of truth for "which sockets are
+// live", so the lookup walks it rather than keeping a second index that could
+// drift; the walk is per device, not per session, because that is how the map is
+// already shaped.
+func (h *RealtimeHandler) findSessionConn(sessionID string) *signalConn {
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" {
+		return nil
+	}
+	h.signalMu.RLock()
+	defer h.signalMu.RUnlock()
+	for _, clients := range h.signalClient {
+		for _, sc := range clients {
+			if sc.sessionID == sessionID {
+				return sc
+			}
+		}
+	}
+	return nil
+}
+
+// InstanceID is this process's identity, the same value session rows record so
+// a revoke can be addressed at the instance that holds the socket.
+func (h *RealtimeHandler) InstanceID() string {
+	return h.presence.InstanceID()
+}
+
+// WithRevokeCooldown turns on the "you were just kicked out" window. It is a
+// setter rather than another constructor argument because only this handler
+// needs it, and a zero ttl leaves the behaviour exactly as it was.
+func (h *RealtimeHandler) WithRevokeCooldown(ttl time.Duration) *RealtimeHandler {
+	h.revokeCooldown = service.NewRevokeCooldown(h.rdb, ttl)
+	return h
+}
+
+// AskInstanceRevoke asks another instance to close one of its sessions. It only
+// publishes the command: whether the socket actually closed is decided by the
+// caller watching the session row, not by this call returning nil.
+func (h *RealtimeHandler) AskInstanceRevoke(ctx context.Context, instanceID, sessionID string) error {
+	if h.revokeBus == nil {
+		return errors.New("session revoke bus is not running")
+	}
+	return h.revokeBus.Publish(ctx, instanceID, sessionID)
+}
+
+// StartSessionRevokeBus subscribes this instance to its own revoke channel so
+// that a session it holds can be ended by an owner or an administrator talking
+// to a different instance. It returns immediately; the subscription runs in the
+// background until ctx ends.
+func (h *RealtimeHandler) StartSessionRevokeBus(ctx context.Context) {
+	if h.rdb == nil {
+		return
+	}
+	h.revokeBus = NewSessionRevokeBus(h.rdb, h.InstanceID(), func(sessionID string) {
+		if h.RevokeSession(sessionID) {
+			log.Printf("[session-revoke] closed session=%s on request from another instance", sessionID)
+			return
+		}
+		// Nothing to do: the socket is already gone (the row's own teardown or
+		// the orphan sweep covers it). Logged because a command that arrives for
+		// a session this instance does not hold is worth knowing about.
+		log.Printf("[session-revoke] session=%s is not connected here; ignoring the request", sessionID)
+	})
+	go h.revokeBus.Run(ctx)
+}
+
+// publishRemoteSessionEvent fans one lifecycle transition out to the owner's
+// realtime stream. An unbound device has no owner to tell, so the row is still
+// recorded but nothing is published.
+func (h *RealtimeHandler) publishRemoteSessionEvent(ctx context.Context, eventType string, row *models.RemoteSession) {
+	if h.bus == nil || row == nil || row.UserID == 0 {
+		return
+	}
+	data := map[string]interface{}{
+		"session_id":       row.SessionID,
+		"device_id":        row.DeviceID,
+		"client_id":        row.ClientID,
+		"client_ip":        row.ClientIP,
+		"started_at":       row.StartedAt,
+		"active":           row.Active,
+		"duration_seconds": row.DurationSeconds,
+	}
+	if row.EndedAt != nil {
+		data["ended_at"] = *row.EndedAt
+		data["end_reason"] = row.EndReason
+	}
+	h.bus.Publish(ctx, service.Event{
+		Type:     eventType,
+		UserID:   row.UserID,
+		DeviceID: row.DeviceID,
+		Data:     data,
+	})
+}
+
+// recordAccessEvent appends one row to the device's access timeline and fans
+// it out to the owner. Audit writes must never break the signaling
+// handshake, so failures are logged and swallowed.
+func (h *RealtimeHandler) recordAccessEvent(c *gin.Context, sc *signalConn, sessionID, result, reason, eventType string) {
+	if h.access == nil {
+		return
+	}
+	row, err := h.access.Record(c.Request.Context(), service.RecordDeviceAccessInput{
+		DeviceID:  sc.deviceID,
+		ClientID:  sc.clientID,
+		SessionID: sessionID,
+		IP:        c.ClientIP(),
+		Result:    result,
+		Reason:    reason,
+	})
+	if err != nil {
+		log.Printf("[device-access] record %s device=%s failed: %v", result, sc.deviceID, err)
+		return
+	}
+	if row.OwnerID == 0 || h.bus == nil {
+		return
+	}
+	h.bus.Publish(c.Request.Context(), service.Event{
+		Type:     eventType,
+		UserID:   row.OwnerID,
+		DeviceID: sc.deviceID,
+		Data: map[string]interface{}{
+			"device_id":  sc.deviceID,
+			"client_id":  row.ClientID,
+			"session_id": sessionID,
+			"ip":         row.IP,
+			"result":     row.Result,
+			"reason":     row.Reason,
+			"log_id":     row.ID,
+		},
+	})
+}
+
+// activeClientCount returns how many controllers currently hold a signaling
+// socket for the device. The host socket is not counted: the cap is about
+// how many people may watch/control the machine at once.
+func (h *RealtimeHandler) activeClientCount(deviceID string) int {
+	h.signalMu.RLock()
+	defer h.signalMu.RUnlock()
+	return len(h.signalClient[deviceID])
 }
 
 // registerSignalConn places sc into the topology maps. For host role,

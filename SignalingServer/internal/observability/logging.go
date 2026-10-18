@@ -45,9 +45,48 @@ func Configure(cfg Config) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	log.SetOutput(io.MultiWriter(os.Stdout, writer))
+	log.SetOutput(&sinkFanout{primary: io.MultiWriter(os.Stdout, writer)})
 	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds | log.LUTC)
 	return path, nil
+}
+
+var (
+	sinksMu sync.RWMutex
+	sinks   []io.Writer
+)
+
+// AttachLogSink adds a writer that receives a copy of every subsequent log
+// line, which is how a running instance ships its own log to a shared store.
+//
+// Attaching happens after Configure because the sink needs the database, and
+// the database is opened after logging is configured. Sink errors are swallowed
+// on purpose: a sink is a *copy* of a line that is already on stdout and in the
+// rotating file, so a broken store must degrade to "aggregation stopped", never
+// to "the server stopped logging" or "the request blocked".
+func AttachLogSink(w io.Writer) {
+	if w == nil {
+		return
+	}
+	sinksMu.Lock()
+	defer sinksMu.Unlock()
+	sinks = append(sinks, w)
+}
+
+// sinkFanout writes to the primary destination (stdout plus the rotating file)
+// and mirrors the same bytes to every attached sink.
+type sinkFanout struct {
+	primary io.Writer
+}
+
+func (f *sinkFanout) Write(p []byte) (int, error) {
+	n, err := f.primary.Write(p)
+	sinksMu.RLock()
+	attached := sinks
+	sinksMu.RUnlock()
+	for _, sink := range attached {
+		_, _ = sink.Write(p)
+	}
+	return n, err
 }
 
 // Event writes one line with a stable component/event prefix and sorted

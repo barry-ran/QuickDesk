@@ -1,0 +1,3809 @@
+openapi: 3.1.0
+info:
+  description: |
+    This document is the contract for the operations a business system needs to
+    integrate with a self-hosted QuickDesk signaling server: authenticate,
+    enumerate the caller's devices, verify a device access code, and manage the
+    owner's access policy, guest access codes, second-factor approvals,
+    offline-alert rule and notification channels.
+
+    It deliberately covers a **subset**. The server exposes more (admin
+    endpoints, the approve/deny and claim halves of the approval flow,
+    recordings, realtime WebSockets); those are documented in
+    `docs/user-api-docs.md` and are added here as they are pinned by a
+    conformance test. Everything listed here is exercised against a live server
+    by `scripts/sdk/openapi-smoke.mjs`, so a change to a documented field fails
+    that check rather than silently invalidating this file.
+
+    That smoke is read-only by default; `QD_SMOKE_DEVICE=<device_id>` adds the
+    operations with side effects, and it restores what it touches: the
+    offline-alert rule and the access policy (including the `approval_mode` it
+    temporarily switches on to drive the approval flow) are put back exactly as
+    they were, and the recording it creates is deleted again.
+
+    Two residues are deliberate and are the reason this document says so: a
+    **revoked, never-used guest code** row from the create-then-revoke probe
+    (revocation, not deletion, is how a grant is disabled), and **two decided
+    approval rows** on the smoke device - one approved and consumed, one denied
+    - because a decision is history and the flow is auditable precisely by
+    leaving it.
+
+    Four generated clients are committed - **TypeScript** under `sdk/ts`,
+    **Go** under `sdk/go`, **Python** under `sdk/python` and **Java** under
+    `sdk/java` - and all four are kept in step with this file by
+    `scripts/sdk/check-generated-sdk.sh`, which CI runs: an edit here without a
+    regenerated client fails the build. Regenerate them with
+    `scripts/sdk/generate-client.sh sdk/ts`,
+    `scripts/sdk/generate-client.sh sdk/go go`,
+    `scripts/sdk/generate-client.sh sdk/python python` and
+    `scripts/sdk/generate-client.sh sdk/java java` (a pinned openapi-generator
+    jar, so local and CI output are byte-identical); the script takes the
+    language as its last argument. All four clients carry a hand-written
+    `examples/` entry that the CI smoke job runs against a live server: Go runs
+    the recording and approval workflows, while Python, TypeScript and Java each
+    run the approval workflow through their own generated client. The
+    `examples/` directories are excluded from the freshness comparison, so they
+    are the only hand-written code under `sdk/`. For a fifth language, use the
+    generator directly, for example:
+
+        npx @openapitools/openapi-generator-cli generate \
+          -i SignalingServer/api/openapi.yaml -g csharp -o sdk/csharp
+
+    All non-2xx responses are RFC 7807 problem details with
+    `Content-Type: application/problem+json`.
+  title: QuickDesk Signaling Server - business API
+  version: 1.0.0
+servers:
+- description: Replace with the base URL of your signaling server.
+  url: https://your-signaling-host
+security:
+- ApiKeyAuth: []
+- ApiKeyAuth: []
+  BearerAuth: []
+tags:
+- name: auth
+- name: me
+- name: devices
+- name: notifications
+paths:
+  /v1/auth/sessions:
+    post:
+      operationId: createSession
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AuthSessionRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthSessionResponse"
+          description: A session with an access token and a refresh token.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+      security:
+      - ApiKeyAuth: []
+      summary: Exchange a username/password for a session
+      tags:
+      - auth
+  /v1/me:
+    get:
+      operationId: getMe
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+          description: The current user.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+      summary: The authenticated user
+      tags:
+      - me
+  /v1/me/devices:
+    get:
+      operationId: listMyDevices
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/listMyDevices_200_response"
+          description: The caller's devices.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+      summary: Devices owned by the authenticated user
+      tags:
+      - devices
+  /v1/me/devices/{device_id}/offline-alert:
+    get:
+      description: |
+        Returns the documented defaults (`enabled: false`, `after_minutes: 10`)
+        when the owner never configured a rule, so a client can render the form
+        without a second "does it exist" call.
+      operationId: getOfflineAlert
+      parameters:
+      - $ref: "#/components/parameters/DeviceId"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OfflineAlertRule"
+          description: "The rule, or its defaults."
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+      summary: The owner's offline-alert rule for a device
+      tags:
+      - notifications
+    parameters:
+    - $ref: "#/components/parameters/DeviceId"
+    put:
+      operationId: putOfflineAlert
+      parameters:
+      - $ref: "#/components/parameters/DeviceId"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OfflineAlertInput"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OfflineAlertRule"
+          description: The stored rule.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+      summary: Create or replace the owner's offline-alert rule
+      tags:
+      - notifications
+  /v1/me/devices/{device_id}/sessions:
+    get:
+      description: |
+        The same history as `GET /v1/me/remote-sessions?device_id=`, but every
+        entry arrives already joined with the records that share its session id -
+        the shape a device page needs, so a client never has to know a session id
+        (or make a second request per row) to reach the join.
+
+        `status` is `active`, `ended` or omitted/`all`; `cursor`/`limit` page it
+        newest first like every other list here. The related arrays are batched
+        across the page, so a page costs three queries rather than three per row,
+        and they are present-but-empty rather than absent.
+
+        A device the caller does not own is `403` and an unknown device is `404`,
+        matching `.../access-logs`. (The session detail read answers `404` for
+        somebody else's session instead, because a session id is looked up rather
+        than named by its owner.)
+      operationId: listDeviceRemoteSessions
+      parameters:
+      - $ref: "#/components/parameters/DeviceId"
+      - description: Defaults to `all`.
+        explode: true
+        in: query
+        name: status
+        required: false
+        schema:
+          enum:
+          - active
+          - ended
+          - all
+          type: string
+        style: form
+      - explode: true
+        in: query
+        name: cursor
+        required: false
+        schema:
+          type: string
+        style: form
+      - explode: true
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RemoteSessionDetailList"
+          description: "One page of the device's control sessions, newest first."
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+      summary: "One device's control sessions, each with its related records"
+      tags:
+      - remoteSessions
+  /v1/me/devices/{device_id}/sessions:revoke:
+    post:
+      description: |
+        The owner's "throw everyone out of this machine": every live controller
+        on the device is ended in one call, whichever server instance happens to
+        hold each socket. Each is closed at its owning instance, and the call
+        confirms the database row before reporting it - the same promise the
+        single-session revoke makes.
+
+        A batch does not fail as a whole: one session that cannot be reached must
+        not stop the others, so the response reports each session's outcome and
+        counts. `truncated` says the device had more live controllers than one
+        call handles (the cap is 200), which means the machine is not necessarily
+        empty when the call returns. A machine with nothing live is a `200` with
+        `revoked: 0`, not an error.
+
+        Ownership answers match the sibling routes: `404` for a device that does
+        not exist, `403` for one that belongs to somebody else.
+      operationId: revokeDeviceSessions
+      parameters:
+      - $ref: "#/components/parameters/DeviceId"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RemoteSessionBatchRevocation"
+          description: "One result per live session, newest first."
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+      summary: End every live control session on one device
+      tags:
+      - remoteSessions
+  /v1/me/notification-channels:
+    get:
+      description: |
+        `supported_events` is the authoritative list of event types a channel
+        may subscribe to. The signing secret is never returned; deliveries are
+        signed with `signature_header` using `signature_scheme`.
+      operationId: listNotificationChannels
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationChannelList"
+          description: The caller's channels plus the subscription vocabulary.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+      summary: The user's notification channels
+      tags:
+      - notifications
+  /v1/me/recordings:
+    get:
+      description: |
+        Cursor-paginated, newest first. `next_cursor` is opaque: pass it back
+        as `?cursor=` to fetch the next page and stop when it is absent. The
+        envelope here has no `total` because this endpoint does not count the
+        whole set on every page, so an integrator must page until
+        `next_cursor` is empty rather than trusting a count. This is the
+        metadata index only; the media bytes live behind the per-recording
+        `.../artifact` routes documented in `docs/user-api-docs.md`.
+      operationId: listSessionRecordings
+      parameters:
+      - explode: true
+        in: query
+        name: cursor
+        required: false
+        schema:
+          type: string
+        style: form
+      - explode: true
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionRecordingList"
+          description: "One page of the caller's recordings, newest first."
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+      summary: The caller's session-recording index
+      tags:
+      - recordings
+    post:
+      description: |
+        Called by the capturing side when a session starts (or when a finished
+        capture is handed over), so the owner sees the recording while it is
+        still being written and the row can carry the outcome afterwards.
+        `status` is one of `recording`, `completed` or `failed`; `started_at`
+        defaults to now. The media is uploaded separately to `.../artifact`.
+
+        The row belongs to the *caller*: `device_id` is recorded as a label and
+        is not checked for ownership, so a producer can index a capture for a
+        machine that is not bound to it. Only the caller can then read or delete
+        the row.
+      operationId: createSessionRecording
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SessionRecordingInput"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionRecording"
+          description: The created index row.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+      summary: Index a new recording
+      tags:
+      - recordings
+  /v1/me/recordings/{recording_id}:
+    delete:
+      description: |
+        Removes the index row and the media files that belong to it, so the
+        recording cannot be played back afterwards. There is no "already gone"
+        success: a second delete is a `404`. The deletion is published on the
+        owner's realtime stream and written to the audit trail as
+        `recording.delete` with the actor's observed address.
+      operationId: deleteSessionRecording
+      parameters:
+      - $ref: "#/components/parameters/RecordingId"
+      responses:
+        "204":
+          description: Deleted. No body.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+      summary: Delete a recording and its stored media
+      tags:
+      - recordings
+    get:
+      description: |
+        The same row the list returns. Another user's id is a `404` rather than
+        a `403`, so the route cannot be used to discover which recording ids
+        exist.
+      operationId: getSessionRecording
+      parameters:
+      - $ref: "#/components/parameters/RecordingId"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionRecording"
+          description: The recording.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+      summary: One recording the caller owns
+      tags:
+      - recordings
+    parameters:
+    - $ref: "#/components/parameters/RecordingId"
+    patch:
+      description: |
+        Partial update: only the fields present in the body are written, so a
+        producer can patch `status` when a capture starts and then
+        `size_bytes`/`ended_at` when the upload finishes. `status` accepts the
+        same three values as create; anything else is a `400` and writes
+        nothing.
+      operationId: updateSessionRecording
+      parameters:
+      - $ref: "#/components/parameters/RecordingId"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SessionRecordingPatch"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionRecording"
+          description: The updated recording.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+      summary: Update a recording's lifecycle metadata
+      tags:
+      - recordings
+  /v1/me/recordings/{recording_id}/artifact:
+    get:
+      description: |
+        Owner-only, `Authorization` (Bearer) required. The response is the
+        stored file itself: the `Content-Type` follows the stored file's
+        extension (`video/mp4` for `.mp4`, `application/octet-stream`
+        otherwise) and `Content-Disposition` is `inline`. A browser cannot
+        attach an `Authorization` header to `<video src>`, which is why the
+        ticket routes below exist; this route is for API clients.
+      operationId: downloadRecordingArtifact
+      parameters:
+      - $ref: "#/components/parameters/RecordingId"
+      responses:
+        "200":
+          content:
+            video/mp4:
+              schema:
+                format: binary
+                type: string
+          description: The media bytes.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+      summary: Download a recording's media bytes
+      tags:
+      - recordings
+    parameters:
+    - $ref: "#/components/parameters/RecordingId"
+    patch:
+      description: |
+        The resumable half of the upload contract, for a capture that does not
+        fit in one request body or a connection that drops halfway. The client
+        sends chunks; the server answers with the offset it actually holds in
+        the `Upload-Offset` response header, so a retry resumes from that number
+        instead of starting over.
+
+        Three headers drive it. `Upload-Offset` (required) is where the chunk
+        starts and must equal the bytes already staged; otherwise the answer is
+        `409` with the authoritative offset in the same header and the client
+        resyncs. `Upload-Length` (optional, `*` while unknown) declares the total
+        size, which lets the server finish by itself when the last byte lands and
+        lets it refuse a chunk that would overshoot. `Upload-Complete: 1` says
+        this chunk ends the upload, which is how a client finishes without ever
+        declaring a total.
+
+        A status probe asks where the upload stands without staging bytes. Send
+        `Upload-Probe: 1` with a valid `Upload-Offset` and no body; the answer is
+        `202` with the current offset, so a client that crashed can re-learn
+        where it stopped without a second endpoint. An empty body with a valid
+        offset does the same thing for raw-HTTP callers, but a generated client
+        cannot send a zero-length body, which is why the explicit header exists.
+
+        The staging file (`<artifact-path>.part`) is subject to the same size
+        limit as the single-shot upload, an empty artifact is refused on every
+        path, and the recording lifecycle deletes a staging file that has been
+        untouched for six hours.
+      operationId: appendRecordingArtifact
+      parameters:
+      - description: "The artifact extension, allow-listed exactly like the raw-body\
+          \ POST shape."
+        explode: true
+        in: query
+        name: ext
+        required: true
+        schema:
+          enum:
+          - .mp4
+          - .m4v
+          - .mkv
+          - .webm
+          - .h264
+          - .grf
+          type: string
+        style: form
+      - description: The byte offset this chunk starts at.
+        explode: false
+        in: header
+        name: Upload-Offset
+        required: true
+        schema:
+          format: int64
+          minimum: 0
+          type: integer
+        style: simple
+      - description: "The total size of the artifact, or `*` while it is unknown."
+        explode: false
+        in: header
+        name: Upload-Length
+        required: false
+        schema:
+          type: string
+        style: simple
+      - description: Set to `1` when this chunk ends the upload.
+        explode: false
+        in: header
+        name: Upload-Complete
+        required: false
+        schema:
+          enum:
+          - "0"
+          - "1"
+          type: string
+        style: simple
+      - description: Set to `1` to ask for the current offset without staging any
+          bytes. The generated clients use this instead of an empty body.
+        explode: false
+        in: header
+        name: Upload-Probe
+        required: false
+        schema:
+          enum:
+          - "0"
+          - "1"
+          type: string
+        style: simple
+      - $ref: "#/components/parameters/RecordingId"
+      requestBody:
+        content:
+          application/octet-stream:
+            schema:
+              format: binary
+              type: string
+        required: false
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionRecording"
+          description: The final chunk; the recording now carries the stored artifact.
+          headers:
+            Upload-Offset:
+              description: "Bytes staged, which for a finished upload is the artifact\
+                \ size."
+              explode: false
+              schema:
+                format: int64
+                type: integer
+              style: simple
+        "202":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionRecording"
+          description: |
+            The chunk was staged and more are expected. The authoritative offset
+            is the `Upload-Offset` response header. The body is the recording
+            row - the same `SessionRecording` schema as the `200` - because a
+            generated client declares one success type per operation and would
+            otherwise fail to decode a staging-only body.
+          headers:
+            Upload-Offset:
+              description: Bytes staged so far; a client resumes from this number.
+              explode: false
+              schema:
+                format: int64
+                type: integer
+              style: simple
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: |
+            `Upload-Offset` did not match the bytes already staged. The header
+            carries the authoritative offset, so the client can resume from it.
+          headers:
+            Upload-Offset:
+              description: The offset the server actually holds.
+              explode: false
+              schema:
+                format: int64
+                type: integer
+              style: simple
+      summary: Append one chunk of a resumable recording upload
+      tags:
+      - recordings
+    post:
+      description: |
+        Two request shapes, because the producers differ: `multipart/form-data`
+        with a `file` part (the browser and Qt clients) or the raw body with
+        `?ext=`. The extension is allow-listed (`.mp4`, `.m4v`, `.mkv`, `.webm`,
+        `.h264`, `.grf`), the bytes are written to a temporary file and renamed
+        into place so a dropped upload can never leave a half-written file under
+        the real name, and the row is then updated with `artifact_path`,
+        `artifact_url`, `format` and `size_bytes` in one step.
+
+        An empty body is a `400`; a body over the configured limit
+        (`RECORDING_MAX_BYTES`, exposed as `store.max_bytes`) is a `400` as well,
+        never a truncated file. Uploading again replaces the stored artifact.
+      operationId: uploadRecordingArtifact
+      parameters:
+      - description: Required for the raw-body shape; ignored for multipart.
+        explode: true
+        in: query
+        name: ext
+        required: false
+        schema:
+          enum:
+          - .mp4
+          - .m4v
+          - .mkv
+          - .webm
+          - .h264
+          - .grf
+          type: string
+        style: form
+      - $ref: "#/components/parameters/RecordingId"
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/uploadRecordingArtifact_request"
+          application/octet-stream:
+            schema:
+              format: binary
+              type: string
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionRecording"
+          description: "The recording, now carrying the stored artifact."
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+      summary: Upload a recording's media bytes
+      tags:
+      - recordings
+  /v1/me/recordings/{recording_id}/thumbnail:
+    get:
+      description: |
+        Owner-only. Served with `Cache-Control: private, max-age=300` because a
+        preview is user-scoped and can change under the same URL.
+      operationId: downloadRecordingThumbnail
+      parameters:
+      - $ref: "#/components/parameters/RecordingId"
+      responses:
+        "200":
+          content:
+            image/jpeg:
+              schema:
+                format: binary
+                type: string
+          description: The preview image bytes.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+      summary: Download a recording's preview image
+      tags:
+      - recordings
+    parameters:
+    - $ref: "#/components/parameters/RecordingId"
+    post:
+      description: |
+        The same two shapes as the artifact upload (`multipart/form-data` with a
+        `file` part, or the raw body with `?ext=`), but the extension is limited
+        to `.jpg`, `.jpeg` and `.png` and the size to 2 MiB - a preview is a
+        small still, and an oversized one means the wrong file was sent.
+
+        The bytes are sniffed before they are stored rather than trusted from
+        the name or the declared content type: the index renders this image
+        inline, so a file that only claims to be a JPEG is a `400`.
+      operationId: uploadRecordingThumbnail
+      parameters:
+      - description: Required for the raw-body shape; ignored for multipart.
+        explode: true
+        in: query
+        name: ext
+        required: false
+        schema:
+          enum:
+          - .jpg
+          - .jpeg
+          - .png
+          type: string
+        style: form
+      - $ref: "#/components/parameters/RecordingId"
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/uploadRecordingArtifact_request"
+          application/octet-stream:
+            schema:
+              format: binary
+              type: string
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionRecording"
+          description: "The recording, now carrying the preview."
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+      summary: Upload a recording's preview image
+      tags:
+      - recordings
+  /v1/me/recordings/{recording_id}/artifact-ticket:
+    parameters:
+    - $ref: "#/components/parameters/RecordingId"
+    post:
+      description: |
+        Owner-only. Returns a signed, time-limited `url` that can be fetched
+        **without** an `Authorization` header, which is what makes playback work
+        from `<video src>`. The ticket is bound to the recording, the owner and
+        its purpose, so an artifact ticket cannot be replayed against the
+        thumbnail route. Minting is stateless - nothing is written - and the
+        link stops working when `expires_at` passes. `400` when playback tickets
+        are disabled on the deployment (`RECORDING_URL_SECRET`/`API_KEY` unset);
+        `404` when the recording has no stored artifact.
+      operationId: createRecordingArtifactTicket
+      parameters:
+      - $ref: "#/components/parameters/RecordingId"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlaybackTicket"
+          description: A signed playback URL.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+      summary: Mint a short-lived playback URL for a recording
+      tags:
+      - recordings
+  /v1/me/recordings/{recording_id}/thumbnail-ticket:
+    parameters:
+    - $ref: "#/components/parameters/RecordingId"
+    post:
+      description: |
+        Same rules as the artifact ticket, but the URL addresses the thumbnail
+        route and the ticket's purpose is checked on redemption.
+      operationId: createRecordingThumbnailTicket
+      parameters:
+      - $ref: "#/components/parameters/RecordingId"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlaybackTicket"
+          description: A signed preview URL.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+      summary: Mint a short-lived preview URL for a recording
+      tags:
+      - recordings
+  /v1/recordings/{recording_id}/artifact:
+    get:
+      description: |
+        The URL returned by `POST /v1/me/recordings/{recording_id}/artifact-ticket`.
+        Deliberately registered **outside** the API-key and user-auth groups,
+        because a browser `<video>` element can send neither header - the signed
+        `t` query parameter is the authorization, and the ticket is bound to
+        owner and purpose. `401` for a missing, malformed or expired ticket;
+        `404` when the ticket is for the wrong route or the recording is gone.
+      operationId: downloadRecordingArtifactByTicket
+      parameters:
+      - description: The signed ticket from the artifact-ticket endpoint.
+        explode: true
+        in: query
+        name: t
+        required: true
+        schema:
+          type: string
+        style: form
+      - $ref: "#/components/parameters/RecordingId"
+      responses:
+        "200":
+          content:
+            video/mp4:
+              schema:
+                format: binary
+                type: string
+          description: The media bytes.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+      summary: Fetch recording media with a playback ticket
+      tags:
+      - recordings
+    parameters:
+    - $ref: "#/components/parameters/RecordingId"
+  /v1/recordings/{recording_id}/thumbnail:
+    get:
+      description: |
+        The URL returned by `POST /v1/me/recordings/{recording_id}/thumbnail-ticket`.
+        Same ticket rules as the artifact route; an artifact ticket is rejected
+        here (`404`) because the purpose is part of the signature.
+      operationId: downloadRecordingThumbnailByTicket
+      parameters:
+      - description: The signed ticket from the thumbnail-ticket endpoint.
+        explode: true
+        in: query
+        name: t
+        required: true
+        schema:
+          type: string
+        style: form
+      - $ref: "#/components/parameters/RecordingId"
+      responses:
+        "200":
+          content:
+            image/jpeg:
+              schema:
+                format: binary
+                type: string
+          description: The preview image bytes.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+      summary: Fetch a recording preview with a playback ticket
+      tags:
+      - recordings
+    parameters:
+    - $ref: "#/components/parameters/RecordingId"
+  /v1/devices/{device_id}/access-code:verify:
+    parameters:
+    - $ref: "#/components/parameters/DeviceId"
+    post:
+      description: |
+        The controller-side entry point. On success it returns a signal token
+        for the relay. When the device policy wants the owner to confirm the
+        session it returns `202` with a pending approval instead, and the caller
+        polls `/v1/devices/{device_id}/access-approvals:claim`. A rejected code
+        is a `403` problem with `code: INVALID_CODE`.
+
+        This route is reachable without a user token (the controlling client is
+        not logged in) but still requires the API key or an allowed Origin.
+      operationId: verifyAccessCode
+      parameters:
+      - $ref: "#/components/parameters/DeviceId"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccessCodeVerifyRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccessCodeVerifyResponse"
+          description: The code was accepted and a signal token was minted.
+        "202":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccessCodeApprovalPending"
+          description: The device policy requires the owner to approve this session.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+      security:
+      - ApiKeyAuth: []
+      summary: Verify a device access code and mint a signal token
+      tags:
+      - devices
+  /v1/me/devices/{device_id}/access-policy:
+    get:
+      description: |
+        Returns the documented "no policy" defaults when the owner never saved
+        one, so a client can render the form without a second existence check.
+      operationId: getAccessPolicy
+      parameters:
+      - $ref: "#/components/parameters/DeviceId"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeviceAccessPolicy"
+          description: "The policy, or its defaults."
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+      summary: The device's access policy
+      tags:
+      - devices
+    parameters:
+    - $ref: "#/components/parameters/DeviceId"
+    put:
+      description: |
+        A **full replace**: every field not sent is reset to its zero value. The
+        policy is enforced on the device-side verify route before the access
+        code is compared, so a blocked client never gets to guess codes.
+      operationId: putAccessPolicy
+      parameters:
+      - $ref: "#/components/parameters/DeviceId"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeviceAccessPolicyInput"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeviceAccessPolicy"
+          description: The stored policy.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+      summary: Create or replace the device's access policy
+      tags:
+      - devices
+  /v1/me/devices/{device_id}/access-grants:
+    get:
+      operationId: listAccessGrants
+      parameters:
+      - $ref: "#/components/parameters/DeviceId"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/listAccessGrants_200_response"
+          description: "The device's grants, newest first."
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+      summary: Guest access codes issued for a device
+      tags:
+      - devices
+    parameters:
+    - $ref: "#/components/parameters/DeviceId"
+    post:
+      description: |
+        The plaintext code is returned **once**, in the creation response; a
+        grant is limited by expiry and uses, may be bound to a client id and/or
+        source addresses, and is revoked with the DELETE below.
+      operationId: createAccessGrant
+      parameters:
+      - $ref: "#/components/parameters/DeviceId"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccessGrantInput"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccessGrant"
+          description: "The created grant, including its one-time plaintext code."
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+      summary: Issue a time-boxed guest access code
+      tags:
+      - devices
+  /v1/me/devices/{device_id}/access-grants/{grant_id}:
+    delete:
+      operationId: revokeAccessGrant
+      parameters:
+      - $ref: "#/components/parameters/DeviceId"
+      - explode: false
+        in: path
+        name: grant_id
+        required: true
+        schema:
+          format: int64
+          type: integer
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/revokeAccessGrant_200_response"
+          description: The grant is no longer redeemable.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+      summary: Revoke a guest access code
+      tags:
+      - devices
+    parameters:
+    - $ref: "#/components/parameters/DeviceId"
+    - explode: false
+      in: path
+      name: grant_id
+      required: true
+      schema:
+        format: int64
+        type: integer
+      style: simple
+  /v1/me/devices/{device_id}/access-approvals:
+    get:
+      description: |
+        `status` is a comma-separated subset of `pending, approved, denied,
+        expired, consumed` and defaults to `pending`. Approval is created by the
+        device-side verify route when the policy asks for it; approving or
+        denying happens on the sub-resource routes documented in
+        `docs/user-api-docs.md` §5.3.5 (not yet part of this contract).
+      operationId: listAccessApprovals
+      parameters:
+      - explode: true
+        in: query
+        name: status
+        required: false
+        schema:
+          type: string
+        style: form
+      - explode: true
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+        style: form
+      - $ref: "#/components/parameters/DeviceId"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/listAccessApprovals_200_response"
+          description: "The matching approvals, newest first."
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+      summary: Second-factor approvals awaiting (or already decided by) the owner
+      tags:
+      - devices
+    parameters:
+    - $ref: "#/components/parameters/DeviceId"
+  /v1/me/devices/{device_id}/access-approvals:summary:
+    get:
+      description: |
+        The row list shows requests one at a time; this is what makes "one
+        address has been refused six times this afternoon" legible. The window
+        is keyed on `created_at` for every count.
+      operationId: getAccessApprovalSummary
+      parameters:
+      - description: RFC3339 start of the window; defaults to the last 24 hours.
+        explode: true
+        in: query
+        name: since
+        required: false
+        schema:
+          format: date-time
+          type: string
+        style: form
+      - description: "How many refused sources to list (default 5, capped at 10)."
+        explode: true
+        in: query
+        name: limit
+        required: false
+        schema:
+          minimum: 1
+          type: integer
+        style: form
+      - $ref: "#/components/parameters/DeviceId"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApprovalSummary"
+          description: The window's counts and refused sources.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+      summary: Aggregated view of a device's approval queue
+      tags:
+      - devices
+    parameters:
+    - $ref: "#/components/parameters/DeviceId"
+  /v1/me/devices/{device_id}/access-approvals/{approval_id}/approve:
+    parameters:
+    - $ref: "#/components/parameters/DeviceId"
+    - $ref: "#/components/parameters/ApprovalId"
+    post:
+      description: |
+        Owner-only. The body is optional; a `reason` is stored on the row and
+        shown to the requester. A request that was already decided or has
+        expired returns `409` with the current status instead of pretending the
+        decision landed. The conformance smoke pins the `404` shape with an
+        unknown id; the happy path needs a real pending approval (an online
+        device plus `approval_mode`), so it is covered by the end-to-end run in
+        `docs/dev/自托管端到端联调记录.md` rather than the smoke.
+      operationId: approveAccessApproval
+      parameters:
+      - $ref: "#/components/parameters/DeviceId"
+      - $ref: "#/components/parameters/ApprovalId"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/approveAccessApproval_request"
+        required: false
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccessApproval"
+          description: The approval after the decision.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApprovalAlreadyDecided"
+          description: The request was already decided or has expired.
+      summary: Approve a pending access request
+      tags:
+      - devices
+  /v1/me/devices/{device_id}/access-approvals/{approval_id}/deny:
+    parameters:
+    - $ref: "#/components/parameters/DeviceId"
+    - $ref: "#/components/parameters/ApprovalId"
+    post:
+      description: |
+        Owner-only, same shape as `approve`. Denying also arms the per-source
+        denial cooldown (`APPROVAL_DENIAL_COOLDOWN_SECONDS`), so the same client
+        cannot immediately re-request.
+      operationId: denyAccessApproval
+      parameters:
+      - $ref: "#/components/parameters/DeviceId"
+      - $ref: "#/components/parameters/ApprovalId"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/approveAccessApproval_request"
+        required: false
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccessApproval"
+          description: The approval after the decision.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApprovalAlreadyDecided"
+          description: The request was already decided or has expired.
+      summary: Deny a pending access request
+      tags:
+      - devices
+  /v1/devices/{device_id}/access-approvals:claim:
+    parameters:
+    - $ref: "#/components/parameters/DeviceId"
+    post:
+      description: |
+        The requesting controller calls this with the `approval_id` and
+        `approval_secret` it received from `access-code:verify`. It is API-key
+        gated rather than user-authenticated because the caller has no account.
+        `202` means the owner has not decided yet - keep polling with the same
+        id and secret; `200` returns the signal token; `403` means denied or
+        expired; `409` means the approval was already spent or the host went
+        offline before the exchange.
+      operationId: claimAccessApproval
+      parameters:
+      - $ref: "#/components/parameters/DeviceId"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApprovalClaimRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccessCodeVerifyResponse"
+          description: The owner approved and the signal token is ready.
+        "202":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApprovalClaimPending"
+          description: Still waiting for the owner to decide.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApprovalClaimConsumed"
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: |
+            The approval was already spent, or the host went offline before the
+            exchange could happen.
+      summary: Exchange an approved request for a signal token
+      tags:
+      - devices
+  /v1/me/remote-sessions:
+    get:
+      description: |
+        Who is in the caller's machines right now, and who has been.
+
+        A remote session is one controller holding a signaling session against a
+        device. It is opened when that controller's signaling socket completes
+        authentication and closed when that socket ends, which is the whole
+        lifetime this server can observe: the media path is peer to peer, so a
+        session whose signaling channel is gone is over as far as the control
+        plane is concerned.
+
+        `status=active` answers "who is in right now", `ended` is history, and
+        the default lists both. `device_id` narrows to one machine.
+        Cursor-paginated, newest first, `next_cursor` absent on the last page.
+      operationId: listRemoteSessions
+      parameters:
+      - description: Defaults to `all`.
+        explode: true
+        in: query
+        name: status
+        required: false
+        schema:
+          enum:
+          - active
+          - ended
+          - all
+          type: string
+        style: form
+      - explode: true
+        in: query
+        name: device_id
+        required: false
+        schema:
+          type: string
+        style: form
+      - explode: true
+        in: query
+        name: cursor
+        required: false
+        schema:
+          type: string
+        style: form
+      - explode: true
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RemoteSessionList"
+          description: "One page of the caller's control sessions, newest first."
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+      summary: "The caller's control sessions, open and finished"
+      tags:
+      - remoteSessions
+  /v1/me/remote-sessions/{session_id}:
+    get:
+      description: |
+        What happened in one session: the session row itself, the recordings
+        produced during it, and the device access-log entries that carry its
+        `session_id` (in practice the `session_started` row written when the
+        controller authenticated). The three tables always existed - this is the
+        read that puts them back together.
+
+        Owner only. A session belonging to another account is reported as `404`
+        rather than `403`, so a caller cannot probe which session ids exist.
+        Both lists are capped at 100 entries and are empty arrays rather than
+        absent when there is nothing to show.
+      operationId: getRemoteSession
+      parameters:
+      - description: The signaling session id from the list.
+        explode: false
+        in: path
+        name: session_id
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RemoteSessionDetail"
+          description: The session and its related records.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+      summary: One control session with the records that share its id
+      tags:
+      - remoteSessions
+  /v1/me/remote-sessions/{session_id}/revoke:
+    post:
+      description: |
+        The owner's "throw them out". A remote session lives exactly as long as
+        the controller's signaling socket, so ending the session means closing
+        that socket; the session row is stamped `end_reason: revoked` and the
+        owner's realtime stream carries `remote_session.ended` with that reason.
+        Closing the socket also frees the device's controller slot, so a revoked
+        session stops counting against the access policy's `max_sessions`.
+
+        Owner only, with the same concealment as the detail read: a session that
+        belongs to another account is a `404`, not a `403`. The socket may be
+        held by a different server instance - the row records which one admitted
+        it - so the request is addressed at that instance and this call waits for
+        the session to actually close: a `200` means it happened, not that a
+        command was merely published. A session that is already over, or whose
+        owning instance did not close it in time, is a `409`, because the one
+        thing worse than refusing a revoke is reporting a success that did not
+        happen.
+      operationId: revokeRemoteSession
+      parameters:
+      - description: The signaling session id from the list.
+        explode: false
+        in: path
+        name: session_id
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RemoteSessionRevocation"
+          description: The session was live here and its socket has been closed.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: |
+            The session exists but cannot be revoked from here - it is already
+            over, or it is live on another instance.
+      summary: End one of the caller's control sessions
+      tags:
+      - remoteSessions
+  /v1/update:check:
+    get:
+      description: |
+        The client-facing half of the self-hosted update channel. It is API-key
+        gated but not user-authenticated: a controlled machine checks for
+        updates before anyone logs in.
+
+        The server owns the index of published releases. The artifact lives at
+        `download_url`: normally a host the operator controls, or this server
+        itself when the installer was uploaded to it (then `download_url` is
+        `GET /v1/update-releases/{release_id}/artifact` and `hosted_here` is
+        true). The index is managed through the admin API
+        (`POST /v1/admin/update-releases` and friends), which stays outside this
+        business contract.
+
+        `current_version` is optional. Without it the newest release is returned
+        and `update_available` is true whenever one exists; with it,
+        `update_available` is true only when the published version is strictly
+        newer, and `mandatory` mirrors the release flag once an update is
+        available. `latest` is always present and is `null` when the channel has
+        no release for that platform/arch.
+      operationId: checkForUpdate
+      parameters:
+      - description: Which operating system the caller is running.
+        explode: true
+        in: query
+        name: platform
+        required: true
+        schema:
+          enum:
+          - windows
+          - macos
+          - linux
+          type: string
+        style: form
+      - description: Which architecture the caller is running.
+        explode: true
+        in: query
+        name: arch
+        required: true
+        schema:
+          enum:
+          - x64
+          - arm64
+          - universal
+          type: string
+        style: form
+      - description: Defaults to `stable`.
+        explode: true
+        in: query
+        name: channel
+        required: false
+        schema:
+          enum:
+          - stable
+          - beta
+          - nightly
+          type: string
+        style: form
+      - description: "The dotted numeric version the caller is running, e.g. `4.2.5.0`.\
+          \ A leading `v` is accepted."
+        explode: true
+        in: query
+        name: current_version
+        required: false
+        schema:
+          type: string
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UpdateCheckResult"
+          description: "The newest release for that channel/platform/arch, or a null\
+            \ `latest` when the channel is empty."
+        "400":
+          $ref: "#/components/responses/BadRequest"
+      summary: Check the self-hosted update channel for a newer build
+      tags:
+      - update
+  /v1/update-releases/{release_id}/artifact:
+    get:
+      description: |
+        The other half of a re-hosted release. `GET /v1/update:check` returns the
+        `download_url` of the newest build, and for a release whose bytes were
+        uploaded to this server that URL is this route, under the same API key
+        the client already used for the check.
+
+        API-key gated but not user-authenticated, like the check itself. The
+        response supports range requests, so a transfer that drops can resume.
+
+        A release whose bytes live on an external static host is not served here:
+        fetching its route is a `404`, and the client should use the
+        `download_url` from the check response instead.
+      operationId: downloadUpdateArtifact
+      parameters:
+      - description: The `id` of the release from the check response.
+        explode: false
+        in: path
+        name: release_id
+        required: true
+        schema:
+          format: int64
+          minimum: 1
+          type: integer
+        style: simple
+      responses:
+        "200":
+          content:
+            application/octet-stream:
+              schema:
+                format: binary
+                type: string
+          description: The installer bytes.
+          headers:
+            Content-Disposition:
+              description: "The stored file name, as an attachment."
+              explode: false
+              schema:
+                type: string
+              style: simple
+            Accept-Ranges:
+              description: Present because range requests are supported.
+              explode: false
+              schema:
+                type: string
+              style: simple
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+      summary: Download an installer this server hosts itself
+      tags:
+      - update
+components:
+  parameters:
+    DeviceId:
+      description: The device id shown on the controlled machine.
+      explode: false
+      in: path
+      name: device_id
+      required: true
+      schema:
+        maxLength: 20
+        type: string
+      style: simple
+    ApprovalId:
+      description: The numeric id from an approval row.
+      explode: false
+      in: path
+      name: approval_id
+      required: true
+      schema:
+        format: int64
+        minimum: 1
+        type: integer
+      style: simple
+    RecordingId:
+      description: The numeric id from a recording index row.
+      explode: false
+      in: path
+      name: recording_id
+      required: true
+      schema:
+        format: int64
+        minimum: 1
+        type: integer
+      style: simple
+  responses:
+    BadRequest:
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+      description: The request was malformed or failed validation.
+    Unauthorized:
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+      description: Missing or expired credentials.
+    Forbidden:
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+      description: Authenticated but not allowed (includes a rejected access code).
+    NotFound:
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+      description: The addressed resource does not exist.
+    RateLimited:
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+      description: Too many requests; retry after the advertised delay.
+      headers:
+        Retry-After:
+          description: Seconds to wait before retrying.
+          explode: false
+          schema:
+            type: string
+          style: simple
+  schemas:
+    AuthSessionRequest:
+      example:
+        identifier: identifier
+        password: password
+      properties:
+        identifier:
+          description: "Username, phone, or email, depending on how the account was\
+            \ created."
+          type: string
+        password:
+          format: password
+          type: string
+      required:
+      - identifier
+      - password
+    AuthSessionResponse:
+      example:
+        access_token: access_token
+        refresh_expires_at: 2000-01-23T04:56:07.000+00:00
+        refresh_token: refresh_token
+        access_expires_at: 2000-01-23T04:56:07.000+00:00
+        user:
+          updated_at: 2000-01-23T04:56:07.000+00:00
+          phone: phone
+          level: level
+          created_at: 2000-01-23T04:56:07.000+00:00
+          id: 0
+          channel_type: channel_type
+          email: email
+          device_count: 6
+          username: username
+          status: true
+      properties:
+        user:
+          $ref: "#/components/schemas/User"
+        access_token:
+          type: string
+        access_expires_at:
+          format: date-time
+          type: string
+        refresh_token:
+          type: string
+        refresh_expires_at:
+          format: date-time
+          type: string
+      required:
+      - access_expires_at
+      - access_token
+      - refresh_expires_at
+      - refresh_token
+      - user
+    User:
+      example:
+        updated_at: 2000-01-23T04:56:07.000+00:00
+        phone: phone
+        level: level
+        created_at: 2000-01-23T04:56:07.000+00:00
+        id: 0
+        channel_type: channel_type
+        email: email
+        device_count: 6
+        username: username
+        status: true
+      properties:
+        id:
+          format: int64
+          type: integer
+        username:
+          type: string
+        phone:
+          type: string
+        email:
+          type: string
+        level:
+          type: string
+        device_count:
+          type: integer
+        channel_type:
+          type: string
+        status:
+          type: boolean
+        created_at:
+          format: date-time
+          type: string
+        updated_at:
+          format: date-time
+          type: string
+      required:
+      - id
+      - status
+      - username
+    Device:
+      example:
+        device_name: device_name
+        device_id: device_id
+        os: os
+        app_version: app_version
+        logged_in: true
+        access_code: access_code
+        os_version: os_version
+        online: true
+        remark: remark
+        last_seen_at: last_seen_at
+      properties:
+        device_id:
+          type: string
+        device_name:
+          type: string
+        remark:
+          description: The owner's private note; empty when none is set.
+          type: string
+        online:
+          description: Whether the machine currently holds a live connection.
+          type: boolean
+        logged_in:
+          description: "True only when the device is online *and* logged in, so a\
+            \ parked machine is not reported as reachable."
+          type: boolean
+        access_code:
+          description: "The current access code. It rotates, so treat it as short-lived."
+          type: string
+        os:
+          type: string
+        os_version:
+          type: string
+        app_version:
+          type: string
+        last_seen_at:
+          description: "RFC3339 UTC, omitted when the device has never been seen."
+          type: string
+      required:
+      - device_id
+      - device_name
+      - logged_in
+      - online
+    OfflineAlertInput:
+      example:
+        after_minutes: 808
+        maintenance_windows:
+        - start: start
+          days:
+          - 0
+          - 0
+          end: end
+        - start: start
+          days:
+          - 0
+          - 0
+          end: end
+        - start: start
+          days:
+          - 0
+          - 0
+          end: end
+        - start: start
+          days:
+          - 0
+          - 0
+          end: end
+        - start: start
+          days:
+          - 0
+          - 0
+          end: end
+        snoozed_until: 2000-01-23T04:56:07.000+00:00
+        repeat_minutes: 6075
+        enabled: true
+        maintenance_timezone: maintenance_timezone
+      properties:
+        enabled:
+          type: boolean
+        after_minutes:
+          description: Omitting it (or sending 0) stores the default of 10.
+          maximum: 10080
+          minimum: 1
+          type: integer
+        repeat_minutes:
+          description: 0 (the default) sends one alert per outage.
+          maximum: 10080
+          minimum: 0
+          type: integer
+        snoozed_until:
+          description: Silences alerts until this instant; null clears an existing
+            snooze.
+          format: date-time
+          nullable: true
+          type: string
+        maintenance_windows:
+          description: Recurring quiet periods evaluated in `maintenance_timezone`.
+          items:
+            $ref: "#/components/schemas/MaintenanceWindow"
+          maxItems: 20
+          type: array
+        maintenance_timezone:
+          description: IANA zone name for the windows; empty means the server's local
+            zone.
+          type: string
+      required:
+      - enabled
+    MaintenanceWindow:
+      example:
+        start: start
+        days:
+        - 0
+        - 0
+        end: end
+      properties:
+        days:
+          description: Weekdays 0-6 (0 = Sunday); empty means every day.
+          items:
+            maximum: 6
+            minimum: 0
+            type: integer
+          type: array
+        start:
+          pattern: "^[0-2][0-9]:[0-5][0-9]$"
+          type: string
+        end:
+          pattern: "^[0-2][0-9]:[0-5][0-9]$"
+          type: string
+      required:
+      - end
+      - start
+    OfflineAlertRule:
+      example:
+        offline_since: 2000-01-23T04:56:07.000+00:00
+        last_alerted_at: 2000-01-23T04:56:07.000+00:00
+        device_id: device_id
+        updated_at: 2000-01-23T04:56:07.000+00:00
+        after_minutes: 0
+        maintenance_windows:
+        - start: start
+          days:
+          - 0
+          - 0
+          end: end
+        - start: start
+          days:
+          - 0
+          - 0
+          end: end
+        in_maintenance_window: true
+        snoozed_until: 2000-01-23T04:56:07.000+00:00
+        repeat_minutes: 6
+        enabled: true
+        maintenance_timezone: maintenance_timezone
+      properties:
+        device_id:
+          type: string
+        enabled:
+          type: boolean
+        after_minutes:
+          type: integer
+        repeat_minutes:
+          type: integer
+        snoozed_until:
+          format: date-time
+          nullable: true
+          type: string
+        maintenance_windows:
+          items:
+            $ref: "#/components/schemas/MaintenanceWindow"
+          type: array
+        maintenance_timezone:
+          type: string
+        in_maintenance_window:
+          description: "Computed at read time, so a client can explain a quiet period\
+            \ without re-implementing the schedule."
+          type: boolean
+        offline_since:
+          description: The evaluator's episode state; present only while the device
+            is in an outage.
+          format: date-time
+          nullable: true
+          type: string
+        last_alerted_at:
+          format: date-time
+          nullable: true
+          type: string
+        updated_at:
+          format: date-time
+          nullable: true
+          type: string
+      required:
+      - after_minutes
+      - device_id
+      - enabled
+      - in_maintenance_window
+      - maintenance_windows
+      - repeat_minutes
+    NotificationChannel:
+      example:
+        last_triggered: 2000-01-23T04:56:07.000+00:00
+        updated_at: 2000-01-23T04:56:07.000+00:00
+        user_id: 6
+        name: name
+        last_status: 1
+        created_at: 2000-01-23T04:56:07.000+00:00
+        id: 0
+        url: https://openapi-generator.tech
+        events: events
+        enabled: true
+      properties:
+        id:
+          format: int64
+          type: integer
+        user_id:
+          format: int64
+          type: integer
+        name:
+          type: string
+        url:
+          format: uri
+          type: string
+        events:
+          description: |
+            A JSON-encoded array of subscribed event types (a string, not an
+            array, because that is how the column is stored). Decode it before
+            matching against `supported_events`.
+          type: string
+        enabled:
+          type: boolean
+        last_triggered:
+          format: date-time
+          nullable: true
+          type: string
+        last_status:
+          description: HTTP status of the most recent delivery attempt; 0 means none
+            yet.
+          type: integer
+        created_at:
+          format: date-time
+          type: string
+        updated_at:
+          format: date-time
+          type: string
+      required:
+      - enabled
+      - events
+      - id
+      - last_status
+      - name
+      - url
+      - user_id
+    NotificationChannelList:
+      example:
+        signature_header: signature_header
+        supported_events:
+        - supported_events
+        - supported_events
+        signature_scheme: signature_scheme
+        items:
+        - last_triggered: 2000-01-23T04:56:07.000+00:00
+          updated_at: 2000-01-23T04:56:07.000+00:00
+          user_id: 6
+          name: name
+          last_status: 1
+          created_at: 2000-01-23T04:56:07.000+00:00
+          id: 0
+          url: https://openapi-generator.tech
+          events: events
+          enabled: true
+        - last_triggered: 2000-01-23T04:56:07.000+00:00
+          updated_at: 2000-01-23T04:56:07.000+00:00
+          user_id: 6
+          name: name
+          last_status: 1
+          created_at: 2000-01-23T04:56:07.000+00:00
+          id: 0
+          url: https://openapi-generator.tech
+          events: events
+          enabled: true
+      properties:
+        items:
+          items:
+            $ref: "#/components/schemas/NotificationChannel"
+          type: array
+        supported_events:
+          items:
+            type: string
+          type: array
+        signature_header:
+          type: string
+        signature_scheme:
+          type: string
+      required:
+      - items
+      - signature_header
+      - signature_scheme
+      - supported_events
+    AccessCodeVerifyRequest:
+      example:
+        code: code
+        client_id: client_id
+      properties:
+        code:
+          type: string
+        client_id:
+          description: "Optional self-reported client identity, recorded on the access\
+            \ log."
+          type: string
+      required:
+      - code
+    AccessCodeVerifyResponse:
+      description: |
+        The answer to `access-code:verify` and to the approval claim endpoint.
+        `status` says which shape it is: `granted` (HTTP 200) carries
+        `signal_token`, `pending` (HTTP 202) carries the approval the controller
+        polls. The approval fields live on this schema rather than only on the
+        202 schema because a generated client declares one success type per
+        operation - a Go caller receives the 202 body as this type, and without
+        these properties it could not read the approval it is supposed to poll.
+      example:
+        expires_at: 2000-01-23T04:56:07.000+00:00
+        poll_after_ms: 6
+        signal_token: signal_token
+        approval_secret: approval_secret
+        status: granted
+        approval_id: 0
+      properties:
+        status:
+          description: Which shape this response is.
+          enum:
+          - granted
+          - pending
+          type: string
+        signal_token:
+          description: Present when `status` is `granted`.
+          type: string
+        expires_at:
+          description: When the signal token (granted) or the approval (pending) expires.
+          format: date-time
+          type: string
+        approval_id:
+          description: Present when `status` is `pending`.
+          format: int64
+          type: integer
+        approval_secret:
+          description: |
+            Present when `status` is `pending`. Shown once; exchanged for a
+            signal token at the claim endpoint.
+          type: string
+        poll_after_ms:
+          description: Present when `status` is `pending`.
+          type: integer
+      required:
+      - status
+    AccessCodeApprovalPending:
+      description: |
+        The HTTP 202 body of `access-code:verify` - the same fields as
+        `AccessCodeVerifyResponse` with `status: pending`.
+      example:
+        expires_at: 2000-01-23T04:56:07.000+00:00
+        poll_after_ms: 5
+        approval_secret: approval_secret
+        approval_id: 1
+        status: pending
+      properties:
+        approval_id:
+          format: int64
+          type: integer
+        approval_secret:
+          description: Shown once; exchanged for a signal token at the claim endpoint.
+          type: string
+        status:
+          enum:
+          - pending
+          type: string
+        expires_at:
+          format: date-time
+          type: string
+        poll_after_ms:
+          type: integer
+      required:
+      - approval_id
+      - approval_secret
+      - expires_at
+      - poll_after_ms
+      - status
+    DeviceAccessPolicyInput:
+      description: |
+        Full replace: fields not sent are reset to their zero value.
+      example:
+        approval_mode: "off"
+        max_sessions: 0
+        timezone: timezone
+        allow_ips:
+        - allow_ips
+        - allow_ips
+        approval_required: true
+        remote_disabled: true
+        allowed_windows:
+        - start: start
+          days:
+          - 3
+          - 3
+          end: end
+        - start: start
+          days:
+          - 3
+          - 3
+          end: end
+        approval_trusted_ips:
+        - approval_trusted_ips
+        - approval_trusted_ips
+        exception_dates:
+        - date: date
+          end_date: end_date
+          mode: allow
+          holiday_day: "off"
+          repeat: yearly
+          lunar_month: 1
+          lunar_day: 5
+          holiday: holiday
+        - date: date
+          end_date: end_date
+          mode: allow
+          holiday_day: "off"
+          repeat: yearly
+          lunar_month: 1
+          lunar_day: 5
+          holiday: holiday
+      properties:
+        remote_disabled:
+          description: "When true, no controller may start a session at all."
+          type: boolean
+        allow_ips:
+          description: Bare IPs or CIDR blocks; empty means "no IP restriction".
+          items:
+            type: string
+          type: array
+        max_sessions:
+          description: "Concurrent controller cap; 0 means unlimited, negative is\
+            \ rejected."
+          type: integer
+        allowed_windows:
+          description: Recurring windows in which access is allowed; empty means always.
+          items:
+            $ref: "#/components/schemas/AccessWindow"
+          type: array
+        timezone:
+          description: IANA zone the windows are evaluated in; empty means the server's
+            local zone.
+          type: string
+        exception_dates:
+          description: "Per-date overrides (holidays, one-off closures, lunar dates)."
+          items:
+            $ref: "#/components/schemas/AccessExceptionDate"
+          type: array
+        approval_required:
+          description: Legacy switch kept for older clients; prefer `approval_mode`.
+          type: boolean
+        approval_mode:
+          description: When the owner must approve a correct code before a session
+            starts.
+          enum:
+          - "off"
+          - always
+          - grant
+          - untrusted_ip
+          type: string
+        approval_trusted_ips:
+          description: "Sources exempted by `approval_mode: untrusted_ip`."
+          items:
+            type: string
+          type: array
+    DeviceAccessPolicy:
+      allOf:
+      - $ref: "#/components/schemas/DeviceAccessPolicyInput"
+      - properties:
+          device_id:
+            type: string
+          updated_at:
+            description: Omitted when the owner never saved a policy.
+            format: date-time
+            nullable: true
+            type: string
+        required:
+        - device_id
+      example:
+        approval_mode: "off"
+        device_id: device_id
+        updated_at: 2000-01-23T04:56:07.000+00:00
+        max_sessions: 0
+        timezone: timezone
+        allow_ips:
+        - allow_ips
+        - allow_ips
+        approval_required: true
+        remote_disabled: true
+        allowed_windows:
+        - start: start
+          days:
+          - 3
+          - 3
+          end: end
+        - start: start
+          days:
+          - 3
+          - 3
+          end: end
+        approval_trusted_ips:
+        - approval_trusted_ips
+        - approval_trusted_ips
+        exception_dates:
+        - date: date
+          end_date: end_date
+          mode: allow
+          holiday_day: "off"
+          repeat: yearly
+          lunar_month: 1
+          lunar_day: 5
+          holiday: holiday
+        - date: date
+          end_date: end_date
+          mode: allow
+          holiday_day: "off"
+          repeat: yearly
+          lunar_month: 1
+          lunar_day: 5
+          holiday: holiday
+    AccessWindow:
+      description: |
+        `start > end` wraps past midnight and the day filter then applies to the
+        day the window starts; `start == end` means all day on the selected days;
+        an empty `days` list means every day.
+      example:
+        start: start
+        days:
+        - 3
+        - 3
+        end: end
+      properties:
+        days:
+          items:
+            maximum: 6
+            minimum: 0
+            type: integer
+          type: array
+        start:
+          pattern: "^[0-2][0-9]:[0-5][0-9]$"
+          type: string
+        end:
+          pattern: "^[0-2][0-9]:[0-5][0-9]$"
+          type: string
+      required:
+      - end
+      - start
+    AccessExceptionDate:
+      additionalProperties: true
+      description: |
+        Exactly one of `date` (+ optional `end_date`), `holiday`, or
+        `repeat: "lunar"` with the lunar month/day. `mode` is `allow` or
+        `deny`; an allow and a deny entry covering the same day are rejected.
+      example:
+        date: date
+        end_date: end_date
+        mode: allow
+        holiday_day: "off"
+        repeat: yearly
+        lunar_month: 1
+        lunar_day: 5
+        holiday: holiday
+      properties:
+        date:
+          description: First date of the exception (YYYY-MM-DD).
+          type: string
+        end_date:
+          description: Last date of a range (YYYY-MM-DD); omit for a single day.
+          type: string
+        mode:
+          enum:
+          - allow
+          - deny
+          type: string
+        repeat:
+          enum:
+          - yearly
+          - lunar
+          type: string
+        holiday:
+          description: "A statutory holiday name from the server's calendar, e.g.\
+            \ 春节."
+          type: string
+        holiday_day:
+          description: Which dates of the holiday an entry covers (default `off`).
+          enum:
+          - "off"
+          - work
+          type: string
+        lunar_month:
+          type: integer
+        lunar_day:
+          type: integer
+      required:
+      - mode
+    AccessGrantInput:
+      example:
+        code: code
+        max_uses: 6
+        bound_client_id: bound_client_id
+        bound_ips:
+        - bound_ips
+        - bound_ips
+        label: label
+        expires_in_minutes: 1
+      properties:
+        label:
+          type: string
+        expires_in_minutes:
+          minimum: 1
+          type: integer
+        max_uses:
+          description: 0 means "no use limit"; the grant still expires.
+          type: integer
+        code:
+          description: Optional caller-chosen code; omitted means the server generates
+            one.
+          type: string
+        bound_client_id:
+          description: Self-reported controller identity the code is bound to.
+          type: string
+        bound_ips:
+          items:
+            type: string
+          type: array
+      required:
+      - expires_in_minutes
+    AccessGrant:
+      example:
+        code: code
+        device_id: device_id
+        active: true
+        created_at: 2000-01-23T04:56:07.000+00:00
+        label: label
+        last_used_at: 2000-01-23T04:56:07.000+00:00
+        expires_at: 2000-01-23T04:56:07.000+00:00
+        revoked_at: 2000-01-23T04:56:07.000+00:00
+        max_uses: 6
+        last_used_client_id: last_used_client_id
+        bound_client_id: bound_client_id
+        uses: 1
+        bound_ips:
+        - bound_ips
+        - bound_ips
+        id: 0
+        last_used_ip: last_used_ip
+      properties:
+        id:
+          format: int64
+          type: integer
+        device_id:
+          type: string
+        code:
+          description: Returned only in the creation response; treat it as a secret.
+          type: string
+        label:
+          type: string
+        expires_at:
+          format: date-time
+          type: string
+        max_uses:
+          type: integer
+        uses:
+          type: integer
+        active:
+          type: boolean
+        revoked_at:
+          format: date-time
+          nullable: true
+          type: string
+        last_used_at:
+          format: date-time
+          nullable: true
+          type: string
+        bound_client_id:
+          type: string
+        bound_ips:
+          items:
+            type: string
+          type: array
+        last_used_client_id:
+          type: string
+        last_used_ip:
+          type: string
+        created_at:
+          format: date-time
+          type: string
+      required:
+      - active
+      - bound_client_id
+      - bound_ips
+      - code
+      - created_at
+      - device_id
+      - expires_at
+      - id
+      - max_uses
+      - uses
+    AccessApproval:
+      example:
+        reason: reason
+        expires_at: 2000-01-23T04:56:07.000+00:00
+        decided_at: 2000-01-23T04:56:07.000+00:00
+        device_id: device_id
+        grant_id: 6
+        created_at: 2000-01-23T04:56:07.000+00:00
+        client_ip: client_ip
+        id: 0
+        source: device_code
+        client_id: client_id
+        status: pending
+      properties:
+        id:
+          format: int64
+          type: integer
+        device_id:
+          type: string
+        client_id:
+          description: Self-reported by the requesting controller.
+          type: string
+        client_ip:
+          description: The address the server observed (trusted-proxy aware).
+          type: string
+        source:
+          enum:
+          - device_code
+          - grant
+          type: string
+        grant_id:
+          format: int64
+          nullable: true
+          type: integer
+        status:
+          enum:
+          - pending
+          - approved
+          - denied
+          - expired
+          - consumed
+          type: string
+        expires_at:
+          format: date-time
+          type: string
+        decided_at:
+          format: date-time
+          nullable: true
+          type: string
+        reason:
+          type: string
+        created_at:
+          format: date-time
+          type: string
+      required:
+      - client_id
+      - client_ip
+      - created_at
+      - device_id
+      - expires_at
+      - id
+      - source
+      - status
+    ApprovalSummary:
+      example:
+        total: 0
+        denied_sources:
+        - client_ip: client_ip
+          denials: 7
+          last_denied_at: 2000-01-23T04:56:07.000+00:00
+        - client_ip: client_ip
+          denials: 7
+          last_denied_at: 2000-01-23T04:56:07.000+00:00
+        denial_cooldown_max_seconds: 2
+        by_status:
+          consumed: 2
+          approved: 1
+          expired: 5
+          pending: 6
+          denied: 5
+        denial_cooldown_seconds: 9
+        denial_cooldown_multiplier: 3
+        since: 2000-01-23T04:56:07.000+00:00
+      properties:
+        since:
+          description: Inclusive start of the window the counts cover.
+          format: date-time
+          type: string
+        total:
+          description: "Every request created inside the window, whatever its outcome."
+          format: int64
+          type: integer
+        by_status:
+          $ref: "#/components/schemas/ApprovalSummary_by_status"
+        denied_sources:
+          description: "Refused sources inside the window, most refusals first."
+          items:
+            $ref: "#/components/schemas/ApprovalSummary_denied_sources_inner"
+          type: array
+        denial_cooldown_seconds:
+          description: "The live APPROVAL_DENIAL_COOLDOWN_SECONDS, so an owner can\
+            \ tell \"refused right now\" from \"refused a while ago\"."
+          type: integer
+        denial_cooldown_multiplier:
+          description: The live APPROVAL_DENIAL_COOLDOWN_MULTIPLIER; 1 means each
+            further consecutive refusal costs the same as the last.
+          type: integer
+        denial_cooldown_max_seconds:
+          description: "The live APPROVAL_DENIAL_COOLDOWN_MAX_SECONDS, the ceiling\
+            \ the escalation cannot pass; 0 means uncapped."
+          type: integer
+      required:
+      - by_status
+      - denial_cooldown_max_seconds
+      - denial_cooldown_multiplier
+      - denial_cooldown_seconds
+      - denied_sources
+      - since
+      - total
+    RemoteSession:
+      description: |
+        One controller holding, or having held, a signaling session against a
+        device. `active` and `duration_seconds` are derived: the first from
+        `ended_at`, the second is the run length so far while the session is
+        still open, so a client never has to pick its own notion of "now".
+      example:
+        duration_seconds: 1
+        device_id: device_id
+        end_reason: end_reason
+        session_id: session_id
+        active: true
+        created_at: 2000-01-23T04:56:07.000+00:00
+        client_id: client_id
+        updated_at: 2000-01-23T04:56:07.000+00:00
+        user_id: 6
+        started_at: 2000-01-23T04:56:07.000+00:00
+        client_ip: client_ip
+        id: 0
+        ended_at: 2000-01-23T04:56:07.000+00:00
+      properties:
+        id:
+          format: int64
+          type: integer
+        session_id:
+          description: The signaling session id the server assigned; unique per session.
+          type: string
+        user_id:
+          description: The device's owner. 0 when the device was unbound at the time.
+          format: int64
+          type: integer
+        device_id:
+          type: string
+        client_id:
+          description: "The controller-declared client id, the same value the device\
+            \ access log records."
+          type: string
+        client_ip:
+          type: string
+        started_at:
+          format: date-time
+          type: string
+        ended_at:
+          format: date-time
+          nullable: true
+          type: string
+        end_reason:
+          description: "Empty while the session is open; `disconnected` when the signaling\
+            \ socket went away on its own, `revoked` when the owner or an administrator\
+            \ closed it on purpose, `server_restart` for rows a restart found still\
+            \ open."
+          type: string
+        active:
+          type: boolean
+        duration_seconds:
+          format: int64
+          type: integer
+        created_at:
+          format: date-time
+          type: string
+        updated_at:
+          format: date-time
+          type: string
+      required:
+      - active
+      - client_id
+      - client_ip
+      - created_at
+      - device_id
+      - duration_seconds
+      - end_reason
+      - ended_at
+      - id
+      - session_id
+      - started_at
+      - updated_at
+      - user_id
+    RemoteSessionAccessLog:
+      description: |
+        One device access-log row that carries a session id - in practice the
+        `session_started` entry the server wrote when the controller
+        authenticated, which is what pairs "an attempt" with "the session it
+        became". The full timeline is documented separately in
+        `docs/user-api-docs.md` (§5.3.1); this is the part a session owns.
+      example:
+        result: result
+        reason: reason
+        device_id: device_id
+        owner_id: 3
+        ip: ip
+        session_id: session_id
+        created_at: 2000-01-23T04:56:07.000+00:00
+        id: 9
+        client_id: client_id
+      properties:
+        id:
+          format: int64
+          type: integer
+        device_id:
+          type: string
+        owner_id:
+          description: The device's owner at the time of the attempt; 0 when unbound.
+          format: int64
+          type: integer
+        client_id:
+          type: string
+        session_id:
+          type: string
+        ip:
+          type: string
+        result:
+          description: "The canonical access result, e.g. `session_started`."
+          type: string
+        reason:
+          type: string
+        created_at:
+          format: date-time
+          type: string
+      required:
+      - client_id
+      - created_at
+      - device_id
+      - id
+      - ip
+      - owner_id
+      - reason
+      - result
+      - session_id
+    RemoteSessionDetail:
+      description: |
+        One control session with the records that share its `session_id`. Both
+        lists are capped at 100 entries and present-but-empty when there is
+        nothing to show, so a client never has to distinguish "no recordings"
+        from "field missing".
+      example:
+        recordings:
+        - duration_seconds: 2
+          size_bytes: 7
+          device_id: device_id
+          format: format
+          session_id: session_id
+          created_at: 2000-01-23T04:56:07.000+00:00
+          thumbnail_url: thumbnail_url
+          artifact_url: artifact_url
+          device_name: device_name
+          thumbnail_path: thumbnail_path
+          artifact_path: artifact_path
+          updated_at: 2000-01-23T04:56:07.000+00:00
+          user_id: 5
+          started_at: 2000-01-23T04:56:07.000+00:00
+          id: 5
+          user: "{}"
+          ended_at: 2000-01-23T04:56:07.000+00:00
+          status: recording
+        - duration_seconds: 2
+          size_bytes: 7
+          device_id: device_id
+          format: format
+          session_id: session_id
+          created_at: 2000-01-23T04:56:07.000+00:00
+          thumbnail_url: thumbnail_url
+          artifact_url: artifact_url
+          device_name: device_name
+          thumbnail_path: thumbnail_path
+          artifact_path: artifact_path
+          updated_at: 2000-01-23T04:56:07.000+00:00
+          user_id: 5
+          started_at: 2000-01-23T04:56:07.000+00:00
+          id: 5
+          user: "{}"
+          ended_at: 2000-01-23T04:56:07.000+00:00
+          status: recording
+        session:
+          duration_seconds: 1
+          device_id: device_id
+          end_reason: end_reason
+          session_id: session_id
+          active: true
+          created_at: 2000-01-23T04:56:07.000+00:00
+          client_id: client_id
+          updated_at: 2000-01-23T04:56:07.000+00:00
+          user_id: 6
+          started_at: 2000-01-23T04:56:07.000+00:00
+          client_ip: client_ip
+          id: 0
+          ended_at: 2000-01-23T04:56:07.000+00:00
+        counts:
+          recordings: 2
+          access_log: 4
+        access_log:
+        - result: result
+          reason: reason
+          device_id: device_id
+          owner_id: 3
+          ip: ip
+          session_id: session_id
+          created_at: 2000-01-23T04:56:07.000+00:00
+          id: 9
+          client_id: client_id
+        - result: result
+          reason: reason
+          device_id: device_id
+          owner_id: 3
+          ip: ip
+          session_id: session_id
+          created_at: 2000-01-23T04:56:07.000+00:00
+          id: 9
+          client_id: client_id
+      properties:
+        session:
+          $ref: "#/components/schemas/RemoteSession"
+        recordings:
+          items:
+            $ref: "#/components/schemas/SessionRecording"
+          type: array
+        access_log:
+          items:
+            $ref: "#/components/schemas/RemoteSessionAccessLog"
+          type: array
+        counts:
+          $ref: "#/components/schemas/RemoteSessionDetail_counts"
+      required:
+      - access_log
+      - counts
+      - recordings
+      - session
+    RemoteSessionDetailList:
+      description: |
+        Cursor page of sessions that each carry their related records (see
+        `RemoteSessionDetail`). `next_cursor` is absent on the last page.
+      example:
+        next_cursor: next_cursor
+        items:
+        - recordings:
+          - duration_seconds: 2
+            size_bytes: 7
+            device_id: device_id
+            format: format
+            session_id: session_id
+            created_at: 2000-01-23T04:56:07.000+00:00
+            thumbnail_url: thumbnail_url
+            artifact_url: artifact_url
+            device_name: device_name
+            thumbnail_path: thumbnail_path
+            artifact_path: artifact_path
+            updated_at: 2000-01-23T04:56:07.000+00:00
+            user_id: 5
+            started_at: 2000-01-23T04:56:07.000+00:00
+            id: 5
+            user: "{}"
+            ended_at: 2000-01-23T04:56:07.000+00:00
+            status: recording
+          - duration_seconds: 2
+            size_bytes: 7
+            device_id: device_id
+            format: format
+            session_id: session_id
+            created_at: 2000-01-23T04:56:07.000+00:00
+            thumbnail_url: thumbnail_url
+            artifact_url: artifact_url
+            device_name: device_name
+            thumbnail_path: thumbnail_path
+            artifact_path: artifact_path
+            updated_at: 2000-01-23T04:56:07.000+00:00
+            user_id: 5
+            started_at: 2000-01-23T04:56:07.000+00:00
+            id: 5
+            user: "{}"
+            ended_at: 2000-01-23T04:56:07.000+00:00
+            status: recording
+          session:
+            duration_seconds: 1
+            device_id: device_id
+            end_reason: end_reason
+            session_id: session_id
+            active: true
+            created_at: 2000-01-23T04:56:07.000+00:00
+            client_id: client_id
+            updated_at: 2000-01-23T04:56:07.000+00:00
+            user_id: 6
+            started_at: 2000-01-23T04:56:07.000+00:00
+            client_ip: client_ip
+            id: 0
+            ended_at: 2000-01-23T04:56:07.000+00:00
+          counts:
+            recordings: 2
+            access_log: 4
+          access_log:
+          - result: result
+            reason: reason
+            device_id: device_id
+            owner_id: 3
+            ip: ip
+            session_id: session_id
+            created_at: 2000-01-23T04:56:07.000+00:00
+            id: 9
+            client_id: client_id
+          - result: result
+            reason: reason
+            device_id: device_id
+            owner_id: 3
+            ip: ip
+            session_id: session_id
+            created_at: 2000-01-23T04:56:07.000+00:00
+            id: 9
+            client_id: client_id
+        - recordings:
+          - duration_seconds: 2
+            size_bytes: 7
+            device_id: device_id
+            format: format
+            session_id: session_id
+            created_at: 2000-01-23T04:56:07.000+00:00
+            thumbnail_url: thumbnail_url
+            artifact_url: artifact_url
+            device_name: device_name
+            thumbnail_path: thumbnail_path
+            artifact_path: artifact_path
+            updated_at: 2000-01-23T04:56:07.000+00:00
+            user_id: 5
+            started_at: 2000-01-23T04:56:07.000+00:00
+            id: 5
+            user: "{}"
+            ended_at: 2000-01-23T04:56:07.000+00:00
+            status: recording
+          - duration_seconds: 2
+            size_bytes: 7
+            device_id: device_id
+            format: format
+            session_id: session_id
+            created_at: 2000-01-23T04:56:07.000+00:00
+            thumbnail_url: thumbnail_url
+            artifact_url: artifact_url
+            device_name: device_name
+            thumbnail_path: thumbnail_path
+            artifact_path: artifact_path
+            updated_at: 2000-01-23T04:56:07.000+00:00
+            user_id: 5
+            started_at: 2000-01-23T04:56:07.000+00:00
+            id: 5
+            user: "{}"
+            ended_at: 2000-01-23T04:56:07.000+00:00
+            status: recording
+          session:
+            duration_seconds: 1
+            device_id: device_id
+            end_reason: end_reason
+            session_id: session_id
+            active: true
+            created_at: 2000-01-23T04:56:07.000+00:00
+            client_id: client_id
+            updated_at: 2000-01-23T04:56:07.000+00:00
+            user_id: 6
+            started_at: 2000-01-23T04:56:07.000+00:00
+            client_ip: client_ip
+            id: 0
+            ended_at: 2000-01-23T04:56:07.000+00:00
+          counts:
+            recordings: 2
+            access_log: 4
+          access_log:
+          - result: result
+            reason: reason
+            device_id: device_id
+            owner_id: 3
+            ip: ip
+            session_id: session_id
+            created_at: 2000-01-23T04:56:07.000+00:00
+            id: 9
+            client_id: client_id
+          - result: result
+            reason: reason
+            device_id: device_id
+            owner_id: 3
+            ip: ip
+            session_id: session_id
+            created_at: 2000-01-23T04:56:07.000+00:00
+            id: 9
+            client_id: client_id
+      properties:
+        items:
+          items:
+            $ref: "#/components/schemas/RemoteSessionDetail"
+          type: array
+        next_cursor:
+          type: string
+      required:
+      - items
+    RemoteSessionList:
+      description: |
+        Cursor page of control sessions. `next_cursor` is absent on the last page
+        and `total` is deliberately absent, the same as every other paginated
+        list here: the endpoint does not count the whole set per page.
+      example:
+        next_cursor: next_cursor
+        items:
+        - duration_seconds: 1
+          device_id: device_id
+          end_reason: end_reason
+          session_id: session_id
+          active: true
+          created_at: 2000-01-23T04:56:07.000+00:00
+          client_id: client_id
+          updated_at: 2000-01-23T04:56:07.000+00:00
+          user_id: 6
+          started_at: 2000-01-23T04:56:07.000+00:00
+          client_ip: client_ip
+          id: 0
+          ended_at: 2000-01-23T04:56:07.000+00:00
+        - duration_seconds: 1
+          device_id: device_id
+          end_reason: end_reason
+          session_id: session_id
+          active: true
+          created_at: 2000-01-23T04:56:07.000+00:00
+          client_id: client_id
+          updated_at: 2000-01-23T04:56:07.000+00:00
+          user_id: 6
+          started_at: 2000-01-23T04:56:07.000+00:00
+          client_ip: client_ip
+          id: 0
+          ended_at: 2000-01-23T04:56:07.000+00:00
+      properties:
+        items:
+          items:
+            $ref: "#/components/schemas/RemoteSession"
+          type: array
+        next_cursor:
+          type: string
+      required:
+      - items
+    RemoteSessionRevocation:
+      description: |
+        The result of ending one live control session. `revoked` is always
+        `true` - the endpoint answers `409` rather than returning a false here,
+        so a caller never has to interpret a success response as "maybe".
+      example:
+        device_id: device_id
+        session_id: session_id
+        revoked: true
+      properties:
+        session_id:
+          type: string
+        device_id:
+          type: string
+        revoked:
+          type: boolean
+      required:
+      - device_id
+      - revoked
+      - session_id
+    RemoteSessionBatchRevocation:
+      description: |
+        The result of clearing every live control session off one device. Unlike
+        the single-session response this is a *report*: a batch can half succeed,
+        so the counts and the per-session entries are the answer. `truncated` is
+        true when the device had more live controllers than one call handles, so
+        a caller that sees it knows the machine may not be empty yet.
+      example:
+        sessions:
+        - reason: reason
+          session_id: session_id
+          revoked: true
+        - reason: reason
+          session_id: session_id
+          revoked: true
+        device_id: device_id
+        truncated: true
+        failed: 6
+        revoked: 0
+      properties:
+        device_id:
+          type: string
+        revoked:
+          description: How many sessions were closed and confirmed.
+          type: integer
+        failed:
+          description: How many were live but could not be closed.
+          type: integer
+        truncated:
+          description: True when more live sessions existed than one call handles
+            (the cap is 200).
+          type: boolean
+        sessions:
+          description: "One entry per session the call attempted, newest first."
+          items:
+            $ref: "#/components/schemas/RemoteSessionBatchRevocation_sessions_inner"
+          type: array
+      required:
+      - device_id
+      - failed
+      - revoked
+      - sessions
+      - truncated
+    UpdateRelease:
+      description: |
+        One build published to the self-hosted update channel. The artifact
+        itself is always fetchable at `download_url`: either an absolute URL on
+        a host the operator controls, or this server's own
+        `GET /v1/update-releases/{release_id}/artifact` when the installer was
+        uploaded here (`hosted_here` is true). A release with no fetchable bytes
+        is a placeholder and is never returned to a client.
+      example:
+        size_bytes: 6
+        notes: notes
+        hosted_here: true
+        sha256: sha256
+        channel: stable
+        download_url: https://openapi-generator.tech
+        id: 0
+        arch: x64
+        published_at: 2000-01-23T04:56:07.000+00:00
+        version: version
+        mandatory: true
+        platform: windows
+      properties:
+        id:
+          format: int64
+          type: integer
+        channel:
+          enum:
+          - stable
+          - beta
+          - nightly
+          type: string
+        platform:
+          enum:
+          - windows
+          - macos
+          - linux
+          type: string
+        arch:
+          enum:
+          - x64
+          - arm64
+          - universal
+          type: string
+        version:
+          description: "Dotted numeric version, e.g. `4.2.5.0`."
+          type: string
+        download_url:
+          description: Absolute http(s) URL of the installer or archive.
+          format: uri
+          type: string
+        hosted_here:
+          description: "True when this server stores and serves the bytes (so `download_url`\
+            \ points at `GET /v1/update-releases/{release_id}/artifact`), false when\
+            \ the installer lives on a host the operator manages."
+          type: boolean
+        sha256:
+          description: Lowercase hex SHA-256 of the artifact; clients verify what
+            they downloaded.
+          type: string
+        size_bytes:
+          format: int64
+          type: integer
+        notes:
+          type: string
+        mandatory:
+          description: "When true, the update is not optional for older clients."
+          type: boolean
+        published_at:
+          format: date-time
+          type: string
+      required:
+      - arch
+      - channel
+      - download_url
+      - hosted_here
+      - id
+      - mandatory
+      - platform
+      - published_at
+      - sha256
+      - size_bytes
+      - version
+    UpdateCheckResult:
+      example:
+        channel: channel
+        current_version: current_version
+        arch: arch
+        mandatory: true
+        update_available: true
+        platform: platform
+        latest:
+          size_bytes: 6
+          notes: notes
+          hosted_here: true
+          sha256: sha256
+          channel: stable
+          download_url: https://openapi-generator.tech
+          id: 0
+          arch: x64
+          published_at: 2000-01-23T04:56:07.000+00:00
+          version: version
+          mandatory: true
+          platform: windows
+      properties:
+        update_available:
+          type: boolean
+        mandatory:
+          type: boolean
+        channel:
+          type: string
+        platform:
+          type: string
+        arch:
+          type: string
+        current_version:
+          description: Echoed when the caller supplied it.
+          type: string
+        latest:
+          $ref: "#/components/schemas/UpdateRelease"
+      required:
+      - arch
+      - channel
+      - latest
+      - mandatory
+      - platform
+      - update_available
+    Problem:
+      description: "RFC 7807 problem details, served as `application/problem+json`."
+      properties:
+        type:
+          format: uri
+          type: string
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+        code:
+          description: "A stable machine-readable code, e.g. `INVALID_CODE` or `RATE_LIMITED`."
+          type: string
+        trace_id:
+          type: string
+      required:
+      - code
+      - status
+      - title
+      - type
+    SessionRecordingInput:
+      description: |
+        The index row a producer creates before (or instead of) uploading media.
+        `device_id` is recorded as a label; it is not checked against the
+        caller's devices, because a headless producer may be indexing a capture
+        for a machine it is not bound to.
+      example:
+        duration_seconds: 0
+        artifact_url: artifact_url
+        device_name: device_name
+        thumbnail_path: thumbnail_path
+        artifact_path: artifact_path
+        size_bytes: 0
+        device_id: device_id
+        format: format
+        session_id: session_id
+        started_at: 2000-01-23T04:56:07.000+00:00
+        ended_at: 2000-01-23T04:56:07.000+00:00
+        status: recording
+      properties:
+        device_id:
+          description: The device the capture came from.
+          type: string
+        device_name:
+          type: string
+        session_id:
+          description: "The control session this recording belongs to, when there\
+            \ is one."
+          type: string
+        status:
+          description: How far the capture got when this row was written.
+          enum:
+          - recording
+          - completed
+          - failed
+          type: string
+        format:
+          description: Free-form label; the upload route overwrites it from the file
+            extension.
+          type: string
+        artifact_path:
+          description: Server-side path. Set by the upload route; clients do not need
+            to send it.
+          type: string
+        artifact_url:
+          type: string
+        thumbnail_path:
+          type: string
+        duration_seconds:
+          minimum: 0
+          type: integer
+        size_bytes:
+          minimum: 0
+          type: integer
+        started_at:
+          description: Defaults to the time the row was created when omitted.
+          format: date-time
+          nullable: true
+          type: string
+        ended_at:
+          format: date-time
+          nullable: true
+          type: string
+      required:
+      - device_id
+      - status
+    SessionRecordingPatch:
+      description: |
+        Partial update - every field is optional and only the ones present are
+        written, so a producer can patch the row as the capture progresses.
+      example:
+        duration_seconds: 0
+        artifact_url: artifact_url
+        thumbnail_path: thumbnail_path
+        artifact_path: artifact_path
+        size_bytes: 0
+        format: format
+        ended_at: 2000-01-23T04:56:07.000+00:00
+        status: recording
+      properties:
+        status:
+          enum:
+          - recording
+          - completed
+          - failed
+          type: string
+        format:
+          type: string
+        artifact_path:
+          type: string
+        artifact_url:
+          type: string
+        thumbnail_path:
+          type: string
+        duration_seconds:
+          minimum: 0
+          type: integer
+        size_bytes:
+          minimum: 0
+          type: integer
+        ended_at:
+          format: date-time
+          nullable: true
+          type: string
+    SessionRecording:
+      description: |
+        One indexed recording. The row is the control-plane metadata; the media
+        artifact is produced by the control engine and fetched through the
+        artifact routes. `artifact_path` is a server-side path and is not a
+        download URL - clients should call `.../artifact-ticket` and use the
+        URL they get back.
+      example:
+        duration_seconds: 2
+        size_bytes: 7
+        device_id: device_id
+        format: format
+        session_id: session_id
+        created_at: 2000-01-23T04:56:07.000+00:00
+        thumbnail_url: thumbnail_url
+        artifact_url: artifact_url
+        device_name: device_name
+        thumbnail_path: thumbnail_path
+        artifact_path: artifact_path
+        updated_at: 2000-01-23T04:56:07.000+00:00
+        user_id: 5
+        started_at: 2000-01-23T04:56:07.000+00:00
+        id: 5
+        user: "{}"
+        ended_at: 2000-01-23T04:56:07.000+00:00
+        status: recording
+      properties:
+        id:
+          type: integer
+        user_id:
+          type: integer
+        device_id:
+          type: string
+        device_name:
+          type: string
+        session_id:
+          type: string
+        status:
+          description: |
+            `recording` while the capture is in progress, then `completed` or
+            `failed`. A stale `recording` row is swept to `failed` by the
+            recording lifecycle worker.
+          enum:
+          - recording
+          - completed
+          - failed
+          type: string
+        format:
+          description: "Container/codec hint, e.g. `mp4`, `h264`, `grf`."
+          type: string
+        artifact_path:
+          description: Server-side stored path; not a client-fetchable URL.
+          type: string
+        artifact_url:
+          type: string
+        thumbnail_path:
+          type: string
+        thumbnail_url:
+          type: string
+        duration_seconds:
+          type: integer
+        size_bytes:
+          format: int64
+          type: integer
+        started_at:
+          format: date-time
+          type: string
+        ended_at:
+          format: date-time
+          type: string
+        created_at:
+          format: date-time
+          type: string
+        updated_at:
+          format: date-time
+          type: string
+        user:
+          description: |
+            The owning user, present when the server eager-loads it. Optional -
+            clients must not depend on this being present.
+          type: object
+      required:
+      - artifact_path
+      - artifact_url
+      - created_at
+      - device_id
+      - device_name
+      - duration_seconds
+      - format
+      - id
+      - session_id
+      - size_bytes
+      - started_at
+      - status
+      - thumbnail_path
+      - thumbnail_url
+      - updated_at
+      - user_id
+    SessionRecordingList:
+      description: |
+        Cursor page of recordings. `next_cursor` is absent on the last page;
+        `total` is intentionally absent because this endpoint does not count the
+        whole set per page.
+      example:
+        next_cursor: next_cursor
+        items:
+        - duration_seconds: 2
+          size_bytes: 7
+          device_id: device_id
+          format: format
+          session_id: session_id
+          created_at: 2000-01-23T04:56:07.000+00:00
+          thumbnail_url: thumbnail_url
+          artifact_url: artifact_url
+          device_name: device_name
+          thumbnail_path: thumbnail_path
+          artifact_path: artifact_path
+          updated_at: 2000-01-23T04:56:07.000+00:00
+          user_id: 5
+          started_at: 2000-01-23T04:56:07.000+00:00
+          id: 5
+          user: "{}"
+          ended_at: 2000-01-23T04:56:07.000+00:00
+          status: recording
+        - duration_seconds: 2
+          size_bytes: 7
+          device_id: device_id
+          format: format
+          session_id: session_id
+          created_at: 2000-01-23T04:56:07.000+00:00
+          thumbnail_url: thumbnail_url
+          artifact_url: artifact_url
+          device_name: device_name
+          thumbnail_path: thumbnail_path
+          artifact_path: artifact_path
+          updated_at: 2000-01-23T04:56:07.000+00:00
+          user_id: 5
+          started_at: 2000-01-23T04:56:07.000+00:00
+          id: 5
+          user: "{}"
+          ended_at: 2000-01-23T04:56:07.000+00:00
+          status: recording
+      properties:
+        items:
+          items:
+            $ref: "#/components/schemas/SessionRecording"
+          type: array
+        next_cursor:
+          type: string
+      required:
+      - items
+    ApprovalAlreadyDecided:
+      description: |
+        Returned by approve/deny when the request was already decided (or
+        expired) so the click is reported honestly instead of silently
+        succeeding.
+      example:
+        message: message
+        status: pending
+      properties:
+        status:
+          enum:
+          - pending
+          - approved
+          - denied
+          - expired
+          - consumed
+          type: string
+        message:
+          type: string
+      required:
+      - message
+      - status
+    ApprovalClaimRequest:
+      example:
+        secret: secret
+        approval_id: 0
+      properties:
+        approval_id:
+          format: int64
+          type: integer
+        secret:
+          description: The `approval_secret` returned once by `access-code:verify`.
+          type: string
+      required:
+      - approval_id
+      - secret
+    ApprovalClaimPending:
+      description: The owner has not decided yet; poll again after `poll_after_ms`.
+      example:
+        expires_at: 2000-01-23T04:56:07.000+00:00
+        poll_after_ms: 0
+        status: pending
+      properties:
+        status:
+          enum:
+          - pending
+          type: string
+        expires_at:
+          format: date-time
+          type: string
+        poll_after_ms:
+          type: integer
+      required:
+      - expires_at
+      - poll_after_ms
+      - status
+    ApprovalClaimConsumed:
+      description: The approval was already exchanged for a token.
+      example:
+        message: message
+        status: consumed
+      properties:
+        status:
+          enum:
+          - consumed
+          type: string
+        message:
+          type: string
+      required:
+      - message
+      - status
+    PlaybackTicket:
+      description: |
+        A signed, time-limited URL for one recording's media or preview. It
+        carries no credentials, so it must be treated as a bearer token: anyone
+        who holds the link can fetch the file until `expires_at`.
+      example:
+        expires_at: 2000-01-23T04:56:07.000+00:00
+        url: url
+      properties:
+        url:
+          description: Absolute path (with the signed `t` parameter) to fetch.
+          type: string
+        expires_at:
+          format: date-time
+          type: string
+      required:
+      - expires_at
+      - url
+    listMyDevices_200_response:
+      example:
+        items:
+        - device_name: device_name
+          device_id: device_id
+          os: os
+          app_version: app_version
+          logged_in: true
+          access_code: access_code
+          os_version: os_version
+          online: true
+          remark: remark
+          last_seen_at: last_seen_at
+        - device_name: device_name
+          device_id: device_id
+          os: os
+          app_version: app_version
+          logged_in: true
+          access_code: access_code
+          os_version: os_version
+          online: true
+          remark: remark
+          last_seen_at: last_seen_at
+      properties:
+        items:
+          items:
+            $ref: "#/components/schemas/Device"
+          type: array
+      required:
+      - items
+    uploadRecordingArtifact_request:
+      properties:
+        file:
+          format: binary
+          type: string
+      required:
+      - file
+    listAccessGrants_200_response:
+      example:
+        items:
+        - code: code
+          device_id: device_id
+          active: true
+          created_at: 2000-01-23T04:56:07.000+00:00
+          label: label
+          last_used_at: 2000-01-23T04:56:07.000+00:00
+          expires_at: 2000-01-23T04:56:07.000+00:00
+          revoked_at: 2000-01-23T04:56:07.000+00:00
+          max_uses: 6
+          last_used_client_id: last_used_client_id
+          bound_client_id: bound_client_id
+          uses: 1
+          bound_ips:
+          - bound_ips
+          - bound_ips
+          id: 0
+          last_used_ip: last_used_ip
+        - code: code
+          device_id: device_id
+          active: true
+          created_at: 2000-01-23T04:56:07.000+00:00
+          label: label
+          last_used_at: 2000-01-23T04:56:07.000+00:00
+          expires_at: 2000-01-23T04:56:07.000+00:00
+          revoked_at: 2000-01-23T04:56:07.000+00:00
+          max_uses: 6
+          last_used_client_id: last_used_client_id
+          bound_client_id: bound_client_id
+          uses: 1
+          bound_ips:
+          - bound_ips
+          - bound_ips
+          id: 0
+          last_used_ip: last_used_ip
+      properties:
+        items:
+          items:
+            $ref: "#/components/schemas/AccessGrant"
+          type: array
+      required:
+      - items
+    revokeAccessGrant_200_response:
+      example:
+        success: true
+      properties:
+        success:
+          type: boolean
+      required:
+      - success
+    listAccessApprovals_200_response:
+      example:
+        items:
+        - reason: reason
+          expires_at: 2000-01-23T04:56:07.000+00:00
+          decided_at: 2000-01-23T04:56:07.000+00:00
+          device_id: device_id
+          grant_id: 6
+          created_at: 2000-01-23T04:56:07.000+00:00
+          client_ip: client_ip
+          id: 0
+          source: device_code
+          client_id: client_id
+          status: pending
+        - reason: reason
+          expires_at: 2000-01-23T04:56:07.000+00:00
+          decided_at: 2000-01-23T04:56:07.000+00:00
+          device_id: device_id
+          grant_id: 6
+          created_at: 2000-01-23T04:56:07.000+00:00
+          client_ip: client_ip
+          id: 0
+          source: device_code
+          client_id: client_id
+          status: pending
+      properties:
+        items:
+          items:
+            $ref: "#/components/schemas/AccessApproval"
+          type: array
+      required:
+      - items
+    approveAccessApproval_request:
+      properties:
+        reason:
+          type: string
+    ApprovalSummary_by_status:
+      description: "Always carries all five states, zeroes included."
+      example:
+        consumed: 2
+        approved: 1
+        expired: 5
+        pending: 6
+        denied: 5
+      properties:
+        pending:
+          format: int64
+          type: integer
+        approved:
+          format: int64
+          type: integer
+        denied:
+          format: int64
+          type: integer
+        expired:
+          format: int64
+          type: integer
+        consumed:
+          format: int64
+          type: integer
+      required:
+      - approved
+      - consumed
+      - denied
+      - expired
+      - pending
+    ApprovalSummary_denied_sources_inner:
+      example:
+        client_ip: client_ip
+        denials: 7
+        last_denied_at: 2000-01-23T04:56:07.000+00:00
+      properties:
+        client_ip:
+          type: string
+        denials:
+          format: int64
+          type: integer
+        last_denied_at:
+          format: date-time
+          nullable: true
+          type: string
+      required:
+      - client_ip
+      - denials
+    RemoteSessionDetail_counts:
+      example:
+        recordings: 2
+        access_log: 4
+      properties:
+        recordings:
+          type: integer
+        access_log:
+          type: integer
+      required:
+      - access_log
+      - recordings
+    RemoteSessionBatchRevocation_sessions_inner:
+      example:
+        reason: reason
+        session_id: session_id
+        revoked: true
+      properties:
+        session_id:
+          type: string
+        revoked:
+          type: boolean
+        reason:
+          description: Why the session could not be closed; present only when `revoked`
+            is false.
+          type: string
+      required:
+      - revoked
+      - session_id
+  securitySchemes:
+    ApiKeyAuth:
+      in: header
+      name: X-API-Key
+      type: apiKey
+    BearerAuth:
+      bearerFormat: opaque
+      scheme: bearer
+      type: http

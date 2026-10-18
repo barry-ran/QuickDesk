@@ -1,14 +1,9 @@
 package service
 
 import (
-	"bytes"
 	"context"
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"log"
-	"net/http"
 	"time"
 
 	"quickdesk/signaling/internal/models"
@@ -80,40 +75,7 @@ func (s *WebhookService) Dispatch(event string, data interface{}) {
 }
 
 func (s *WebhookService) deliver(webhook models.Webhook, payload map[string]interface{}) {
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return
-	}
-
-	var lastStatus int
-	for attempt := 0; attempt < 3; attempt++ {
-		req, err := http.NewRequest("POST", webhook.URL, bytes.NewReader(body))
-		if err != nil {
-			return
-		}
-		req.Header.Set("Content-Type", "application/json")
-
-		if webhook.Secret != "" {
-			mac := hmac.New(sha256.New, []byte(webhook.Secret))
-			mac.Write(body)
-			sig := hex.EncodeToString(mac.Sum(nil))
-			req.Header.Set("X-Webhook-Signature", "sha256="+sig)
-		}
-
-		client := &http.Client{Timeout: 10 * time.Second}
-		resp, err := client.Do(req)
-		if err != nil {
-			lastStatus = 0
-			time.Sleep(time.Duration(attempt+1) * 2 * time.Second)
-			continue
-		}
-		resp.Body.Close()
-		lastStatus = resp.StatusCode
-		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-			break
-		}
-		time.Sleep(time.Duration(attempt+1) * 2 * time.Second)
-	}
+	lastStatus := postWebhook(webhook.URL, webhook.Secret, payload)
 
 	now := time.Now()
 	if err := s.db.Model(&webhook).Updates(map[string]interface{}{

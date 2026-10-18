@@ -2,8 +2,10 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -107,6 +109,57 @@ func (p *PresenceService) Start(ctx context.Context) {
 
 func (p *PresenceService) markInstanceAlive(ctx context.Context) error {
 	return p.rdb.Set(ctx, p.instanceKey(p.instanceID), "1", presenceInstanceTTL).Err()
+}
+
+// MarkAlive refreshes this instance's presence lease synchronously. Start()
+// does the same thing on a ticker, but a caller that needs the lease to exist
+// *before* it acts - the boot-time orphan sweep, which must see itself in the
+// live set - calls this directly.
+func (p *PresenceService) MarkAlive(ctx context.Context) error {
+	if p == nil || p.rdb == nil {
+		return errors.New("presence service is not configured")
+	}
+	return p.markInstanceAlive(ctx)
+}
+
+// InstanceID is this process's presence/lease identity. It is what a session
+// row records so a later sweep can tell whose socket it was.
+func (p *PresenceService) InstanceID() string {
+	if p == nil {
+		return ""
+	}
+	return p.instanceID
+}
+
+// LiveInstances lists the signaling-server processes currently holding a
+// presence lease.
+//
+// This is a liveness view, not a registry: the keys expire within
+// presenceInstanceTTL of a process dying (or being killed without cleanup), so
+// a crashed instance drops out on its own and never has to be reaped by hand.
+// The caller uses it to decide which open session rows are orphans.
+func (p *PresenceService) LiveInstances(ctx context.Context) ([]string, error) {
+	if p == nil || p.rdb == nil {
+		return nil, errors.New("presence service is not configured")
+	}
+	const prefix = "qd:presence:instance:"
+	var live []string
+	var cursor uint64
+	for {
+		keys, next, err := p.rdb.Scan(ctx, cursor, prefix+"*", 100).Result()
+		if err != nil {
+			return nil, err
+		}
+		for _, key := range keys {
+			if id := strings.TrimPrefix(key, prefix); id != "" {
+				live = append(live, id)
+			}
+		}
+		cursor = next
+		if cursor == 0 {
+			return live, nil
+		}
+	}
 }
 
 // Heartbeat refreshes the heartbeat TTL for deviceID. Called from
