@@ -128,7 +128,8 @@ Item {
                             spacing: Theme.spacingXXLarge
                             
                             Text {
-                                text: qsTr("Access Code")
+                                text: mainController.permanentPasswordActive
+                                      ? qsTr("Permanent Password") : qsTr("Access Code")
                                 font.pixelSize: Theme.fontSizeSmall
                                 color: Theme.textSecondary
                                 anchors.verticalCenter: parent.verticalCenter
@@ -139,7 +140,7 @@ Item {
                                 font.pixelSize: Theme.fontSizeSmall - 1
                                 color: Theme.textSecondary
                                 anchors.verticalCenter: parent.verticalCenter
-                                visible: mainController.accessCode
+                                visible: mainController.accessCode && !mainController.permanentPasswordActive
                             }
                         }
                         
@@ -149,8 +150,11 @@ Item {
                             spacing: Theme.spacingSmall
                             
                             Text {
-                                width: parent.width - refreshBtn.width - copyPwdBtn.width - parent.spacing * 2
-                                text: mainController.accessCode || qsTr("Loading...")
+                                width: parent.width - (refreshBtn.visible ? refreshBtn.width + parent.spacing : 0)
+                                       - copyPwdBtn.width - parent.spacing
+                                // The permanent password is never shown on screen
+                                text: mainController.permanentPasswordActive
+                                      ? "••••••••" : (mainController.accessCode || qsTr("Loading..."))
                                 font.pixelSize: 24
                                 font.weight: Font.Bold
                                 font.family: "Consolas"
@@ -162,6 +166,7 @@ Item {
                             QDIconButton {
                                 id: refreshBtn
                                 iconSource: FluentIconGlyph.refreshGlyph
+                                visible: !mainController.permanentPasswordEnabled
                                 enabled: mainController.signalingState === "connected"
                                 anchors.verticalCenter: parent.verticalCenter
                                 onClicked: {
@@ -488,10 +493,18 @@ Item {
         console.log("mainController:", mainController)
         if (mainController) {
             console.log("  deviceId:", mainController.deviceId)
-            console.log("  accessCode:", mainController.accessCode)
         }
     }
     
+    // Host is not (yet) using the permanent password
+    Connections {
+        target: mainController
+        function onPermanentPasswordRejected() {
+            root.showToast(qsTr("The permanent password is not in use yet. Restart QuickDesk to apply it."),
+                           QDToast.Type.Warning)
+        }
+    }
+
     // Connect to refresh access code result
     Connections {
         target: mainController.hostManager

@@ -10,6 +10,7 @@
 #include "infra/env/applicationcontext.h"
 #include "infra/log/log.h"
 #include "core/localconfigcenter.h"
+#include <QRegularExpression>
 #include <QAbstractSocket>
 #include <QTimer>
 #include <QClipboard>
@@ -181,12 +182,27 @@ MainController::MainController(QObject* parent)
     connect(m_hostManager.get(), &HostManager::accessCodeChanged,
             this, [this]() {
         QString currentCode = m_hostManager->accessCode();
-        LOG_INFO("Host access code changed: {}", currentCode.toStdString());
+        auto& config = core::LocalConfigCenter::instance();
+        if (config.permanentPasswordEnabled()) {
+            emit permanentPasswordEnabledChanged();  // re-evaluate permanentPasswordActive
+        }
         if (currentCode.isEmpty()) {
             return;
         }
-        core::LocalConfigCenter::instance().setSavedAccessCode(currentCode);
-        LOG_INFO("Saved access code for 'never refresh' mode: {}", currentCode.toStdString());
+        if (config.permanentPasswordEnabled()) {
+            // Never overwrite (or log) the permanent password.
+            if (currentCode != config.savedAccessCode()) {
+                LOG_WARN("Host access code differs from the permanent password "
+                         "(not applied yet, or rejected by the host)");
+                emit permanentPasswordRejected();
+                return;
+            }
+            LOG_INFO("Host is using the permanent password");
+        } else {
+            LOG_INFO("Host access code changed: {}", currentCode.toStdString());
+            config.setSavedAccessCode(currentCode);
+            LOG_INFO("Saved access code for 'never refresh' mode: {}", currentCode.toStdString());
+        }
 
         // §2.23: access_code upload is independent of user login state —
         // it uses Bearer device_secret. The PUT only succeeds once the
@@ -291,6 +307,10 @@ MainController::MainController(QObject* parent)
         m_accessCodeRefreshIntervalMinutes = interval;
         updateAccessCodeRefreshTimer();
     });
+
+    connect(&core::LocalConfigCenter::instance(),
+            &core::LocalConfigCenter::signalPermanentPasswordEnabledChanged,
+            this, &MainController::permanentPasswordEnabledChanged);
 }
 
 MainController::~MainController()
@@ -479,6 +499,10 @@ void MainController::showRemoteWindowForDevice(const QString& deviceId)
 
 void MainController::refreshAccessCode()
 {
+    if (permanentPasswordEnabled()) {
+        LOG_INFO("Access code refresh ignored: permanent password is set");
+        return;
+    }
     m_hostManager->refreshAccessCode();
     
     // Reset auto-refresh timer when user manually refreshes
@@ -570,6 +594,63 @@ QString MainController::deviceId() const
 QString MainController::accessCode() const
 {
     return m_hostManager->accessCode();
+}
+
+bool MainController::permanentPasswordEnabled() const
+{
+    return core::LocalConfigCenter::instance().permanentPasswordEnabled();
+}
+
+bool MainController::permanentPasswordActive() const
+{
+    const auto& config = core::LocalConfigCenter::instance();
+    const QString code = m_hostManager->accessCode();
+    return config.permanentPasswordEnabled() && !code.isEmpty()
+           && code == config.savedAccessCode();
+}
+
+QString MainController::setPermanentPassword(const QString& password, const QString& confirmation)
+{
+    if (password != confirmation) {
+        return QStringLiteral("MISMATCH");
+    }
+    if (password.length() < 8) {
+        return QStringLiteral("TOO_SHORT");
+    }
+    if (password.length() > 32) {
+        return QStringLiteral("TOO_LONG");
+    }
+    // Letters and digits only: the code travels in signaling URLs and
+    // through the remoting host, so avoid characters that need escaping.
+    static const QRegularExpression kAllowed(QStringLiteral("^[A-Za-z0-9]+$"));
+    if (!kAllowed.match(password).hasMatch()) {
+        return QStringLiteral("INVALID_CHARS");
+    }
+
+    auto& config = core::LocalConfigCenter::instance();
+    config.setSavedAccessCode(password);
+    config.setAccessCodeRefreshInterval(-1);  // stops the auto-refresh timer
+    config.setAccessCodeNextRefreshTime("");
+    config.setPermanentPasswordEnabled(true);
+    LOG_INFO("Permanent password set; it will be used after restart");
+    return QString();
+}
+
+void MainController::clearPermanentPassword()
+{
+    auto& config = core::LocalConfigCenter::instance();
+    if (!config.permanentPasswordEnabled()) {
+        return;
+    }
+    config.setPermanentPasswordEnabled(false);
+    config.setSavedAccessCode("");  // a new code is generated on next start
+    config.setAccessCodeRefreshInterval(120);  // back to the default (2 hours)
+    LOG_INFO("Permanent password removed");
+
+    // Invalidate the old password right away when possible.
+    if (m_hostManager->isConnected()) {
+        m_hostManager->refreshAccessCode();
+    }
 }
 
 bool MainController::isHostConnected() const
@@ -707,7 +788,11 @@ void MainController::onHostProcessStarted()
             
             QString savedAccessCode;
             int interval = core::LocalConfigCenter::instance().accessCodeRefreshInterval();
-            if (interval == -1) {
+            if (core::LocalConfigCenter::instance().permanentPasswordEnabled()) {
+                // Permanent password: always use it, never log it
+                savedAccessCode = core::LocalConfigCenter::instance().savedAccessCode();
+                LOG_INFO("Using permanent password as access code");
+            } else if (interval == -1) {
                 // "Never refresh" mode: always use saved access code
                 savedAccessCode = core::LocalConfigCenter::instance().savedAccessCode();
                 if (!savedAccessCode.isEmpty()) {

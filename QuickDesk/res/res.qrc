@@ -2,6 +2,7 @@
     <qresource prefix="/">
         <file>i18n/en_US.qm</file>
         <file>i18n/zh_CN.qm</file>
+        <file>i18n/it_IT.qm</file>
         <file>image/tray/logo.png</file>
         <file>QuickDesk.ico</file>
         <file>font/SegoeFluentIcons.ttf</file>

@@ -124,6 +124,7 @@ LCC_FUNCTION_IMP_STRING(extraSkillsDirs, ExtraSkillsDirs);
 LCC_FUNCTION_IMP_STRING(trustConfirmMode, TrustConfirmMode);
 
 LCC_FUNCTION_IMP_BOOL(autoPrivacyScreenOnConnect, AutoPrivacyScreenOnConnect);
+LCC_FUNCTION_IMP_BOOL(permanentPasswordEnabled, PermanentPasswordEnabled);
 
 LCC_FUNCTION_IMP_STRING(userToken, UserToken);
 LCC_FUNCTION_IMP_STRING(refreshToken, RefreshToken);

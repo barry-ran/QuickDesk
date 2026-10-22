@@ -60,6 +60,9 @@ class MainController : public QObject {
     // Host properties (convenience for QML)
     Q_PROPERTY(QString deviceId READ deviceId NOTIFY deviceIdChanged)
     Q_PROPERTY(QString accessCode READ accessCode NOTIFY accessCodeChanged)
+    Q_PROPERTY(bool permanentPasswordEnabled READ permanentPasswordEnabled NOTIFY permanentPasswordEnabledChanged)
+    // True when the host is actually using the permanent password
+    Q_PROPERTY(bool permanentPasswordActive READ permanentPasswordActive NOTIFY permanentPasswordEnabledChanged)
     Q_PROPERTY(bool isHostConnected READ isHostConnected NOTIFY hostConnectionChanged)
     
     // MCP Service status
@@ -117,6 +120,25 @@ public:
      */
     Q_INVOKABLE void refreshAccessCode();
     
+    /**
+     * @brief Set a permanent (never regenerated) access password.
+     *
+     * The password must be typed twice. Allowed: 8-32 letters/digits.
+     * @return empty string on success, otherwise an error code:
+     *         "MISMATCH", "TOO_SHORT", "TOO_LONG", "INVALID_CHARS"
+     *         Takes effect after QuickDesk is restarted.
+     */
+    Q_INVOKABLE QString setPermanentPassword(const QString& password, const QString& confirmation);
+
+    /**
+     * @brief Remove the permanent password and go back to a temporary,
+     *        auto-refreshed access code (refreshed immediately if connected).
+     */
+    Q_INVOKABLE void clearPermanentPassword();
+
+    bool permanentPasswordEnabled() const;
+    bool permanentPasswordActive() const;
+
     /**
      * @brief Reset access code refresh timer (called after manual refresh)
      */
@@ -216,6 +238,9 @@ signals:
     void clientProcessStatusChanged();
     void clientServerStatusChanged();
     void nextAccessCodeRefreshTimeChanged();
+    void permanentPasswordEnabledChanged();
+    // Host reported an access code different from the permanent password
+    void permanentPasswordRejected();
     void presetLoadFailed(const QString& error);
     void forceUpgradeRequired(const QString& minVersion);
     void requestShowRemoteWindow(const QString& deviceId);
