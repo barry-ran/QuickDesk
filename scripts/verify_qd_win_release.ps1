@@ -179,6 +179,66 @@ function Assert-PackageDependencies {
     }
 }
 
+function Get-FileVersionText {
+    param([string]$Path)
+
+    # Deliberately the file version rather than the product version: the Qt
+    # platform plugin and the Qt libraries it loads are matched at load time by
+    # the build id Qt records internally, and a mismatch is what produces
+    # "Available platform plugins are: windows" followed by a failure to
+    # initialize - the plugin is present and is simply not usable.
+    $info = Get-Item -LiteralPath $Path
+    $versionInfo = $info.VersionInfo
+    if ($versionInfo -and $versionInfo.FileVersion) {
+        return $versionInfo.FileVersion
+    }
+    return ''
+}
+
+function Assert-QtVersionsAgree {
+    param(
+        [string]$PackageRoot,
+        [string[]]$RelativeBinaries,
+        # Injected so the comparison can be tested without a stamped PE, which
+        # is not something a test can manufacture reliably. Defaults to the real
+        # reader.
+        [scriptblock]$ReadVersion = { param($Path) (Get-FileVersionText -Path $Path) }
+    )
+
+    # A Qt plugin that loads against a different Qt build than the application
+    # is present, x64, and has all its imports satisfied - and still fails to
+    # initialize. Every check above passes on that package, which is why the
+    # failure reached users as "reinstalling may fix this" with no actionable
+    # cause. Comparing the shipped Qt versions is what catches it.
+    $versions = @{}
+    foreach ($relative in $RelativeBinaries) {
+        $path = Join-Path $PackageRoot $relative
+        if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+            continue
+        }
+        $version = & $ReadVersion $path
+        if ([string]::IsNullOrWhiteSpace($version)) {
+            # Not every Qt build stamps a file version, and a missing stamp is
+            # not evidence of a mismatch. Skipping keeps a legitimate package
+            # from being rejected for something the check cannot see.
+            continue
+        }
+        if (-not $versions.ContainsKey($version)) {
+            $versions[$version] = New-Object System.Collections.Generic.List[string]
+        }
+        $versions[$version].Add($relative)
+    }
+
+    if ($versions.Count -le 1) {
+        return
+    }
+
+    $report = ($versions.GetEnumerator() | ForEach-Object {
+        "{0}: {1}" -f $_.Key, ($_.Value -join ', ')
+    }) -join '; '
+    throw ("the package ships more than one Qt version, so the platform plugin cannot load: {0}" -f $report)
+}
+
 try {
     $normalizedPackageDir = $PackageDir.Trim().Trim('"')
     if ($normalizedPackageDir.Length -gt 3) {
@@ -245,6 +305,20 @@ try {
             'VCRUNTIME140.dll',
             'VCRUNTIME140_1.dll'
         )
+
+    Assert-QtVersionsAgree -PackageRoot $PackageRoot -RelativeBinaries @(
+        'Qt6Core.dll',
+        'Qt6Gui.dll',
+        'Qt6Widgets.dll',
+        'Qt6Qml.dll',
+        'Qt6Quick.dll',
+        'Qt6QuickControls2.dll',
+        'Qt6Network.dll',
+        'Qt6Sql.dll',
+        'Qt6Multimedia.dll',
+        'Qt6WebSockets.dll',
+        'platforms\qwindows.dll'
+    )
 
     Write-Host "PASS: Windows publish dependencies verified: $packageRoot"
     exit 0
