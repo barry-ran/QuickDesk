@@ -74,6 +74,13 @@ pub struct MemoryStore {
 impl MemoryStore {
     pub fn new() -> Result<Self, String> {
         let db_path = Self::db_path();
+        Self::open_at(db_path)
+    }
+
+    // Opens a store at a caller-chosen path. Production goes through `new`,
+    // which resolves the platform data directory; this variant exists so tests
+    // can use a throwaway file instead of the real one on the developer's disk.
+    fn open_at(db_path: PathBuf) -> Result<Self, String> {
         if let Some(parent) = db_path.parent() {
             std::fs::create_dir_all(parent)
                 .map_err(|e| format!("cannot create memory dir: {e}"))?;
@@ -306,6 +313,11 @@ impl MemoryStore {
             ],
         );
 
+        // Release the guard before record_failure takes it again. The mutex is
+        // not reentrant: holding it across that call blocked the thread on a
+        // lock only that thread could release, and every failed tool call
+        // reached this path, so the first failure froze the whole server.
+        drop(db);
         if !success {
             self.record_failure(device_id, tool_name, &args_str, error_message);
         }
@@ -559,5 +571,109 @@ fn dirs_data_dir() -> Option<PathBuf> {
     #[cfg(not(target_os = "windows"))]
     {
         std::env::var("HOME").ok().map(PathBuf::from)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn store_in_temp() -> (MemoryStore, PathBuf) {
+        let dir = std::env::temp_dir().join(format!(
+            "quickdesk-memory-test-{}-{}",
+            std::process::id(),
+            Utc::now().timestamp_nanos_opt().unwrap_or_default()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = MemoryStore::open_at(dir.join("memory.db")).unwrap();
+        (store, dir)
+    }
+
+    // A deadlock reports nothing: the test never returns, so CI kills the job
+    // with no diagnosis. Running the body on a worker with a receive timeout
+    // turns that silence into a failure that names the problem.
+    fn without_deadlocking<F: FnOnce() + Send + 'static>(body: F) {
+        let (done, finished) = std::sync::mpsc::channel();
+        let worker = std::thread::spawn(move || {
+            body();
+            let _ = done.send(());
+        });
+        assert!(
+            finished.recv_timeout(std::time::Duration::from_secs(20)).is_ok(),
+            "timed out: the store is deadlocked, not slow"
+        );
+        worker.join().unwrap();
+    }
+
+    #[test]
+    fn logging_a_failure_records_it_without_deadlocking() {
+        without_deadlocking(|| {
+            let (store, dir) = store_in_temp();
+            store.log_operation(
+                "session-1",
+                "device-1",
+                "mouse_click",
+                &serde_json::json!({"x": 10, "y": 20}),
+                "failed",
+                false,
+                12,
+                "connection timed out",
+            );
+
+            let failures = store.get_failures("device-1", None);
+            assert_eq!(failures.len(), 1, "the failure should be recorded");
+            assert_eq!(failures[0].occurrence_count, 1);
+            assert_eq!(failures[0].error_category, "timeout");
+
+            let _ = std::fs::remove_dir_all(dir);
+        });
+    }
+
+    #[test]
+    fn logging_a_repeated_failure_counts_it_as_one_pattern() {
+        without_deadlocking(|| {
+            let (store, dir) = store_in_temp();
+            for duration in [12, 14] {
+                store.log_operation(
+                    "session-1",
+                    "device-1",
+                    "mouse_click",
+                    &serde_json::json!({"x": 10, "y": 20}),
+                    "failed",
+                    false,
+                    duration,
+                    "connection timed out",
+                );
+            }
+
+            let failures = store.get_failures("device-1", None);
+            assert_eq!(failures.len(), 1, "same shape is one pattern, not two");
+            assert_eq!(failures[0].occurrence_count, 2);
+
+            let _ = std::fs::remove_dir_all(dir);
+        });
+    }
+
+    #[test]
+    fn summarizing_a_device_with_failures_does_not_deadlock() {
+        without_deadlocking(|| {
+            let (store, dir) = store_in_temp();
+            store.log_operation(
+                "session-1",
+                "device-1",
+                "mouse_click",
+                &serde_json::json!({"x": 1, "y": 2}),
+                "failed",
+                false,
+                5,
+                "connection timed out",
+            );
+
+            let summary = store.device_summary("device-1");
+            assert_eq!(summary.total_operations, 1);
+            assert_eq!(summary.common_failures.len(), 1);
+
+            let _ = std::fs::remove_dir_all(dir);
+        });
     }
 }
