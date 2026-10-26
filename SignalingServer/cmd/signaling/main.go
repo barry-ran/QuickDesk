@@ -67,7 +67,7 @@ func main() {
 
 	if cfg.Runtime.RunAutoMigrate {
 		log.Println("Running AutoMigrate (schema source of truth is migrations/001_init.sql)...")
-		if err := db.AutoMigrate(
+		if err := database.AutoMigrate(db,
 			&models.User{},
 			&models.Device{},
 			&models.UserDevice{},

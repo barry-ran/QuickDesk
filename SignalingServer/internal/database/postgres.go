@@ -1,6 +1,7 @@
 package database
 
 import (
+	"errors"
 	"log"
 	"quickdesk/signaling/internal/config"
 
@@ -8,6 +9,10 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
+
+// errNoDatabaseHandle is returned by AutoMigrate when there is nothing to
+// migrate against, rather than a nil dereference deeper in.
+var errNoDatabaseHandle = errors.New("no database handle to migrate")
 
 // InitPostgreSQL initializes the PostgreSQL connection
 func InitPostgreSQL(cfg *config.Config) *gorm.DB {
@@ -54,4 +59,29 @@ func RunMigrations(db *gorm.DB) error {
 	
 	log.Println("Database migrations completed")
 	return nil
+}
+
+// AutoMigrate runs GORM's schema sync through a session with PrepareStmt on.
+//
+// Use this instead of db.AutoMigrate on a Postgres handle opened without
+// PrepareStmt. gorm.io/driver/postgres's Migrator.GetRows injects
+// pgx.QueryExecModeSimpleProtocol as a query argument whenever PrepareStmt is
+// off, and it does so for `SELECT * FROM "t" LIMIT 1`, a statement with no
+// placeholder. pgx's sanitizer rejects the query with "insufficient arguments",
+// so a table that already exists cannot be migrated.
+//
+// A fresh database is unaffected - a missing table goes straight to CREATE
+// TABLE and never reaches that path - so the failure only shows up on an
+// existing installation, where it is easy to miss because the caller logs a
+// warning and keeps going: every later schema update is silently skipped.
+//
+// PrepareStmt is scoped to this session rather than set on the handle because
+// it changes how every subsequent statement is executed, and because a
+// prepared session refuses a multi-statement Exec such as the
+// migrations/001_init.sql file.
+func AutoMigrate(db *gorm.DB, models ...interface{}) error {
+	if db == nil {
+		return errNoDatabaseHandle
+	}
+	return db.Session(&gorm.Session{PrepareStmt: true}).AutoMigrate(models...)
 }
