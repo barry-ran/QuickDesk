@@ -11,6 +11,7 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 
 import '../api/signaling_api.dart';
 import '../core/rand_id.dart';
+import '../core/quality_settings.dart';
 import 'auth/spake2.dart' as spake2;
 import 'auth/spake2_authenticator.dart';
 import 'datachannel_config.dart';
@@ -51,12 +52,15 @@ class ClientSession {
   late final DataChannelHandler dcHandler = DataChannelHandler(onLog: _log);
 
   /// 远端 candidate：remote description 就绪前缓冲
-  late final RemoteCandidateSink _remoteCandidates =
-      RemoteCandidateSink(() => _pc!, _log);
+  late final RemoteCandidateSink _remoteCandidates = RemoteCandidateSink(
+    () => _pc!,
+    _log,
+  );
 
   /// 本端 candidate：认证完成前缓冲（签名 SDP 必须先于 candidate 到达对端）
-  late final LocalCandidateGate _localCandidates =
-      LocalCandidateGate(_sendCandidateNow);
+  late final LocalCandidateGate _localCandidates = LocalCandidateGate(
+    _sendCandidateNow,
+  );
 
   RTCDataChannel? _eventChannel;
 
@@ -89,15 +93,20 @@ class ClientSession {
   /// 建立连接。
   /// [signalToken] 由 SignalingApi.verifyAccessCode 预先换取（一次性）。
   Future<void> connect(
-      String deviceId, String accessCode, String signalToken) async {
+    String deviceId,
+    String accessCode,
+    String signalToken,
+  ) async {
     this.deviceId = deviceId;
 
     try {
       _setState(SessionState.connecting);
 
       // 1. 共享密钥哈希: HMAC(device_id, device_id + access_code)
-      final sharedSecretHash =
-          spake2.getSharedSecretHash(deviceId, deviceId + accessCode);
+      final sharedSecretHash = spake2.getSharedSecretHash(
+        deviceId,
+        deviceId + accessCode,
+      );
 
       // 2. JID：与 WebClient / Chromium Host 的 FTL resource 格式对齐
       final clientUuid = randomHex(12);
@@ -110,8 +119,11 @@ class ClientSession {
       _jingleBuilder.remoteJid = remoteJid;
 
       // 3. SPAKE2 认证器（Alice）
-      _authenticator =
-          Spake2ClientAuthenticator(localJid, remoteJid, sharedSecretHash);
+      _authenticator = Spake2ClientAuthenticator(
+        localJid,
+        remoteJid,
+        sharedSecretHash,
+      );
 
       // 4. 信令 WebSocket（首帧 auth）
       _transport = WebSocketTransport(
@@ -199,8 +211,13 @@ class ClientSession {
     };
 
     _pc!.onTrack = (event) async {
+      if (event.track.kind == 'audio') {
+        _audioTracks.add(event.track);
+        event.track.enabled = !_audioMuted;
+      }
       _log(
-          'track received: ${event.track.kind}, streams=${event.streams.length}');
+        'track received: ${event.track.kind}, streams=${event.streams.length}',
+      );
       if (event.streams.isNotEmpty) {
         for (final stream in event.streams) {
           remoteStreams[stream.id] = stream;
@@ -224,8 +241,47 @@ class ClientSession {
     };
   }
 
+  bool _audioMuted = false;
+  final List<MediaStreamTrack> _audioTracks = [];
+  String preferredVideoCodec = '';
+
+  void setAudioMuted(bool muted) {
+    _audioMuted = muted;
+    for (final track in _audioTracks) {
+      track.enabled = !muted;
+    }
+    dcHandler.sendAudioControl(enable: !muted);
+  }
+
+  Future<void> _applyCodecPreferences({
+    RTCRtpTransceiver? videoTransceiver,
+  }) async {
+    if (preferredVideoCodec.isEmpty) return;
+    try {
+      final capabilities = await getRtpReceiverCapabilities('video');
+      final codecs = capabilities.codecs;
+      if (codecs == null || codecs.isEmpty) return;
+      final ordered = preferCodec(
+        codecs,
+        preferredVideoCodec,
+        (c) => c.mimeType,
+      );
+      final transceivers = videoTransceiver == null
+          ? await _pc!.getTransceivers()
+          : [videoTransceiver];
+      for (final transceiver in transceivers) {
+        if (identical(transceiver, videoTransceiver) ||
+            transceiver.receiver.track?.kind == 'video') {
+          await transceiver.setCodecPreferences(ordered);
+        }
+      }
+    } catch (_) {
+      _log('Codec preference unavailable; keeping negotiated defaults');
+    }
+  }
+
   Future<void> _createAndSendOffer() async {
-    await _pc!.addTransceiver(
+    final videoTransceiver = await _pc!.addTransceiver(
       kind: RTCRtpMediaType.RTCRtpMediaTypeVideo,
       init: RTCRtpTransceiverInit(direction: TransceiverDirection.RecvOnly),
     );
@@ -234,6 +290,8 @@ class ClientSession {
       init: RTCRtpTransceiverInit(direction: TransceiverDirection.RecvOnly),
     );
 
+    preferredVideoCodec = await QualitySettings.loadCodec();
+    await _applyCodecPreferences(videoTransceiver: videoTransceiver);
     final offer = await _pc!.createOffer();
     await _pc!.setLocalDescription(offer);
 
@@ -250,11 +308,15 @@ class ClientSession {
 
   void _sendCandidateNow(RTCIceCandidate candidate) {
     if (_transport == null || !_transport!.isConnected) return;
-    _transport!.send(_jingleBuilder.buildTransportInfo(IceCandidateInfo(
-      candidate: candidate.candidate!,
-      sdpMid: candidate.sdpMid ?? '',
-      sdpMLineIndex: candidate.sdpMLineIndex ?? 0,
-    )));
+    _transport!.send(
+      _jingleBuilder.buildTransportInfo(
+        IceCandidateInfo(
+          candidate: candidate.candidate!,
+          sdpMid: candidate.sdpMid ?? '',
+          sdpMLineIndex: candidate.sdpMLineIndex ?? 0,
+        ),
+      ),
+    );
   }
 
   void _onSignalingMessage(String message) => _signalQueue.add(message);
@@ -282,10 +344,11 @@ class ClientSession {
 
   void _handleJsonMessage(Map<String, dynamic> json) {
     if (json['type'] != 'error') return;
-    final code = (json['code'] ??
-            (json['data'] is Map ? json['data']['code'] : '') ??
-            '')
-        .toString();
+    final code =
+        (json['code'] ??
+                (json['data'] is Map ? json['data']['code'] : '') ??
+                '')
+            .toString();
     _log('signaling error: $code');
     if (code == 'HOST_OFFLINE' ||
         code == 'PEER_DISCONNECTED' ||
@@ -327,8 +390,10 @@ class ClientSession {
         await _handleSessionInfo(message);
         break;
       case 'session-terminate':
-        _log('session terminated by host: '
-            '${message.terminateInfo?.describe() ?? 'unknown'}');
+        _log(
+          'session terminated by host: '
+          '${message.terminateInfo?.describe() ?? 'unknown'}',
+        );
         await _cleanup();
         _setState(SessionState.closed);
         break;
@@ -344,8 +409,9 @@ class ClientSession {
 
     if (message.authMessage != null) {
       _setState(SessionState.authenticating);
-      final st = driveAuthExchange(_authenticator!, message.authMessage!,
-          (next) {
+      final st = driveAuthExchange(_authenticator!, message.authMessage!, (
+        next,
+      ) {
         _transport!.send(_jingleBuilder.buildSessionInfo(next));
         _log('sent auth message (session-info)');
       });
@@ -359,7 +425,8 @@ class ClientSession {
     if (message.sdp != null) {
       try {
         await _pc!.setRemoteDescription(
-            RTCSessionDescription(message.sdp!.sdp, message.sdp!.type));
+          RTCSessionDescription(message.sdp!.sdp, message.sdp!.type),
+        );
         _log('remote SDP set');
         await _remoteCandidates.markReady();
       } catch (e) {
@@ -378,24 +445,32 @@ class ClientSession {
           final signalingState = await _pc!.getSignalingState();
           if (signalingState ==
               RTCSignalingState.RTCSignalingStateHaveLocalOffer) {
-            await _pc!
-                .setLocalDescription(RTCSessionDescription('', 'rollback'));
+            await _pc!.setLocalDescription(
+              RTCSessionDescription('', 'rollback'),
+            );
           }
           await _pc!.setRemoteDescription(
-              RTCSessionDescription(message.sdp!.sdp, 'offer'));
+            RTCSessionDescription(message.sdp!.sdp, 'offer'),
+          );
 
+          await _applyCodecPreferences();
           final answer = await _pc!.createAnswer();
           await _pc!.setLocalDescription(answer);
 
           final authKey = _authenticator?.authKey;
           if (authKey == null) {
             throw StateError(
-                'authentication key unavailable for SDP signature');
+              'authentication key unavailable for SDP signature',
+            );
           }
           final signature = signSdp(authKey, answer.sdp!, 'answer');
-          _transport!.send(_jingleBuilder.buildTransportInfoSdp(
-              answer.sdp!, 'answer',
-              signature: signature));
+          _transport!.send(
+            _jingleBuilder.buildTransportInfoSdp(
+              answer.sdp!,
+              'answer',
+              signature: signature,
+            ),
+          );
           _log('sent SDP answer via transport-info');
 
           // Host 要求 client 创建 "event" DataChannel（键鼠输入）
@@ -412,7 +487,8 @@ class ClientSession {
           }
         } else {
           await _pc!.setRemoteDescription(
-              RTCSessionDescription(message.sdp!.sdp, sdpType));
+            RTCSessionDescription(message.sdp!.sdp, sdpType),
+          );
         }
         await _remoteCandidates.markReady();
       } catch (e) {
@@ -428,8 +504,11 @@ class ClientSession {
   Future<void> _handleSessionInfo(JingleMessage message) async {
     if (message.authMessage == null) return;
 
-    final st = driveAuthExchange(_authenticator!, message.authMessage!,
-        (next) => _transport!.send(_jingleBuilder.buildSessionInfo(next)));
+    final st = driveAuthExchange(
+      _authenticator!,
+      message.authMessage!,
+      (next) => _transport!.send(_jingleBuilder.buildSessionInfo(next)),
+    );
 
     if (st == AuthState.rejected) {
       _log('auth rejected: ${_authenticator!.rejectionReason}');

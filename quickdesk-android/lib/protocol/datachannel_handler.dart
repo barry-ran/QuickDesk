@@ -106,7 +106,8 @@ class DataChannelHandler {
   void _handleControlState(RTCDataChannelState? channelState) {
     if (_disposed) return;
     onLog?.call(
-        'control datachannel: $channelState (sid=${_controlChannel?.id})');
+      'control datachannel: $channelState (sid=${_controlChannel?.id})',
+    );
     final wasReady = _controlReady;
     _controlReady = channelState == RTCDataChannelState.RTCDataChannelOpen;
     if (_controlReady && !wasReady) {
@@ -156,31 +157,39 @@ class DataChannelHandler {
   }
 
   void sendMouseEvent(MouseEventMsg mouseEvent) {
-    _sendEvent(encodeEventMessage(
-      timestamp: DateTime.now().millisecondsSinceEpoch,
-      mouseEvent: mouseEvent,
-    ));
+    _sendEvent(
+      encodeEventMessage(
+        timestamp: DateTime.now().millisecondsSinceEpoch,
+        mouseEvent: mouseEvent,
+      ),
+    );
   }
 
   void sendKeyEvent(KeyEventMsg keyEvent) {
-    _sendEvent(encodeEventMessage(
-      timestamp: DateTime.now().millisecondsSinceEpoch,
-      keyEvent: keyEvent,
-    ));
+    _sendEvent(
+      encodeEventMessage(
+        timestamp: DateTime.now().millisecondsSinceEpoch,
+        keyEvent: keyEvent,
+      ),
+    );
   }
 
   /// 文本注入（IME 输入，如中文）
   void sendTextEvent(String text) {
-    _sendEvent(encodeEventMessage(
-      timestamp: DateTime.now().millisecondsSinceEpoch,
-      textEventText: text,
-    ));
+    _sendEvent(
+      encodeEventMessage(
+        timestamp: DateTime.now().millisecondsSinceEpoch,
+        textEventText: text,
+      ),
+    );
   }
 
   void sendClipboard(String mimeType, Uint8List data) {
-    _sendControl(encodeControlMessage(
-      clipboardEvent: ClipboardEventMsg(mimeType: mimeType, data: data),
-    ));
+    _sendControl(
+      encodeControlMessage(
+        clipboardEvent: ClipboardEventMsg(mimeType: mimeType, data: data),
+      ),
+    );
   }
 
   void sendCapabilities(String capabilities) {
@@ -189,6 +198,29 @@ class DataChannelHandler {
 
   void sendAudioControl({required bool enable}) {
     _sendControl(encodeControlMessage(audioControlEnable: enable));
+  }
+
+  void sendTargetFramerate(int fps) {
+    if (![5, 15, 30, 60].contains(fps)) throw ArgumentError.value(fps);
+    _sendControl(encodeControlMessage(targetFramerate: fps));
+  }
+
+  /// This is a preferred MINIMUM, not a bandwidth ceiling.
+  void sendPreferredMinBitrate(int bitsPerSecond) {
+    if (bitsPerSecond < 0 || bitsPerSecond > 104857600) {
+      throw ArgumentError.value(bitsPerSecond);
+    }
+    _sendControl(encodeControlMessage(preferredMinBitrateBps: bitsPerSecond));
+  }
+
+  void sendClientResolution(ClientResolutionMsg resolution) {
+    if (resolution.width <= 0 ||
+        resolution.height <= 0 ||
+        resolution.width > 7680 ||
+        resolution.height > 4320) {
+      throw ArgumentError.value(resolution);
+    }
+    _sendControl(encodeControlMessage(clientResolution: resolution));
   }
 
   void sendVideoLayout(VideoLayoutMsg layout) {

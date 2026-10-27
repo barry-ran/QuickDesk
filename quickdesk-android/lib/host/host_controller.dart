@@ -34,6 +34,7 @@ class HostStatus {
   final String? deviceId;
   final String? accessCode;
   final int peerCount;
+  final List<ConnectedHostClient> clients;
   final String? message;
 
   HostStatus({
@@ -41,6 +42,7 @@ class HostStatus {
     this.deviceId,
     this.accessCode,
     this.peerCount = 0,
+    this.clients = const [],
     this.message,
   });
 }
@@ -76,6 +78,7 @@ class HostController {
 
   HostStage _stage = HostStage.idle;
   int _peerCount = 0;
+  bool _updatingAccessCode = false;
 
   HostController({
     required this.signalingUrl,
@@ -102,7 +105,8 @@ class HostController {
     if (_disposed ||
         _starting != null ||
         _stopping != null ||
-        _session != null) {
+        _session != null ||
+        _updatingAccessCode) {
       return;
     }
     final generation = ++_generation;
@@ -215,7 +219,9 @@ class HostController {
 
       _subs.add(
         session.onPeerCountChange.listen((n) {
-          if (_disposed || generation != _generation) {
+          if (_disposed ||
+              generation != _generation ||
+              !identical(_session, session)) {
             return;
           }
           _peerCount = n;
@@ -224,7 +230,9 @@ class HostController {
       );
       _subs.add(
         session.onStateChange.listen((s) {
-          if (_disposed || generation != _generation) {
+          if (_disposed ||
+              generation != _generation ||
+              !identical(_session, session)) {
             return;
           }
           if (s == HostSessionState.failed) {
@@ -263,20 +271,37 @@ class HostController {
     }
   }
 
+  Future<void> disconnectClient(
+    String clientId, {
+    DateTime? connectedAt,
+  }) async {
+    await _session?.disconnectClient(clientId, connectedAt: connectedAt);
+  }
+
   /// 用户手动重设访问码
   Future<void> regenerateAccessCode() async {
-    if (_creds == null || !_creds!.isProvisioned) {
-      return;
+    if (_disposed || _starting != null || _stopping != null) return;
+    final generation = _generation;
+    if (_stage != HostStage.idle && _stage != HostStage.error) {
+      throw StateError('Stop hosting before changing the access code');
     }
-    final code = HostCredentialStore.generateAccessCode();
-    await _api.setAccessCode(
-      deviceId: _creds!.deviceId!,
-      deviceSecret: _creds!.deviceSecret!,
-      accessCode: code,
-    );
-    await _store.saveAccessCode(code);
-    _creds = await _store.load();
-    _emit(_stage);
+    if (_session != null) throw StateError('Host session is still active');
+    if (_creds == null || !_creds!.isProvisioned) return;
+    if (_updatingAccessCode) return;
+    _updatingAccessCode = true;
+    try {
+      final code = HostCredentialStore.generateAccessCode();
+      await _api.setAccessCode(
+        deviceId: _creds!.deviceId!,
+        deviceSecret: _creds!.deviceSecret!,
+        accessCode: code,
+      );
+      await _store.saveAccessCode(code);
+      _creds = await _store.load();
+      if (!_disposed && generation == _generation) _emit(_stage);
+    } finally {
+      _updatingAccessCode = false;
+    }
   }
 
   void _startHeartbeat() {
@@ -337,6 +362,7 @@ class HostController {
         deviceId: _creds?.deviceId,
         accessCode: _creds?.accessCode,
         peerCount: _peerCount,
+        clients: _session?.connectedClients ?? const [],
         message: message,
       ),
     );

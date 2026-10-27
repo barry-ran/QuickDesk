@@ -24,6 +24,7 @@ class RemoteToolbar extends StatelessWidget {
   final VoidCallback onDownload;
   final VoidCallback onDisconnect;
   final VoidCallback onHelp;
+  final VoidCallback? onQuality;
   final VoidCallback onLeftClick;
   final VoidCallback onRightClick;
   final VoidCallback onToggleDrag;
@@ -49,6 +50,7 @@ class RemoteToolbar extends StatelessWidget {
     required this.onDownload,
     required this.onDisconnect,
     required this.onHelp,
+    this.onQuality,
     required this.onLeftClick,
     required this.onRightClick,
     required this.onToggleDrag,
@@ -110,6 +112,8 @@ class RemoteToolbar extends StatelessWidget {
                 onControlKey(int.parse(value.split(':').last));
               } else {
                 switch (value) {
+                  case 'quality':
+                    onQuality?.call();
                   case 'rotate':
                     onToggleOrientation();
                   case 'clipboard':
@@ -141,6 +145,11 @@ class RemoteToolbar extends StatelessWidget {
                   child: Text(entry.value),
                 ),
               const PopupMenuDivider(),
+              if (onQuality != null)
+                PopupMenuItem(
+                  value: 'quality',
+                  child: Text(L10n.t('quality.title')),
+                ),
               for (var i = 0; i < displays.length; i++)
                 CheckedPopupMenuItem(
                   value: 'display:$i',
