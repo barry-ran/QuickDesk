@@ -40,6 +40,8 @@ test('actual remote-view handlers queue browser files, reject folders and render
             // open a real session. All transfer UI/clipboard handlers are real.
             const { RemoteDesktopApp } = await import('/js/remote-main.js');
             const { DataChannelHandler } = await import('/js/protocol/datachannel-handler.js');
+            const { KeyboardHandler } = await import('/js/input/keyboard-handler.js');
+            const { ClipboardHandler } = await import('/js/input/clipboard-handler.js');
             const app = Object.create(RemoteDesktopApp.prototype);
             const handler = new DataChannelHandler();
             const channels = [];
@@ -62,14 +64,29 @@ test('actual remote-view handlers queue browser files, reject folders and render
             handler.addEventListener('fileTransferError', event =>
                 app._updateTransferStatus(event.detail.transferId, 'error', event.detail.errorMessage));
             const target = document.getElementById('target');
+            const inputEvents = [];
+            handler.sendKeyEvent = value => inputEvents.push({ kind: 'key', ...value });
+            handler.sendClipboardEvent = value => inputEvents.push({ kind: 'clipboard', ...value });
+            app.keyboardHandler = new KeyboardHandler(target, handler);
+            app.keyboardHandler.enable();
+            app.clipboardHandler = new ClipboardHandler(handler);
+            app.clipboardHandler._enabled = true;
             app._setupPasteUpload(target);
+            target.dispatchEvent(new KeyboardEvent('keydown', { code: 'ControlLeft', bubbles: true, cancelable: true }));
+            const vdown = new KeyboardEvent('keydown', { code: 'KeyV', ctrlKey: true, bubbles: true, cancelable: true });
+            target.dispatchEvent(vdown);
             const data = new DataTransfer();
             data.items.add(new File(['hello'], '<img src=x onerror=alert(1)>.txt', { lastModified: 1 }));
             data.items.add(new File(['world'], 'second.txt', { lastModified: 2 }));
             const pasted = new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true });
             target.dispatchEvent(pasted);
+            target.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyV', ctrlKey: true, bubbles: true }));
+            target.dispatchEvent(new KeyboardEvent('keyup', { code: 'ControlLeft', bubbles: true }));
+            const filePasteVEvents = inputEvents.filter(value => value.usbKeycode === 0x070019).length;
             const firstIds = [...handler._activeUploads.keys()];
-            target.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+            // Re-submission of the exact File objects is deduplicated. A new
+            // browser File with equal metadata must not be silently discarded.
+            app._uploadFiles([...handler._activeUploads.values()].map(task => task.file));
             const rows = document.querySelectorAll('.transfer-item');
             const queuedId = firstIds[1];
             document.querySelector('[data-transfer-id="' + queuedId + '"] .transfer-item-cancel').click();
@@ -79,6 +96,11 @@ test('actual remote-view handlers queue browser files, reject folders and render
             target.dispatchEvent(textPaste);
             const snapshot = {
                 handled: pasted.defaultPrevented,
+                keydownPrevented: vdown.defaultPrevented,
+                filePasteVEvents,
+                textPasteVEvents: inputEvents.filter(value => value.usbKeycode === 0x070019).length,
+                clipboardBeforeV: inputEvents.findIndex(value => value.kind === 'clipboard')
+                    < inputEvents.findIndex(value => value.usbKeycode === 0x070019),
                 textHandled: textPaste.defaultPrevented,
                 rows: rows.length,
                 name: rows[0].querySelector('.transfer-item-name').textContent,
@@ -86,11 +108,23 @@ test('actual remote-view handlers queue browser files, reject folders and render
                 channels: channels.length,
                 pending: handler._activeUploads.size,
             };
+            app._cleanupInputHandlers();
+            let submitted = 0;
+            app._uploadFiles = () => { submitted++; };
+            app._setupPasteUpload(target);
+            target.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+            snapshot.afterReconnectSubmissions = submitted;
+            app._cleanupInputHandlers();
             handler.destroy();
             return snapshot;
         });
         assert.equal(result.handled, true);
-        assert.equal(result.textHandled, false);
+        assert.equal(result.textHandled, true);
+        assert.equal(result.keydownPrevented, false);
+        assert.equal(result.filePasteVEvents, 0);
+        assert.equal(result.textPasteVEvents, 2);
+        assert.equal(result.clipboardBeforeV, true);
+        assert.equal(result.afterReconnectSubmissions, 1);
         assert.equal(result.rows, 2);
         assert.equal(result.injectedImages, 0);
         assert.equal(result.name, '<img src=x onerror=alert(1)>.txt');

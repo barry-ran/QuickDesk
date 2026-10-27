@@ -26,9 +26,9 @@ class Channel {
     open() { this.readyState = 'open'; return this.onopen?.(); }
     close() { this.readyState = 'closed'; this.onclose?.(); }
 }
-function setup(t) {
+function setup(t, options) {
     const channels = [];
-    const handler = new DataChannelHandler();
+    const handler = new DataChannelHandler(options);
     handler.supportsFileTransfer = true;
     handler.setPeerConnection({ connectionState: 'connected',
         createDataChannel(label) { const channel = new Channel(label); channels.push(channel); return channel; },
@@ -49,7 +49,7 @@ const count = (events, name) => events.filter(event => event.name === name).leng
 test('same-name uploads have distinct immediate IDs and dispatch serially', async t => {
     const { handler, channels, events } = setup(t);
     const first = handler.startFileUpload(file('same', [1], 1));
-    const second = handler.startFileUpload(file('same', [2], 2));
+    const second = handler.startFileUpload(file('same', [2], 1));
     assert.notEqual(first, second);
     assert.equal(channels.length, 1);
     assert.equal(count(events, 'fileTransferStarted'), 2);
@@ -242,4 +242,55 @@ test('backpressure does not read the next chunk while the channel remains full',
     channels[0].bufferedAmount = 0;
     await new Promise(resolve => setTimeout(resolve, 40));
     assert.equal(reads, 1);
+});
+
+test('upload idle watchdog releases a permanently backpressured queue', async t => {
+    const { handler, channels, events } = setup(t, { uploadIdleMs: 15 });
+    handler.startFileUpload(file('stuck')); handler.startFileUpload(file('next'));
+    channels[0].bufferedAmount = 1024 * 1024; channels[0].open();
+    await new Promise(resolve => setTimeout(resolve, 50));
+    assert.match(events.find(event => event.name === 'fileTransferError').errorMessage, /no progress/);
+    assert.equal(channels.length, 2); assert.equal(channels[0].readyState, 'closed');
+});
+test('malformed protobuf lengths and unterminated varints fail without looping', t => {
+    const { handler } = setup(t);
+    for (const bytes of [
+        [0x0a, 0x80, 0x80, 0x80, 0x80, 0x08], [0x0a, 0x05, 0x01], [0x0a, 0x80],
+        [0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x00],
+        [0x0b], [0x00], [0x12, 0x03, 0x0a, 0x05, 0x01], [0x0a, 0x02, 0x10, 0x80],
+    ]) assert.throws(() => handler._decodeFileTransfer(Uint8Array.from(bytes)), /file|File|Invalid|Truncated/);
+});
+test('malformed channel message ends only its own upload once', t => {
+    const { handler, channels, events } = setup(t);
+    handler.startFileUpload(file());
+    channels[0].onmessage({ data: Uint8Array.from([0x0a, 0x80]).buffer });
+    assert.equal(count(events, 'fileTransferError'), 1); assert.equal(channels[0].readyState, 'closed');
+});
+test('local committed download remains successful if host acknowledgement fails', async t => {
+    const { handler, channels, events } = setup(t);
+    let closed = 0;
+    handler.startFileDownload({ createWritable: async () => ({
+        write: async () => {}, close: async () => { closed++; },
+        abort: async () => { throw new Error('must not abort committed file'); },
+    }) });
+    await channels[0].open();
+    receive(handler, channels[0], { metadata: { filename: 'saved', size: 0 } });
+    receive(handler, channels[0], { end: {} });
+    channels[0].close(); await flush();
+    assert.equal(closed, 1); assert.equal(count(events, 'fileDownloadError'), 0);
+    const result = events.find(event => event.name === 'fileDownloadComplete');
+    assert.equal(result.acknowledgementSent, false); assert.equal(result.streaming, true);
+});
+test('cancel during writable close cannot claim rollback of a committed file', async t => {
+    const { handler, channels, events } = setup(t);
+    const closing = deferred(); let aborts = 0;
+    const id = handler.startFileDownload({ createWritable: async () => ({
+        write: async () => {}, close: () => closing.promise, abort: async () => { aborts++; },
+    }) });
+    await channels[0].open();
+    receive(handler, channels[0], { metadata: { filename: 'saved', size: 0 } });
+    receive(handler, channels[0], { end: {} }); await flush();
+    handler.cancelFileDownload(id); closing.resolve(); await flush();
+    assert.equal(aborts, 0); assert.equal(count(events, 'fileDownloadError'), 0);
+    assert.equal(count(events, 'fileDownloadComplete'), 1);
 });

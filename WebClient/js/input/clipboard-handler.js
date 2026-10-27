@@ -62,6 +62,12 @@ export class ClipboardHandler {
         }
     }
 
+    syncText(text) {
+        if (!this._enabled) return;
+        this._lastClipboardText = String(text);
+        this._sendToRemote(this._lastClipboardText);
+    }
+
     /**
      * 发送剪贴板内容到远程
      * @private
