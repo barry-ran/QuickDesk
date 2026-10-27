@@ -221,7 +221,9 @@ class _ConnectPageState extends State<ConnectPage> {
                       ? null
                       : () async {
                           await _savePrefs();
-                          if (!mounted) return;
+                          if (!context.mounted) {
+                            return;
+                          }
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(content: Text(L10n.t('account.saved'))),
                           );
