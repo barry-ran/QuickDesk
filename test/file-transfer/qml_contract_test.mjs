@@ -48,7 +48,11 @@ function modelFixture() {
     };
     const scope = {
         transferViewReady: true,
-        clientManager: { fileTransferTasks: [] },
+        clientManager: {
+            fileTransferTasks: [],
+            clearCompletedFileTasks() { ++scope.clearRequests; },
+        },
+        clearRequests: 0,
         transferModel: model,
         clearedTransferTasks: {},
         deletedTransferTasks: {},
@@ -91,6 +95,7 @@ test('clear completed does not resurrect on the next snapshot; uncertain work re
     sync();
     const clearSection = windowSource.slice(windowSource.indexOf('// Clear completed button'));
     handler(clearSection, 'onClicked:', scope)();
+    assert.equal(scope.clearRequests, 1, 'the authoritative history is cleared asynchronously');
     assert.deepEqual(rows.map(row => row.taskId), ['pending']);
     sync();
     assert.deepEqual(rows.map(row => row.taskId), ['pending']);

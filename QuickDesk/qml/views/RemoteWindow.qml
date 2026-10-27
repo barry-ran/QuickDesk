@@ -1121,6 +1121,7 @@ Window {
                             Text {
                                 Layout.fillWidth: true
                                 text: model.filename
+                                textFormat: Text.PlainText
                                 font.family: Theme.fontFamily
                                 font.pixelSize: Theme.fontSizeMedium
                                 color: Theme.text
@@ -1272,6 +1273,8 @@ Window {
                                 transferModel.remove(i)
                             }
                         }
+                        if (remoteWindow.clientManager)
+                            remoteWindow.clientManager.clearCompletedFileTasks()
                     }
                 }
             }

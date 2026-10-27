@@ -48,6 +48,35 @@ void FileTransferQueue::endSession(const QString& connectionId)
     if (updated) emit changed();
 }
 
+void FileTransferQueue::reconcileSession(const QString& connectionId, const QString& deviceId,
+                                         bool connected, bool terminated)
+{
+    // An initial Connecting snapshot is not the end of a session. Once active,
+    // leaving Connected invalidates that generation, even if native reconnects.
+    if (terminated || (!connected && m_sessions.contains(connectionId)))
+        endSession(connectionId);
+    else if (connected)
+        beginSession(connectionId, deviceId);
+}
+
+bool FileTransferQueue::sessionActive(const QString& connectionId) const
+{
+    return m_sessions.contains(connectionId);
+}
+
+void FileTransferQueue::clearCompleted()
+{
+    // changed() is synchronous and can be emitted while a method holds a task
+    // index/reference. Prune only after that stack unwinds. Keep wire-ID
+    // tombstones so late native events cannot bind to the next pending upload.
+    QTimer::singleShot(0, this, [this] {
+        const auto oldSize = m_tasks.size();
+        m_tasks.erase(std::remove_if(m_tasks.begin(), m_tasks.end(),
+            [](const Task& task) { return terminal(task.status); }), m_tasks.end());
+        if (oldSize != m_tasks.size()) emit changed();
+    });
+}
+
 void FileTransferQueue::endAllSessions()
 {
     const auto ids = m_sessions.keys();

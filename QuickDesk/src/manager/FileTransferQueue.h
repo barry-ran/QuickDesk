@@ -21,6 +21,10 @@ public:
     explicit FileTransferQueue(QObject* parent = nullptr);
     void beginSession(const QString& connectionId, const QString& deviceId);
     void endSession(const QString& connectionId);
+    void reconcileSession(const QString& connectionId, const QString& deviceId,
+                          bool connected, bool terminated);
+    bool sessionActive(const QString& connectionId) const;
+    void clearCompleted();
     void endAllSessions();
     bool enqueueUpload(const QString& connectionId, const QUrl& url);
     void registerDownload(const QString& connectionId, const QString& saveDir);
