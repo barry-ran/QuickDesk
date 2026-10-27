@@ -4,7 +4,7 @@
 /// file_transfer.proto，通过按传输独立的 `filetransfer-<n>` DataChannel 传送：
 ///
 ///   FileTransfer {
-///     Metadata metadata = 1;        // { string filename=1; int64 size=2; }
+///     Metadata metadata = 1;        // { string filename=1; optional uint64 size=2; }
 ///     Data     data     = 2;        // { bytes data=1; }
 ///     Empty    end      = 3;
 ///     Empty    success  = 4;
@@ -18,7 +18,6 @@ library;
 
 import 'dart:async';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
@@ -48,6 +47,7 @@ Uint8List _encRequestTransfer() => lengthDelimitedField(5, Uint8List(0));
 // ==================== 解码 ====================
 
 class _FtMessage {
+  bool metadata = false;
   String? metaFilename;
   int? metaSize;
   Uint8List? data;
@@ -67,6 +67,7 @@ _FtMessage _decode(Uint8List data) {
     }
     switch (tag.fieldNumber) {
       case 1:
+        msg.metadata = true;
         _decodeMetadata(reader.readBytes(), msg);
         break;
       case 2:
@@ -290,6 +291,7 @@ class FileTransferManager extends ChangeNotifier {
     Directory? staging;
     final finished = Completer<void>();
     var inbound = Future<void>.value();
+    Future<void>? outbound;
     var pendingInboundBytes = 0;
     Timer? timer;
     String? failure;
@@ -315,6 +317,7 @@ class FileTransferManager extends ChangeNotifier {
     }
 
     void touch() {
+      if (ended || _disposed || task.finished) return;
       timer?.cancel();
       timer = Timer(idleTimeout, () => stop('File transfer timed out'));
     }
@@ -334,23 +337,39 @@ class FileTransferManager extends ChangeNotifier {
         task.totalBytes = await openedInput.length();
       }
       if (getStopped()) return;
-      channel = await _createChannel(task.id);
-      if (getStopped()) return;
+      final creation = _createChannel(task.id).then<FileTransferChannel?>((created) async {
+        if (getStopped()) {
+          try { await created.close(); } catch (_) {}
+          return null;
+        }
+        return created;
+      });
+      channel = await Future.any<FileTransferChannel?>([
+        creation,
+        finished.future.then((_) => null),
+      ]);
+      if (channel == null || getStopped()) return;
       final transport = channel;
+      Future<void> send(Uint8List data) => Future.any<void>([
+        transport.send(data),
+        finished.future,
+      ]);
 
       Future<void> onOpen() async {
         if (opened || getStopped()) return;
         opened = true;
         try {
           if (task.download) {
-            await transport.send(_encRequestTransfer());
+            await send(_encRequestTransfer());
             touch();
             return;
           }
-          await transport.send(_encMetadata(task.filename, task.totalBytes));
+          await send(_encMetadata(task.filename, task.totalBytes));
           while (task.bytes < task.totalBytes && !getStopped()) {
             while (!getStopped() &&
-                await transport.bufferedBytes() > _bufferHighWater) {
+                await Future.any<int>([
+                  transport.bufferedBytes(), finished.future.then((_) => 0),
+                ]) > _bufferHighWater) {
               await Future<void>.delayed(const Duration(milliseconds: 20));
             }
             if (getStopped()) return;
@@ -359,7 +378,7 @@ class FileTransferManager extends ChangeNotifier {
                 remaining < _chunkSize ? remaining : _chunkSize);
             if (getStopped()) return;
             if (chunk.isEmpty) throw StateError('The local file changed during upload');
-            await transport.send(_encData(chunk));
+            await send(_encData(chunk));
             if (getStopped()) return;
             task.bytes += chunk.length;
             touch();
@@ -367,7 +386,7 @@ class FileTransferManager extends ChangeNotifier {
           }
           if (!getStopped()) {
             sentEnd = true;
-            await transport.send(_encEnd());
+            await send(_encEnd());
             touch();
           }
         } catch (error) {
@@ -390,29 +409,30 @@ class FileTransferManager extends ChangeNotifier {
           }
           return;
         }
-        if (message.metaFilename != null || message.metaSize != null) {
-          if (metadataReceived || message.metaSize == null || message.metaSize! < 0) {
+        if (message.metadata) {
+          if (metadataReceived || (message.metaSize != null && message.metaSize! < 0)) {
             throw StateError('Invalid or repeated download metadata');
           }
           metadataReceived = true;
           task.filename = sanitizeDownloadName(message.metaFilename ?? 'download');
-          task.totalBytes = message.metaSize!;
+          // Existing remoting Metadata.size is optional/advisory. End, not
+          // a byte-count equality, determines successful transfer completion.
+          task.totalBytes = message.metaSize ?? 0;
           await Directory(task.source).create(recursive: true);
           staging = await Directory(task.source).createTemp('quickdesk-');
           output = await File('${staging!.path}${Platform.pathSeparator}payload.part').open(
               mode: FileMode.write);
           _changed();
         } else if (message.data != null) {
-          if (!metadataReceived || output == null ||
-              task.bytes + message.data!.length > task.totalBytes) {
-            throw StateError('Invalid download data or size');
+          if (!metadataReceived || output == null) {
+            throw StateError('Download data arrived before metadata');
           }
           await output!.writeFrom(message.data!);
           if (getStopped()) return;
           task.bytes += message.data!.length;
           _changed();
         } else if (message.end) {
-          if (!metadataReceived || output == null || task.bytes != task.totalBytes) {
+          if (!metadataReceived || output == null) {
             throw StateError('Incomplete download');
           }
           await output!.flush();
@@ -423,14 +443,28 @@ class FileTransferManager extends ChangeNotifier {
           await File('${staging!.path}${Platform.pathSeparator}payload.part').rename(destination);
           if (getStopped()) return;
           task.savedPath = destination;
-          await transport.send(_encSuccess());
-          if (getStopped()) return;
+          // Download completion means our file is durable and finalized. The
+          // peer may close immediately after receiving success; that must not
+          // delete the committed file or relabel it as a failure.
           succeeded = true;
+          task.status = FileTransferStatus.completed;
+          task.error = null;
+          _changed();
+          try {
+            await transport.send(_encSuccess()).timeout(const Duration(seconds: 5));
+          } catch (_) {
+            // Local download remains valid even if the acknowledgement is lost.
+          }
           stop();
         }
       }
 
-      transport.onOpen = () => unawaited(onOpen());
+      void startOpen() {
+        if (opened || getStopped()) return;
+        outbound = onOpen();
+        unawaited(outbound);
+      }
+      transport.onOpen = startOpen;
       transport.onClosed = () => stop('File channel closed before completion');
       transport.onData = (data) {
         if (getStopped()) return;
@@ -448,7 +482,7 @@ class FileTransferManager extends ChangeNotifier {
           pendingInboundBytes -= data.length;
         });
       };
-      if (transport.isOpen) unawaited(onOpen());
+      if (transport.isOpen) startOpen();
       await finished.future;
     } catch (error) {
       failure = '$error';
@@ -464,6 +498,7 @@ class FileTransferManager extends ChangeNotifier {
         try { await channel.close(); } catch (_) {}
       }
       await inbound;
+      await outbound;
       try { await input?.close(); } catch (_) {}
       try { await output?.close(); } catch (_) {}
       if (!succeeded && staging != null) {
@@ -492,7 +527,6 @@ class FileTransferManager extends ChangeNotifier {
   @override
   void dispose() {
     if (_disposed) return;
-    _disposed = true;
     for (final task in _tasks) {
       if (!task.finished) {
         task.status = FileTransferStatus.cancelled;
@@ -500,6 +534,8 @@ class FileTransferManager extends ChangeNotifier {
         _cancelHooks[task.id]?.call();
       }
     }
+    notifyListeners();
+    _disposed = true;
     super.dispose();
   }
 }
