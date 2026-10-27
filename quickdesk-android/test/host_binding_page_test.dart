@@ -92,7 +92,21 @@ void main() {
 
   Future<void> open(WidgetTester tester) async {
     await tester.tap(find.byKey(const Key('account-bind-host')));
-    await tester.pumpAndSettle();
+    // Binding deliberately remains busy while consent is pending. Its
+    // indeterminate progress indicator must keep animating, so global
+    // pumpAndSettle can never complete here. Advance only the actual dialog
+    // route transition, then assert the state this test waits for.
+    await tester.pump();
+    final dialog = find.byType(AlertDialog);
+    expect(dialog, findsOneWidget);
+    final route = ModalRoute.of(tester.element(dialog))!;
+    await tester.pump(route.transitionDuration);
+    expect(
+      tester
+          .widget<OutlinedButton>(find.byKey(const Key('account-bind-host')))
+          .onPressed,
+      isNull,
+    );
   }
 
   testWidgets(
