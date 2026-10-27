@@ -175,6 +175,10 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
           };
         });
         if (s != SessionState.connected) _cancelAllInput();
+        if (s == SessionState.closed || s == SessionState.failed) {
+          _fileTransfer?.dispose();
+          _fileTransfer = null;
+        }
         if (s == SessionState.failed) {
           unawaited(
             widget.connectionLog?.finish(failureCode: 'SESSION_FAILED'),
@@ -296,32 +300,52 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
 
   bool get _supportsFileTransfer => _hostCaps.contains('fileTransfer');
 
+  bool _transferSheetOpen = false;
+
   Future<void> _pickAndUpload() async {
-    final result = await FilePicker.platform.pickFiles(withData: false);
-    final picked = (result != null && result.files.isNotEmpty)
-        ? result.files.first
-        : null;
-    if (picked == null || picked.path == null || _fileTransfer == null) return;
-    final bytes = await File(picked.path!).readAsBytes();
-    if (!mounted) return;
-    _showTransferProgress(
-      title: L10n.t('file.uploading'),
-      stream: _fileTransfer!.upload(picked.name, bytes),
-    );
+    final manager = _fileTransfer;
+    if (manager == null || _state != SessionState.connected) return;
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        withData: false, allowMultiple: true,
+      );
+      if (!mounted || manager != _fileTransfer ||
+          _state != SessionState.connected || result == null) return;
+      for (final picked in result.files) {
+        if (picked.path == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(L10n.t('file.unavailable'))),
+          );
+          continue;
+        }
+        manager.enqueueUpload(picked.name, picked.path!);
+      }
+      if (manager.tasks.isNotEmpty) _showTransferProgress(manager);
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${L10n.t('file.failed')}: $error')),
+      );
+    }
   }
 
   Future<void> _startDownload() async {
-    if (_fileTransfer == null) return;
-    final dir = await _downloadDir();
-    if (!mounted) return;
-    _showTransferProgress(
-      title: L10n.t('file.downloading'),
-      stream: _fileTransfer!.download(dir),
-    );
+    final manager = _fileTransfer;
+    if (manager == null || _state != SessionState.connected) return;
+    try {
+      final dir = await _downloadDir();
+      if (!mounted || manager != _fileTransfer ||
+          _state != SessionState.connected) return;
+      manager.enqueueDownload(dir);
+      _showTransferProgress(manager);
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${L10n.t('file.failed')}: $error')),
+      );
+    }
   }
 
   Future<String> _downloadDir() async {
-    // 优先外部 Downloads，退回应用文档目录
+    // App-specific external storage; this is not the public Downloads folder.
     try {
       final ext = await getExternalStorageDirectory();
       if (ext != null) {
@@ -336,16 +360,14 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     return docs.path;
   }
 
-  void _showTransferProgress({
-    required String title,
-    required Stream<FileTransferProgress> stream,
-  }) {
+  void _showTransferProgress(FileTransferManager manager) {
+    if (_transferSheetOpen) return;
+    _transferSheetOpen = true;
     showModalBottomSheet<void>(
       context: context,
-      isDismissible: false,
-      enableDrag: false,
-      builder: (ctx) => TransferSheet(title: title, stream: stream),
-    );
+      isScrollControlled: true,
+      builder: (ctx) => TransferSheet(manager: manager),
+    ).whenComplete(() => _transferSheetOpen = false);
   }
 
   void _toggleStats() {
@@ -729,6 +751,10 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                     onToggleStats: _toggleStats,
                     onUpload: _pickAndUpload,
                     onDownload: _startDownload,
+                    onTransfers: () {
+                      final manager = _fileTransfer;
+                      if (manager != null) _showTransferProgress(manager);
+                    },
                     onDisconnect: () async {
                       _cancelAllInput();
                       await _session.disconnect();
@@ -896,6 +922,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     for (final s in _subs) {
       s.cancel();
     }
+    _fileTransfer?.dispose();
     _clipboard?.dispose();
     _stats?.stop();
     WakelockPlus.disable();
