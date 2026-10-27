@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 
+import "../util/DeviceSort.js" as DeviceSort
 import "../component"
 import "../quickdeskcomponent"
 
@@ -91,7 +92,7 @@ Item {
                     ScrollBar.vertical: QDScrollBar {}
 
                     model: root.mainController && root.mainController.cloudDeviceManager
-                           ? root.mainController.cloudDeviceManager.myDevices : []
+                           ? DeviceSort.sortedDeviceRows(root.mainController.cloudDeviceManager.myDevices, false) : []
 
                     delegate: Rectangle {
                         required property var modelData
@@ -122,7 +123,7 @@ Item {
                             Text {
                                 Layout.fillWidth: true
                                 text: {
-                                    var name = modelData.remark || modelData.device_name || modelData.device_id|| qsTr("Device")
+                                    var name = DeviceSort.displayName(modelData, false) || qsTr("Device")
                                     return name + " (" + (modelData.device_id || "") + ")"
                                 }
                                 font.pixelSize: Theme.fontSizeMedium
@@ -206,7 +207,7 @@ Item {
                     ScrollBar.vertical: QDScrollBar {}
 
                     model: root.mainController && root.mainController.cloudDeviceManager
-                           ? root.mainController.cloudDeviceManager.myFavorites : []
+                           ? DeviceSort.sortedDeviceRows(root.mainController.cloudDeviceManager.myFavorites, true) : []
 
                     delegate: Rectangle {
                         required property var modelData
@@ -239,7 +240,7 @@ Item {
                             Text {
                                 Layout.fillWidth: true
                                 text: {
-                                    var name = modelData.device_name || modelData.device_id || qsTr("Device")
+                                    var name = DeviceSort.displayName(modelData, true) || qsTr("Device")
                                     return name + " (" + (modelData.device_id || "") + ")"
                                 }
                                 font.pixelSize: Theme.fontSizeMedium

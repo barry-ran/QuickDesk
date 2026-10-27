@@ -76,3 +76,17 @@ flutter build apk --release --dart-define=QUICKDESK_API_KEY=your-secret-key
 - Android 14 MediaProjection 前台服务时序、锁屏终止投影
 - Shizuku `injectInputEvent` 在不同 ROM/版本的兼容性
 - 旋转后主控端坐标对齐
+
+## 账户、设备与收藏
+
+首页新增「账户」页：沿用服务器设置，支持密码/SMS 登录、注册、会话恢复、
+我的设备、云端收藏及云端历史查询。修改服务器配置后需点「保存」；账户令牌
+使用安全存储并按服务器配置隔离，不会转移到另一台服务器。
+
+请优先配置 `wss://` / `https://`；明文服务器会显示安全提示。账户登录不等于
+绑定本机：旧 Host 凭据缺少服务器来源信息，本次不会自动绑定或转移设备归属。
+退出时本地账户缓存立即清空；网络不可达时会提示服务端撤销未确认。
+
+三端设备/收藏排序规则及尚未对齐项见
+[App 账户设备功能对齐](../docs/dev/App账户设备功能对齐.md) 和
+[排序契约](../docs/dev/Device-list-ordering.md)。

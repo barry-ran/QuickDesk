@@ -3,6 +3,8 @@
 /// 主控端连接页与被控端 HostController 共用同一份服务器配置。
 library;
 
+import 'package:flutter/foundation.dart';
+
 import 'package:shared_preferences/shared_preferences.dart';
 
 const kDefaultSignalingUrl = 'ws://qdsignaling.quickcoder.cc:8060';
@@ -10,6 +12,7 @@ const _kLegacyDefaultSignalingUrl = 'wss://qd.quickcoder.cn';
 const kBuildTimeApiKey = String.fromEnvironment('QUICKDESK_API_KEY');
 
 class AppSettings {
+  static final changes = ValueNotifier<int>(0);
   static const _kSignalingUrl = 'signaling_url';
   static const _kApiKey = 'api_key';
   static const _kLastDeviceId = 'last_device_id';
@@ -49,6 +52,7 @@ class AppSettings {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_kSignalingUrl, signalingUrl.trim());
     await prefs.setString(_kApiKey, apiKey.trim());
+    changes.value++;
     if (lastDeviceId != null) {
       await prefs.setString(_kLastDeviceId, lastDeviceId.trim());
     }

@@ -22,10 +22,10 @@
           <div class="empty-icon">📱</div>
           <p>{{ $t('devices.noDevices') }}</p>
         </div>
-        <div v-for="d in myDevices" :key="d.device_id" class="device-item">
+        <div v-for="d in sortedDevices" :key="d.device_id" class="device-item">
           <div :class="['device-status', statusClass(d)]"></div>
           <div class="device-info">
-            <div class="device-name">{{ d.remark || d.device_name || d.device_id }}</div>
+            <div class="device-name">{{ displayName(d, false) }}</div>
             <div class="device-id">
               {{ d.device_id }}
               <span v-if="!d.online" class="badge offline">{{ $t('devices.offline') }}</span>
@@ -54,10 +54,10 @@
           <div class="empty-icon">⭐</div>
           <p>{{ $t('devices.noFavorites') }}</p>
         </div>
-        <div v-for="f in myFavorites" :key="f.device_id" class="device-item">
+        <div v-for="f in sortedFavorites" :key="f.device_id" class="device-item">
           <span style="font-size:16px;flex-shrink:0;">⭐</span>
           <div class="device-info">
-            <div class="device-name">{{ f.device_name || f.device_id }}</div>
+            <div class="device-name">{{ displayName(f, true) }}</div>
             <div class="device-id">{{ f.device_id }}</div>
           </div>
           <div class="device-actions">
@@ -107,8 +107,9 @@
 </template>
 
 <script setup>
-import { ref, inject, onMounted, onBeforeUnmount } from 'vue'
+import { computed, ref, inject, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { sortedDeviceRows, displayName } from '../utils/deviceSort'
 import { userApi } from '../api/userApi'
 import { userSync } from '../api/userSync'
 import { openRemoteSession } from '../utils/remoteLauncher'
@@ -120,6 +121,8 @@ const authState = inject('authState')
 
 const myDevices = ref([])
 const myFavorites = ref([])
+const sortedDevices = computed(() => sortedDeviceRows(myDevices.value, false))
+const sortedFavorites = computed(() => sortedDeviceRows(myFavorites.value, true))
 const logs = ref([])
 const remarkDialog = ref({ show: false, device: null, value: '' })
 const connecting = ref(null)

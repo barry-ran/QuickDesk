@@ -2,9 +2,9 @@ name: WebClient
 
 on:
   push:
-    paths: ['WebClient/**', 'test/fixtures/mobile-gestures.json', '.github/workflows/webclient.yml']
+    paths: ['WebClient/**', 'test/fixtures/mobile-gestures.json', 'test/fixtures/device-sort.json', 'QuickDesk/qml/util/DeviceSort.js', '.github/workflows/webclient.yml']
   pull_request:
-    paths: ['WebClient/**', 'test/fixtures/mobile-gestures.json', '.github/workflows/webclient.yml']
+    paths: ['WebClient/**', 'test/fixtures/mobile-gestures.json', 'test/fixtures/device-sort.json', 'QuickDesk/qml/util/DeviceSort.js', '.github/workflows/webclient.yml']
 
 permissions:
   contents: read
