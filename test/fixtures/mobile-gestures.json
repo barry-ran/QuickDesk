@@ -1,0 +1,13 @@
+{
+  "description": "Cross-client two-finger intent cases. Coordinates are logical viewport pixels. Both fingers start together; each move supplies the full pair. Lift both without a click.",
+  "viewport": [400, 800],
+  "remote": [1920, 1080],
+  "cases": [
+    {"name": "vertical scroll at fit", "initialScale": 1, "start": [[150,400],[250,400]], "moves": [[[150,412],[250,412]]], "mode": "scroll", "scale": 1, "wheel": [0,36]},
+    {"name": "horizontal scroll while zoomed", "initialScale": 2, "start": [[150,400],[250,400]], "moves": [[[162,400],[262,400]]], "mode": "scroll", "scale": 2, "wheel": [36,0]},
+    {"name": "pinch without scrolling", "initialScale": 1, "start": [[150,400],[250,400]], "moves": [[[100,400],[300,400]]], "mode": "pinch", "scale": 2, "wheel": null},
+    {"name": "scroll intent stays locked", "initialScale": 1, "start": [[150,400],[250,400]], "moves": [[[150,412],[250,412]], [[100,424],[300,424]]], "mode": "scroll", "scale": 1, "wheel": [0,72]},
+    {"name": "pinch intent stays locked", "initialScale": 1, "start": [[150,400],[250,400]], "moves": [[[100,400],[300,400]], [[100,420],[300,420]]], "mode": "pinch", "scale": 2, "wheel": null},
+    {"name": "jitter is not input", "initialScale": 1, "start": [[150,400],[250,400]], "moves": [[[151,402],[249,402]]], "mode": null, "scale": 1, "wheel": null}
+  ]
+}

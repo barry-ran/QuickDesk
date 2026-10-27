@@ -7,10 +7,11 @@
 ///   双击后拖动   → 按住左键拖拽，抬手释放
 ///   长按         → 右键
 ///   双指捏合     → 绕捏合中心缩放（1x–5x），不跳动
-///   双指滑动     → 未放大时滚轮
+///   双指滑动     → 任意缩放下滚轮；捏合开始后锁定缩放/平移
 library;
 
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart';
 
@@ -45,6 +46,7 @@ class TouchInputController {
   double viewportHeight = 0;
 
   bool leftButtonHeld = false;
+  bool dragArmed = false;
 
   void Function()? onCursorMoved;
   void Function()? onTransformChanged;
@@ -64,7 +66,8 @@ class TouchInputController {
   double _pinchStartScale = 1;
   Offset _pinchStartCenter = Offset.zero;
   Offset _pinchStartTranslate = Offset.zero;
-  bool _pinchActive = false;
+  String _twoFingerMode = 'pending';
+  bool _suppressUntilUp = false;
 
   TouchInputController(this.dcHandler);
 
@@ -73,23 +76,30 @@ class TouchInputController {
   Offset get _center => Offset(viewportWidth / 2, viewportHeight / 2);
 
   void setRemoteResolution(int w, int h) {
+    if (w <= 0 || h <= 0) return;
+    final firstResolution = remoteWidth <= 0 || remoteHeight <= 0;
+    if (remoteWidth != w || remoteHeight != h) cancelGesture();
     remoteWidth = w;
     remoteHeight = h;
-    if (cursorX == 0 && cursorY == 0 && w > 0 && h > 0) {
+    if (firstResolution) {
       cursorX = w / 2;
       cursorY = h / 2;
-      onCursorMoved?.call();
     }
+    cursorX = cursorX.clamp(0, w - 1.0);
+    cursorY = cursorY.clamp(0, h - 1.0);
+    onCursorMoved?.call();
   }
 
   void setViewportSize(double w, double h) {
     if (viewportWidth == w && viewportHeight == h) return;
+    if (_activeTouches > 0) cancelGesture(notify: false);
     viewportWidth = w;
     viewportHeight = h;
     _clampTranslate();
   }
 
   void resetZoom() {
+    cancelGesture();
     scale = 1;
     translateX = 0;
     translateY = 0;
@@ -111,19 +121,26 @@ class TouchInputController {
   // ==================== 手势入口 ====================
 
   void onPointerDown(PointerDownEvent event, int pointerCount) {
+    if (_suppressUntilUp) return;
+    if (pointerCount > 2) {
+      cancelGesture();
+      _suppressUntilUp = true;
+      return;
+    }
     _activeTouches = pointerCount;
     if (pointerCount == 1) {
       _touchStartPos = event.position;
       _lastSinglePos = event.position;
       _moved = false;
-      _pinchActive = false;
+      _twoFingerMode = 'pending';
       _secondTap = _isSecondTap(event.position);
       if (!_secondTap) {
         _lastTapTime = null;
         _lastTapPos = null;
-        if (!leftButtonHeld) _startLongPress();
+        if (!leftButtonHeld && !dragArmed) _startLongPress();
       }
     } else if (pointerCount == 2) {
+      dragArmed = false;
       _cancelLongPress();
       if (_dragging) {
         _releaseLeftButton();
@@ -133,7 +150,7 @@ class TouchInputController {
       _lastTapTime = null;
       _lastTapPos = null;
       _moved = true;
-      _pinchActive = false;
+      _twoFingerMode = 'pending';
     }
   }
 
@@ -143,7 +160,7 @@ class TouchInputController {
     _pinchStartScale = scale;
     _pinchStartCenter = center;
     _pinchStartTranslate = Offset(translateX, translateY);
-    _pinchActive = distance > 12;
+    _twoFingerMode = 'pending';
   }
 
   void onPointerMove(
@@ -152,6 +169,7 @@ class TouchInputController {
     Offset? twoFingerCenter,
     double? twoFingerDistance,
   }) {
+    if (_suppressUntilUp) return;
     if (pointerCount == 1 && _activeTouches == 1) {
       final dx = event.position.dx - _lastSinglePos.dx;
       final dy = event.position.dy - _lastSinglePos.dy;
@@ -165,11 +183,12 @@ class TouchInputController {
 
       // RustDesk 鼠标模式：单指始终移动光标；放大时画布自动跟随
       // A second tap followed by movement is the common mobile drag gesture.
-      if (_secondTap && !_dragging) {
+      if ((_secondTap || dragArmed) && !_dragging) {
+        dragArmed = false;
         _pressLeftButton();
         _dragging = true;
       }
-      _moveCursor(dx * _cursorSpeed, dy * _cursorSpeed);
+      _moveCursor(dx * _cursorSpeed / scale, dy * _cursorSpeed / scale);
       if (isZoomed) {
         _autoPanToFollow();
       }
@@ -180,9 +199,20 @@ class TouchInputController {
       final scrollDy = twoFingerCenter.dy - _lastTwoFingerCenter.dy;
       _lastTwoFingerCenter = twoFingerCenter;
 
-      if (_pinchActive && _pinchStartDist > 0) {
+      if (_twoFingerMode == 'pending') {
+        final distanceChange = (twoFingerDistance - _pinchStartDist).abs();
+        if (_pinchStartDist > 0 &&
+            distanceChange >= 8 &&
+            distanceChange / _pinchStartDist >= .05) {
+          _twoFingerMode = 'pinch';
+        } else if ((twoFingerCenter - _pinchStartCenter).distance >= 8) {
+          _twoFingerMode = 'scroll';
+        }
+      }
+      if (_twoFingerMode == 'pinch') {
         _applyPinchZoom(twoFingerCenter, twoFingerDistance);
-      } else if (!isZoomed && scrollDy.abs() > 2) {
+      } else if (_twoFingerMode == 'scroll' &&
+          (scrollDx != 0 || scrollDy != 0)) {
         _sendScroll(scrollDx, scrollDy);
       }
     }
@@ -192,8 +222,10 @@ class TouchInputController {
   /// screen = center + translate + (local - center) * scale
   /// 保持「捏合开始时焦点下的画面点」始终落在当前两指中心下。
   void _applyPinchZoom(Offset focal, double distance) {
-    final newScale =
-        (_pinchStartScale * (distance / _pinchStartDist)).clamp(_minScale, _maxScale);
+    final newScale = (_pinchStartScale * (distance / _pinchStartDist)).clamp(
+      _minScale,
+      _maxScale,
+    );
 
     if (newScale <= _minScale + 0.001) {
       scale = 1;
@@ -224,13 +256,17 @@ class TouchInputController {
     Offset? remainingPosition,
   }) {
     _cancelLongPress();
+    if (_suppressUntilUp) {
+      if (remainingPointers == 0) _suppressUntilUp = false;
+      return;
+    }
 
     if (_activeTouches == 1 && remainingPointers == 0) {
       if (_dragging) {
         _releaseLeftButton();
         _dragging = false;
         _secondTap = false;
-      } else if (!_moved) {
+      } else if (!_moved && !dragArmed) {
         // Emit every tap immediately so both clients produce the same
         // standard two-click sequence for a double-click.
         _sendClick(MouseButton.left);
@@ -245,46 +281,57 @@ class TouchInputController {
       }
     }
 
-    if (_activeTouches > 1 &&
-        remainingPointers == 1 &&
-        remainingPosition != null) {
-      _touchStartPos = remainingPosition;
-      _lastSinglePos = remainingPosition;
-      _moved = false;
-      _secondTap = false;
-      _lastTapTime = null;
-      _lastTapPos = null;
+    // Lifting either finger completes a two-finger gesture. Ignore the
+    // survivor until all fingers lift: never turn a pinch into a tap/drag.
+    if (_activeTouches > 1 && remainingPointers > 0) {
+      cancelGesture();
+      _suppressUntilUp = true;
+      return;
     }
 
     if (remainingPointers == 0) {
-      _pinchActive = false;
+      _twoFingerMode = 'pending';
       _pinchStartDist = 0;
     }
     _activeTouches = remainingPointers;
   }
 
-  void onPointerCancel(
-    int remainingPointers, {
-    Offset? remainingPosition,
-  }) {
+  void onPointerCancel(int remainingPointers, {Offset? remainingPosition}) {
+    cancelGesture();
+    _suppressUntilUp = remainingPointers > 0;
+  }
+
+  void cancelGesture({bool notify = true}) {
     _cancelLongPress();
-    if (_dragging) _releaseLeftButton();
+    if (leftButtonHeld) _releaseLeftButton(notify: false);
     _dragging = false;
+    dragArmed = false;
     _secondTap = false;
     _lastTapTime = null;
     _lastTapPos = null;
-    if (remainingPointers == 1 && remainingPosition != null) {
-      _touchStartPos = remainingPosition;
-      _lastSinglePos = remainingPosition;
-    }
     _moved = false;
-    _pinchActive = false;
+    _twoFingerMode = 'pending';
     _pinchStartDist = 0;
-    _activeTouches = remainingPointers;
+    _suppressUntilUp = _activeTouches > 0;
+    _activeTouches = 0;
+    if (notify) onCursorMoved?.call();
+  }
+
+  void click({bool right = false}) {
+    cancelGesture();
+    _sendClick(right ? MouseButton.right : MouseButton.left);
+  }
+
+  void toggleDrag() {
+    final arm = !dragArmed && !leftButtonHeld;
+    cancelGesture();
+    dragArmed = arm;
+    onCursorMoved?.call();
   }
 
   bool _isSecondTap(Offset position) {
-    if (_lastTapTime == null || _lastTapPos == null ||
+    if (_lastTapTime == null ||
+        _lastTapPos == null ||
         DateTime.now().difference(_lastTapTime!) >= _doubleTapGap) {
       return false;
     }
@@ -298,54 +345,62 @@ class TouchInputController {
     cursorX = (cursorX + dx).clamp(0, remoteWidth - 1.0);
     cursorY = (cursorY + dy).clamp(0, remoteHeight - 1.0);
 
-    dcHandler.sendMouseEvent(MouseEventMsg(
-      x: cursorX.round(),
-      y: cursorY.round(),
-    ));
+    dcHandler.sendMouseEvent(
+      MouseEventMsg(x: cursorX.round(), y: cursorY.round()),
+    );
     onCursorMoved?.call();
   }
 
   void _pressLeftButton() {
     leftButtonHeld = true;
-    dcHandler.sendMouseEvent(MouseEventMsg(
-      x: cursorX.round(),
-      y: cursorY.round(),
-      button: MouseButton.left.value,
-      buttonDown: true,
-    ));
+    dcHandler.sendMouseEvent(
+      MouseEventMsg(
+        x: cursorX.round(),
+        y: cursorY.round(),
+        button: MouseButton.left.value,
+        buttonDown: true,
+      ),
+    );
     onCursorMoved?.call();
   }
 
-  void _releaseLeftButton() {
+  void _releaseLeftButton({bool notify = true}) {
     if (!leftButtonHeld) return;
     leftButtonHeld = false;
-    dcHandler.sendMouseEvent(MouseEventMsg(
-      x: cursorX.round(),
-      y: cursorY.round(),
-      button: MouseButton.left.value,
-      buttonDown: false,
-    ));
-    onCursorMoved?.call();
+    dcHandler.sendMouseEvent(
+      MouseEventMsg(
+        x: cursorX.round(),
+        y: cursorY.round(),
+        button: MouseButton.left.value,
+        buttonDown: false,
+      ),
+    );
+    if (notify) onCursorMoved?.call();
   }
 
   void _sendClick(MouseButton button) {
+    if (remoteWidth <= 0 || remoteHeight <= 0) return;
     final x = cursorX.round();
     final y = cursorY.round();
     dcHandler.sendMouseEvent(
-        MouseEventMsg(x: x, y: y, button: button.value, buttonDown: true));
+      MouseEventMsg(x: x, y: y, button: button.value, buttonDown: true),
+    );
     dcHandler.sendMouseEvent(
-        MouseEventMsg(x: x, y: y, button: button.value, buttonDown: false));
+      MouseEventMsg(x: x, y: y, button: button.value, buttonDown: false),
+    );
   }
 
   void _sendScroll(double dx, double dy) {
-    dcHandler.sendMouseEvent(MouseEventMsg(
-      x: cursorX.round(),
-      y: cursorY.round(),
-      wheelDeltaX: dx * 3,
-      wheelDeltaY: dy * 3,
-      wheelTicksX: dx / 40,
-      wheelTicksY: dy / 40,
-    ));
+    dcHandler.sendMouseEvent(
+      MouseEventMsg(
+        x: cursorX.round(),
+        y: cursorY.round(),
+        wheelDeltaX: dx * 3,
+        wheelDeltaY: dy * 3,
+        wheelTicksX: dx / 40,
+        wheelTicksY: dy / 40,
+      ),
+    );
   }
 
   void _startLongPress() {
@@ -372,8 +427,14 @@ class TouchInputController {
       }
       return;
     }
-    final maxX = (viewportWidth * (scale - 1)) / 2;
-    final maxY = (viewportHeight * (scale - 1)) / 2;
+    final rect = fitContain(
+      contentW: remoteWidth.toDouble(),
+      contentH: remoteHeight.toDouble(),
+      boxW: viewportWidth,
+      boxH: viewportHeight,
+    );
+    final maxX = math.max(0.0, (rect.width * scale - viewportWidth) / 2);
+    final maxY = math.max(0.0, (rect.height * scale - viewportHeight) / 2);
     translateX = translateX.clamp(-maxX, maxX);
     translateY = translateY.clamp(-maxY, maxY);
   }
@@ -386,7 +447,10 @@ class TouchInputController {
     final screen = _cursorScreenPosition();
     if (screen == null) return;
 
-    const edge = 56.0;
+    final edge = math.min(
+      56.0,
+      math.min(viewportWidth / 4, viewportHeight / 4),
+    );
     var panX = 0.0;
     var panY = 0.0;
     if (screen.dx < edge) panX = edge - screen.dx;
@@ -431,10 +495,7 @@ class TouchInputController {
   Offset? cursorScreenPosition() => _cursorScreenPosition();
 
   void dispose() {
-    _cancelLongPress();
-    if (leftButtonHeld) {
-      _releaseLeftButton();
-    }
+    cancelGesture(notify: false);
   }
 }
 

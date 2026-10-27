@@ -24,6 +24,8 @@ import '../clipboard_sync.dart';
 import '../connection_store.dart';
 import '../keycode_mapper.dart';
 import '../touch_input.dart';
+import '../touch_pointer_router.dart';
+import '../remote_text_input.dart';
 import '../video_stats.dart';
 import 'cursor_painter.dart';
 import 'remote_toolbar.dart';
@@ -50,15 +52,17 @@ class RemotePage extends StatefulWidget {
   State<RemotePage> createState() => _RemotePageState();
 }
 
-class _RemotePageState extends State<RemotePage> {
+class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   late final ClientSession _session;
   late final TouchInputController _touch;
+  late final TouchPointerRouter _pointerRouter;
   final _renderer = RTCVideoRenderer();
 
   SessionState _state = SessionState.idle;
   String _statusText = '';
   bool _rendererReady = false;
   final _textInputCtrl = TextEditingController();
+  late final RemoteTextInputRelay _textRelay;
   final _textFocus = FocusNode();
   bool _keyboardVisible = false;
   final List<StreamSubscription> _subs = [];
@@ -83,18 +87,27 @@ class _RemotePageState extends State<RemotePage> {
   String _hostCaps = '';
 
   bool _firstFrame = false;
+
   /// true = 横屏锁定；false = 竖屏锁定。进入远程页默认横屏（桌面被控更合适）。
   bool _landscape = true;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+
     _statusText = L10n.t('remote.connecting');
     _session = ClientSession(
       signalingUrl: widget.signalingUrl,
       iceServers: widget.iceServers,
     );
+    _textRelay = RemoteTextInputRelay(_textInputCtrl, (text) {
+      if (_state == SessionState.connected) {
+        _session.dcHandler.sendTextEvent(text);
+      }
+    }, () => _sendControlKey(0x2a));
     _touch = TouchInputController(_session.dcHandler);
+    _pointerRouter = TouchPointerRouter(_touch);
     _touch.onCursorMoved = () {
       if (mounted) setState(() {});
     };
@@ -118,12 +131,11 @@ class _RemotePageState extends State<RemotePage> {
             ],
     );
     // 沉浸式：横屏时少占一点边距
-    await SystemChrome.setEnabledSystemUIMode(
-      SystemUiMode.immersiveSticky,
-    );
+    await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
   }
 
   Future<void> _toggleOrientation() async {
+    _cancelAllInput();
     setState(() => _landscape = !_landscape);
     await _applyOrientation();
   }
@@ -135,33 +147,37 @@ class _RemotePageState extends State<RemotePage> {
 
   Future<void> _init() async {
     await _renderer.initialize();
+    if (!mounted) return;
     setState(() => _rendererReady = true);
 
     WakelockPlus.enable();
 
-    _subs.add(_session.onStateChange.listen((s) {
-      if (!mounted) return;
-      setState(() {
-        _state = s;
-        _statusText = switch (s) {
-          SessionState.connecting => L10n.t('remote.stateConnecting'),
-          SessionState.initiating => L10n.t('remote.stateInitiating'),
-          SessionState.accepting => L10n.t('remote.stateAccepting'),
-          SessionState.authenticating => L10n.t('remote.stateAuthenticating'),
-          SessionState.connected => '',
-          SessionState.failed =>
-            '${L10n.t('remote.stateFailed')}${_session.failureReason != null ? ': ${_session.failureReason}' : ''}',
-          SessionState.closed => L10n.t('remote.stateClosed'),
-          _ => '',
-        };
-      });
-      if (s == SessionState.connected) {
-        _onConnected();
-      }
-      if (s == SessionState.closed && mounted) {
-        Navigator.of(context).maybePop();
-      }
-    }));
+    _subs.add(
+      _session.onStateChange.listen((s) {
+        if (!mounted) return;
+        setState(() {
+          _state = s;
+          _statusText = switch (s) {
+            SessionState.connecting => L10n.t('remote.stateConnecting'),
+            SessionState.initiating => L10n.t('remote.stateInitiating'),
+            SessionState.accepting => L10n.t('remote.stateAccepting'),
+            SessionState.authenticating => L10n.t('remote.stateAuthenticating'),
+            SessionState.connected => '',
+            SessionState.failed =>
+              '${L10n.t('remote.stateFailed')}${_session.failureReason != null ? ': ${_session.failureReason}' : ''}',
+            SessionState.closed => L10n.t('remote.stateClosed'),
+            _ => '',
+          };
+        });
+        if (s != SessionState.connected) _cancelAllInput();
+        if (s == SessionState.connected) {
+          _onConnected();
+        }
+        if (s == SessionState.closed && mounted) {
+          Navigator.of(context).maybePop();
+        }
+      }),
+    );
 
     // 新流到达 → 刷新渲染
     _subs.add(_session.onRemoteStreamsChanged.listen((_) => _applyStream()));
@@ -194,21 +210,28 @@ class _RemotePageState extends State<RemotePage> {
     };
 
     // control 通道就绪后发送初始配置（对照 remote-main.js _sendInitialConfig）
-    _subs.add(_session.dcHandler.onControlReady.listen((_) {
-      _session.dcHandler.sendCapabilities('');
-      _session.dcHandler.sendAudioControl(enable: true);
-    }));
+    _subs.add(
+      _session.dcHandler.onControlReady.listen((_) {
+        _session.dcHandler.sendCapabilities('');
+        _session.dcHandler.sendAudioControl(enable: true);
+      }),
+    );
 
     // 记录 host 能力（用于判断是否支持文件传输）
-    _subs.add(_session.dcHandler.onCapabilities.listen((caps) {
-      if (mounted) setState(() => _hostCaps = caps);
-    }));
+    _subs.add(
+      _session.dcHandler.onCapabilities.listen((caps) {
+        if (mounted) setState(() => _hostCaps = caps);
+      }),
+    );
 
     _subs.add(_session.dcHandler.onVideoLayout.listen(_onVideoLayout));
 
     try {
       await _session.connect(
-          widget.deviceId, widget.accessCode, widget.signalToken);
+        widget.deviceId,
+        widget.accessCode,
+        widget.signalToken,
+      );
     } catch (_) {
       // 状态流里已处理
     }
@@ -230,8 +253,9 @@ class _RemotePageState extends State<RemotePage> {
 
   Future<void> _pickAndUpload() async {
     final result = await FilePicker.platform.pickFiles(withData: false);
-    final picked =
-        (result != null && result.files.isNotEmpty) ? result.files.first : null;
+    final picked = (result != null && result.files.isNotEmpty)
+        ? result.files.first
+        : null;
     if (picked == null || picked.path == null || _fileTransfer == null) return;
     final bytes = await File(picked.path!).readAsBytes();
     if (!mounted) return;
@@ -256,8 +280,9 @@ class _RemotePageState extends State<RemotePage> {
     try {
       final ext = await getExternalStorageDirectory();
       if (ext != null) {
-        final downloads =
-            Directory('${ext.path}${Platform.pathSeparator}QuickDesk');
+        final downloads = Directory(
+          '${ext.path}${Platform.pathSeparator}QuickDesk',
+        );
         if (!downloads.existsSync()) downloads.createSync(recursive: true);
         return downloads.path;
       }
@@ -338,6 +363,8 @@ class _RemotePageState extends State<RemotePage> {
 
   void _selectDisplay(int index) {
     if (index < 0 || index >= _displays.length) return;
+    _cancelAllInput();
+    _touch.resetZoom();
     final track = _displays[index];
     _selectedStreamId = track.mediaStreamId;
     _activeDisplayIndex = index;
@@ -373,6 +400,7 @@ class _RemotePageState extends State<RemotePage> {
   // ==================== 键盘 ====================
 
   void _toggleKeyboard() {
+    _cancelAllInput();
     setState(() => _keyboardVisible = !_keyboardVisible);
     if (_keyboardVisible) {
       _textFocus.requestFocus();
@@ -382,81 +410,103 @@ class _RemotePageState extends State<RemotePage> {
   }
 
   /// 软键盘按键 → USB HID keycode 注入；可打印字符走 TextEvent
+  final Set<int> _pressedKeys = {};
+
   KeyEventResult _onKey(FocusNode node, KeyEvent event) {
+    final releasedUsb = KeycodeMapper.logicalToUsb(event.logicalKey);
+    if (event is KeyUpEvent &&
+        releasedUsb != null &&
+        _pressedKeys.remove(releasedUsb)) {
+      _session.dcHandler.sendKeyEvent(
+        KeyEventMsg(pressed: false, usbKeycode: releasedUsb),
+      );
+      return KeyEventResult.handled;
+    }
+    // Printable hardware keys belong to TextField/IME, not both channels.
+    final composing = _textInputCtrl.value.composing;
+    if (composing.isValid && !composing.isCollapsed) {
+      return KeyEventResult.ignored;
+    }
+    final shortcut =
+        HardwareKeyboard.instance.isControlPressed ||
+        HardwareKeyboard.instance.isAltPressed ||
+        HardwareKeyboard.instance.isMetaPressed;
+    if (!shortcut &&
+        event.character != null &&
+        event.character!.isNotEmpty &&
+        event.logicalKey != LogicalKeyboardKey.enter) {
+      return KeyEventResult.ignored;
+    }
     final usb = KeycodeMapper.logicalToUsb(event.logicalKey);
     if (usb == null) return KeyEventResult.ignored;
 
     if (event is KeyDownEvent) {
-      _session.dcHandler
-          .sendKeyEvent(KeyEventMsg(pressed: true, usbKeycode: usb));
+      _pressedKeys.add(usb);
+      _session.dcHandler.sendKeyEvent(
+        KeyEventMsg(pressed: true, usbKeycode: usb),
+      );
     } else if (event is KeyUpEvent) {
-      _session.dcHandler
-          .sendKeyEvent(KeyEventMsg(pressed: false, usbKeycode: usb));
+      if (!_pressedKeys.remove(usb)) return KeyEventResult.ignored;
+      _session.dcHandler.sendKeyEvent(
+        KeyEventMsg(pressed: false, usbKeycode: usb),
+      );
     }
     return KeyEventResult.handled;
   }
 
-  void _onTextChanged(String value) {
-    if (value.isEmpty) return;
-    // 输入框只是文本中转：把增量文本发送到远端后立即清空
-    _session.dcHandler.sendTextEvent(value);
-    _textInputCtrl.clear();
+  void _sendControlKey(int usage) {
+    _cancelAllInput();
+    final usb = 0x070000 | usage;
+    _session.dcHandler.sendKeyEvent(
+      KeyEventMsg(pressed: true, usbKeycode: usb),
+    );
+    _session.dcHandler.sendKeyEvent(
+      KeyEventMsg(pressed: false, usbKeycode: usb),
+    );
+  }
+
+  void _cancelAllInput() {
+    _cancelTouchInput();
+    for (final usb in _pressedKeys) {
+      _session.dcHandler.sendKeyEvent(
+        KeyEventMsg(pressed: false, usbKeycode: usb),
+      );
+    }
+    _pressedKeys.clear();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) _cancelAllInput();
+  }
+
+  @override
+  void didChangeMetrics() {
+    _cancelAllInput();
+  }
+
+  void _showGestureHelp() {
+    _cancelAllInput();
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(L10n.t('remote.gestureHelp')),
+        content: SingleChildScrollView(
+          child: Text(L10n.t('remote.gestureInstructions')),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(MaterialLocalizations.of(context).closeButtonLabel),
+          ),
+        ],
+      ),
+    );
   }
 
   // ==================== 触控 ====================
 
-  int _pointerCount = 0;
-  final Map<int, Offset> _pointers = {};
-
-  Offset? get _twoFingerCenter {
-    if (_pointers.length < 2) return null;
-    final positions = _pointers.values.toList();
-    return twoFingerCenterOf(positions[0], positions[1]);
-  }
-
-  double? get _twoFingerDistance {
-    if (_pointers.length < 2) return null;
-    final positions = _pointers.values.toList();
-    return twoFingerDistance(positions[0], positions[1]);
-  }
-
-  void _handlePointerDown(PointerDownEvent e) {
-    _pointers[e.pointer] = e.position;
-    _pointerCount = _pointers.length;
-    _touch.onPointerDown(e, _pointerCount);
-    if (_pointerCount == 2) {
-      final center = _twoFingerCenter!;
-      final dist = _twoFingerDistance!;
-      _touch.onTwoFingerStart(center, dist);
-    }
-  }
-
-  void _handlePointerMove(PointerMoveEvent e) {
-    _pointers[e.pointer] = e.position;
-    _touch.onPointerMove(
-      e,
-      _pointerCount,
-      twoFingerCenter: _twoFingerCenter,
-      twoFingerDistance: _twoFingerDistance,
-    );
-  }
-
-  void _handlePointerUp(PointerUpEvent e) {
-    _pointers.remove(e.pointer);
-    _touch.onPointerUp(
-      e,
-      _pointers.length,
-      remainingPosition:
-          _pointers.length == 1 ? _pointers.values.first : null,
-    );
-    _pointerCount = _pointers.length;
-  }
-
-  void _cancelTouchInput() {
-    _pointers.clear();
-    _pointerCount = 0;
-    _touch.onPointerCancel(0);
-  }
+  void _cancelTouchInput() => _pointerRouter.cancel();
 
   // ==================== UI ====================
 
@@ -468,158 +518,145 @@ class _RemotePageState extends State<RemotePage> {
       canPop: false,
       onPopInvokedWithResult: (didPop, _) async {
         if (didPop) return;
-        _cancelTouchInput();
+        _cancelAllInput();
         await _session.disconnect();
         if (context.mounted) Navigator.of(context).pop();
       },
       child: Scaffold(
         backgroundColor: Colors.black,
         body: SafeArea(
-          child: Stack(
+          child: Column(
             children: [
-              // 视频画面：捏合缩放 / 平移由 TouchInputController 驱动
-              if (_rendererReady)
-                Positioned.fill(
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
-                      _touch.setViewportSize(
-                          constraints.maxWidth, constraints.maxHeight);
-                      return Listener(
-                        onPointerDown: _handlePointerDown,
-                        onPointerMove: _handlePointerMove,
-                        onPointerUp: _handlePointerUp,
-                        onPointerCancel: (e) {
-                          _pointers.remove(e.pointer);
-                          _touch.onPointerCancel(
-                            _pointers.length,
-                            remainingPosition: _pointers.length == 1
-                                ? _pointers.values.first
-                                : null,
-                          );
-                          _pointerCount = _pointers.length;
-                        },
-                        behavior: HitTestBehavior.opaque,
-                        child: ClipRect(
-                          child: Transform(
-                            transform: _touch.buildTransformMatrix(),
-                            child: _buildRemoteVideo(),
+              Expanded(
+                child: Stack(
+                  children: [
+                    // 视频画面：捏合缩放 / 平移由 TouchInputController 驱动
+                    if (_rendererReady)
+                      Positioned.fill(
+                        child: LayoutBuilder(
+                          builder: (context, constraints) {
+                            _touch.setViewportSize(
+                              constraints.maxWidth,
+                              constraints.maxHeight,
+                            );
+                            return Listener(
+                              onPointerDown: _pointerRouter.down,
+                              onPointerMove: _pointerRouter.move,
+                              onPointerUp: _pointerRouter.up,
+                              onPointerCancel: _pointerRouter.cancelPointer,
+                              behavior: HitTestBehavior.opaque,
+                              child: ClipRect(
+                                child: Transform(
+                                  transform: _touch.buildTransformMatrix(),
+                                  child: _buildRemoteVideo(),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+
+                    // 已连接但还没收到远程画面时的提示
+                    if (connected && !_firstFrame)
+                      Positioned.fill(
+                        child: IgnorePointer(
+                          child: Container(
+                            color: Colors.black,
+                            alignment: Alignment.center,
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const CircularProgressIndicator(),
+                                const SizedBox(height: 20),
+                                Text(
+                                  L10n.t('remote.waitingFrame'),
+                                  style: const TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 15,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
-                      );
-                    },
-                  ),
-                ),
+                      ),
 
-              // 已连接但还没收到远程画面时的提示
-              if (connected && !_firstFrame)
-                Positioned.fill(
-                  child: IgnorePointer(
-                    child: Container(
-                      color: Colors.black,
-                      alignment: Alignment.center,
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const CircularProgressIndicator(),
-                          const SizedBox(height: 20),
-                          Text(L10n.t('remote.waitingFrame'),
+                    // 虚拟光标（随画布缩放平移）
+                    if (connected && _firstFrame && _touch.remoteWidth > 0)
+                      _buildVirtualCursor(context),
+
+                    // 左键按住提示
+                    if (connected &&
+                        (_touch.leftButtonHeld || _touch.dragArmed))
+                      Positioned(
+                        left: 12,
+                        bottom: 12,
+                        child: Material(
+                          color: Colors.orange.withValues(alpha: 0.85),
+                          borderRadius: BorderRadius.circular(8),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 6,
+                            ),
+                            child: Text(
+                              L10n.t(
+                                _touch.dragArmed
+                                    ? 'remote.dragArmed'
+                                    : 'remote.leftHold',
+                              ),
                               style: const TextStyle(
-                                  color: Colors.white70, fontSize: 15)),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-
-              // 虚拟光标（随画布缩放平移）
-              if (connected && _firstFrame && _touch.remoteWidth > 0)
-                _buildVirtualCursor(context),
-
-              // 左键按住提示
-              if (connected && _touch.leftButtonHeld)
-                Positioned(
-                  left: 12,
-                  bottom: 12,
-                  child: Material(
-                    color: Colors.orange.withValues(alpha: 0.85),
-                    borderRadius: BorderRadius.circular(8),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 6),
-                      child: Text(
-                        L10n.t('remote.leftHold'),
-                        style:
-                            const TextStyle(color: Colors.white, fontSize: 12),
-                      ),
-                    ),
-                  ),
-                ),
-
-              // 连接状态遮罩
-              if (!connected && _state != SessionState.closed)
-                Positioned.fill(
-                  child: Container(
-                    color: Colors.black87,
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        if (_state != SessionState.failed)
-                          const CircularProgressIndicator(),
-                        const SizedBox(height: 24),
-                        Text(_statusText,
-                            style: const TextStyle(
-                                color: Colors.white70, fontSize: 16)),
-                        if (_state == SessionState.failed) ...[
-                          const SizedBox(height: 24),
-                          FilledButton(
-                            onPressed: () => Navigator.of(context).pop(),
-                            child: Text(L10n.t('common.back')),
+                                color: Colors.white,
+                                fontSize: 12,
+                              ),
+                            ),
                           ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ),
-
-              // 隐藏的文本输入框（软键盘中转）
-              if (_keyboardVisible)
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  child: Container(
-                    color: Theme.of(context).colorScheme.surface,
-                    padding: const EdgeInsets.all(8),
-                    child: Focus(
-                      onKeyEvent: _onKey,
-                      child: TextField(
-                        controller: _textInputCtrl,
-                        focusNode: _textFocus,
-                        autofocus: true,
-                        onChanged: _onTextChanged,
-                        decoration: InputDecoration(
-                          hintText: L10n.t('remote.textInputHint'),
-                          border: const OutlineInputBorder(),
-                          isDense: true,
                         ),
                       ),
-                    ),
-                  ),
-                ),
 
-              // 性能统计叠层
-              if (connected && _statsVisible)
-                Positioned(
-                  top: 56,
-                  right: 8,
-                  child: StatsPanel(data: _statsData),
-                ),
+                    // 连接状态遮罩
+                    if (!connected && _state != SessionState.closed)
+                      Positioned.fill(
+                        child: Container(
+                          color: Colors.black87,
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              if (_state != SessionState.failed)
+                                const CircularProgressIndicator(),
+                              const SizedBox(height: 24),
+                              Text(
+                                _statusText,
+                                style: const TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 16,
+                                ),
+                              ),
+                              if (_state == SessionState.failed) ...[
+                                const SizedBox(height: 24),
+                                FilledButton(
+                                  onPressed: () => Navigator.of(context).pop(),
+                                  child: Text(L10n.t('common.back')),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ),
 
-              // 浮动工具条
+                    // 性能统计叠层
+                    if (connected && _statsVisible)
+                      Positioned(
+                        top: 56,
+                        right: 8,
+                        child: StatsPanel(data: _statsData),
+                      ),
+                  ],
+                ),
+              ),
               if (connected)
-                Positioned(
-                  top: 8,
-                  right: 8,
+                Padding(
+                  padding: const EdgeInsets.all(8),
                   child: RemoteToolbar(
                     displays: _displays,
                     activeDisplayIndex: _activeDisplayIndex,
@@ -631,24 +668,94 @@ class _RemotePageState extends State<RemotePage> {
                     onSelectDisplay: _selectDisplay,
                     onToggleOrientation: _toggleOrientation,
                     onResetZoom: () {
+                      _cancelAllInput();
                       _touch.resetZoom();
                       setState(() {});
                     },
                     onToggleKeyboard: _toggleKeyboard,
+                    onHelp: _showGestureHelp,
+                    onLeftClick: () => _touch.click(),
+                    onRightClick: () => _touch.click(right: true),
+                    onToggleDrag: _touch.toggleDrag,
+                    dragArmed: _touch.dragArmed || _touch.leftButtonHeld,
+                    onControlKey: _sendControlKey,
                     onSendClipboard: () async => _clipboard?.syncNow(),
                     onToggleStats: _toggleStats,
                     onUpload: _pickAndUpload,
                     onDownload: _startDownload,
                     onDisconnect: () async {
-                      _cancelTouchInput();
+                      _cancelAllInput();
                       await _session.disconnect();
                       if (context.mounted) Navigator.of(context).pop();
                     },
                   ),
                 ),
+              if (_keyboardVisible) _buildKeyboard(),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildKeyboard() {
+    return Container(
+      color: Theme.of(context).colorScheme.surface,
+      padding: const EdgeInsets.all(8),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                for (final entry in const <int, String>{
+                  0x29: 'Esc',
+                  0x2b: 'Tab',
+                  0x28: 'Enter',
+                  0x2a: '⌫',
+                  0x50: '←',
+                  0x52: '↑',
+                  0x4f: '→',
+                  0x51: '↓',
+                }.entries)
+                  TextButton(
+                    style: TextButton.styleFrom(
+                      minimumSize: const Size(48, 48),
+                    ),
+                    onPressed: () => _sendControlKey(entry.key),
+                    child: Text(entry.value),
+                  ),
+              ],
+            ),
+          ),
+          Focus(
+            onKeyEvent: _onKey,
+            onFocusChange: (focused) {
+              if (!focused) _cancelAllInput();
+            },
+            child: TextField(
+              controller: _textInputCtrl,
+              focusNode: _textFocus,
+              autofocus: true,
+              autocorrect: false,
+              enableSuggestions: false,
+              textInputAction: TextInputAction.done,
+              onSubmitted: (_) => _sendControlKey(0x28),
+              decoration: InputDecoration(
+                hintText: L10n.t('remote.textInputHint'),
+                labelText: L10n.t('remote.keyboard'),
+                suffixIcon: IconButton(
+                  tooltip: L10n.t('remote.hideKeyboard'),
+                  onPressed: _toggleKeyboard,
+                  icon: const Icon(Icons.keyboard_hide),
+                ),
+                border: const OutlineInputBorder(),
+                isDense: true,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -667,17 +774,16 @@ class _RemotePageState extends State<RemotePage> {
 
           final vw = _renderer.videoWidth.toDouble();
           final vh = _renderer.videoHeight.toDouble();
-          final aspect =
-              (vw > 0 && vh > 0) ? vw / vh : _renderer.value.aspectRatio;
+          final aspect = (vw > 0 && vh > 0)
+              ? vw / vh
+              : _renderer.value.aspectRatio;
 
           return LayoutBuilder(
             builder: (context, constraints) {
               final maxW = constraints.maxWidth;
               final maxH = constraints.maxHeight;
               if (!maxW.isFinite || !maxH.isFinite || maxW <= 0 || maxH <= 0) {
-                return SizedBox.expand(
-                  child: Texture(textureId: textureId),
-                );
+                return SizedBox.expand(child: Texture(textureId: textureId));
               }
 
               // contain：完整显示远程画面，必要时留黑边；
@@ -708,29 +814,38 @@ class _RemotePageState extends State<RemotePage> {
 
   Widget _buildVirtualCursor(BuildContext context) {
     return Positioned.fill(
-      child: LayoutBuilder(builder: (context, constraints) {
-        _touch.setViewportSize(constraints.maxWidth, constraints.maxHeight);
-        final screen = _touch.cursorScreenPosition();
-        if (screen == null) return const SizedBox.shrink();
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          _touch.setViewportSize(constraints.maxWidth, constraints.maxHeight);
+          final screen = _touch.cursorScreenPosition();
+          if (screen == null) return const SizedBox.shrink();
 
-        return Stack(
-          children: [
-            Positioned(
-              left: screen.dx - 3,
-              top: screen.dy - 1,
-              child: const IgnorePointer(
-                child: CustomPaint(
-                    size: Size(20, 20), painter: CursorPainter()),
+          return Stack(
+            children: [
+              Positioned(
+                left: screen.dx - 3,
+                top: screen.dy - 1,
+                child: const IgnorePointer(
+                  child: CustomPaint(
+                    size: Size(20, 20),
+                    painter: CursorPainter(),
+                  ),
+                ),
               ),
-            ),
-          ],
-        );
-      }),
+            ],
+          );
+        },
+      ),
     );
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _touch.onCursorMoved = null;
+    _touch.onTransformChanged = null;
+    _cancelAllInput();
+    _textRelay.dispose();
     for (final s in _subs) {
       s.cancel();
     }
