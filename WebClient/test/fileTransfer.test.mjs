@@ -294,3 +294,19 @@ test('cancel during writable close cannot claim rollback of a committed file', a
     assert.equal(aborts, 0); assert.equal(count(events, 'fileDownloadError'), 0);
     assert.equal(count(events, 'fileDownloadComplete'), 1);
 });
+
+test('destroy preserves a committing download until a failed close reports its terminal error', async t => {
+    const { handler, channels, events } = setup(t);
+    const closing = deferred();
+    handler.startFileDownload({ createWritable: async () => ({
+        write: async () => {}, close: () => closing.promise, abort: async () => {},
+    }) });
+    await channels[0].open();
+    receive(handler, channels[0], { metadata: { filename: 'saved', size: 0 } });
+    receive(handler, channels[0], { end: {} }); await flush();
+    handler.destroy();
+    closing.reject(new Error('disk close failed after disconnect')); await flush();
+    assert.equal(count(events, 'fileDownloadError'), 1);
+    assert.equal(count(events, 'fileDownloadComplete'), 0);
+    assert.equal(handler._activeDownloads.size, 0);
+});
