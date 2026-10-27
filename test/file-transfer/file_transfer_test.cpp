@@ -2,6 +2,7 @@
 #include "FileTransferQueue.h"
 #include "ClipboardFiles.h"
 #include <QFile>
+#include <QDir>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QtTest>
@@ -74,9 +75,9 @@ private slots:
         QCOMPARE(status(q, 1), QString("queued"));
         q.handleMessage(event("fileTransferError", "a", "t"));
         QTRY_COMPARE(commands.count(), 3);
-        QCOMPARE(status(q, 0), QString("cancelled"));
+        QCOMPARE(status(q, 0), QString("error"));
         q.handleMessage(event("fileTransferComplete", "a", "t", "first"));
-        QCOMPARE(status(q, 0), QString("cancelled"));
+        QCOMPARE(status(q, 0), QString("error"));
     }
 
     void queuedCancelNeverDispatchesAndCompletionCanWin() {
@@ -106,7 +107,7 @@ private slots:
         QCOMPARE(status(q, 2), QString("error"));
         q.handleMessage(event("fileTransferError", "a", ""));
         QCoreApplication::processEvents();
-        QCOMPARE(status(q, 0), QString("error"));
+        QCOMPARE(status(q, 0), QString("uncertain"));
         QCOMPARE(status(q, 1), QString("queued"));
         QCOMPARE(commands.count(), 2); // no unsafe reuse of an unidentified slot
     }
@@ -181,14 +182,25 @@ private slots:
         q.handleMessage(done);
         QCOMPARE(QGuiApplication::clipboard()->text(), QString("keep this"));
         q.endSession("a");
-        QCOMPARE(q.completedDownloadPath(id(q, 0)), path);
+        const QString canonical = QFileInfo(path).canonicalFilePath();
+        QCOMPARE(q.completedDownloadPath(id(q, 0)), canonical);
         QVERIFY(copyLocalFileToClipboard(q.completedDownloadPath(id(q, 0))));
-        QCOMPARE(QGuiApplication::clipboard()->mimeData()->urls(), QList<QUrl>{QUrl::fromLocalFile(path)});
+        QCOMPARE(QGuiApplication::clipboard()->mimeData()->urls(), QList<QUrl>{QUrl::fromLocalFile(canonical)});
         QVERIFY(QFile::remove(path));
         QGuiApplication::clipboard()->setText("new clipboard");
         QVERIFY(q.completedDownloadPath(id(q, 0)).isEmpty());
         QVERIFY(!copyLocalFileToClipboard(path));
         QCOMPARE(QGuiApplication::clipboard()->text(), QString("new clipboard"));
+    }
+
+    void downloadFailureBeforeStartedIsVisible() {
+        FileTransferQueue q;
+        QSignalSpy notices(&q, &FileTransferQueue::notice);
+        q.beginSession("a", "A");
+        q.registerDownload("a", dir.path());
+        q.handleMessage(event("fileDownloadError", "a", ""));
+        QCOMPARE(notices.count(), 1);
+        QCOMPARE(q.tasks().size(), 0);
     }
 
     void downloadCannotCopyOutsideRequestedDirectory() {
