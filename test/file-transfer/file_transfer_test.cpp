@@ -31,6 +31,54 @@ class FileTransferTest : public QObject {
     }
 
 private slots:
+    void initialConnectingSnapshotDoesNotRetireGeneration() {
+        FileTransferQueue q;
+        QSignalSpy commands(&q, &FileTransferQueue::commandRequested);
+        q.reconcileSession("first", "device", false, false); // initial Connecting
+        QVERIFY(!q.sessionActive("first"));
+        q.reconcileSession("first", "device", true, false);
+        QVERIFY(q.sessionActive("first"));
+        QVERIFY(q.enqueueUpload("first", QUrl::fromLocalFile(file("initial-connect"))));
+        QCOMPARE(commands.count(), 1);
+        q.reconcileSession("first", "device", false, false); // active transport lost
+        QVERIFY(!q.sessionActive("first"));
+        q.reconcileSession("first", "device", true, false); // stale/native reconnect
+        QVERIFY(!q.sessionActive("first"));
+        QVERIFY(!q.enqueueUpload("first", QUrl::fromLocalFile(file("retired"))));
+        q.reconcileSession("second", "device", true, false);
+        QVERIFY(q.sessionActive("second"));
+    }
+
+    void clearHistoryDefersAndKeepsWireTombstones() {
+        FileTransferQueue q;
+        QSignalSpy commands(&q, &FileTransferQueue::commandRequested);
+        q.beginSession("a", "A");
+        q.enqueueUpload("a", QUrl::fromLocalFile(file("clear/one")));
+        q.enqueueUpload("a", QUrl::fromLocalFile(file("clear/two")));
+        bool requested = false;
+        connect(&q, &FileTransferQueue::changed, &q, [&] {
+            if (!requested && q.tasks().size() == 2 && status(q, 0) == "complete") {
+                requested = true;
+                q.clearCompleted();
+                QCOMPARE(q.tasks().size(), 2); // no synchronous index invalidation
+            }
+        });
+        q.handleMessage(event("fileTransferComplete", "a", "retired", "one"));
+        QVERIFY(requested);
+        QTRY_COMPARE(q.tasks().size(), 1);
+        QTRY_COMPARE(commands.count(), 2);
+        QCOMPARE(status(q, 0), QString("uploading"));
+        q.handleMessage(event("fileTransferProgress", "a", "retired", "one"));
+        q.handleMessage(event("fileTransferError", "a", "retired"));
+        QCOMPARE(status(q, 0), QString("uploading"));
+        QCOMPARE(row(q, 0).value("transferId").toString(), QString());
+        q.handleMessage(event("fileTransferError", "a", ""));
+        q.clearCompleted();
+        QCoreApplication::processEvents();
+        QCOMPARE(q.tasks().size(), 1); // uncertain work cannot be cleared
+        QCOMPARE(status(q, 0), QString("uncertain"));
+    }
+
     void sameNameAcrossSessionsAndPaths() {
         FileTransferQueue q;
         QSignalSpy commands(&q, &FileTransferQueue::commandRequested);
