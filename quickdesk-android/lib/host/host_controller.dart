@@ -99,8 +99,12 @@ class HostController {
 
   /// 启动被控：完整流程。调用前应确保无障碍已开启（否则会停在 needAccessibility）。
   Future<void> start() async {
-    if (_disposed || _starting != null || _stopping != null || _session != null)
+    if (_disposed ||
+        _starting != null ||
+        _stopping != null ||
+        _session != null) {
       return;
+    }
     final generation = ++_generation;
     final work = _start(generation);
     _starting = work;
@@ -211,14 +215,18 @@ class HostController {
 
       _subs.add(
         session.onPeerCountChange.listen((n) {
-          if (_disposed || generation != _generation) return;
+          if (_disposed || generation != _generation) {
+            return;
+          }
           _peerCount = n;
           _emit(HostStage.online);
         }),
       );
       _subs.add(
         session.onStateChange.listen((s) {
-          if (_disposed || generation != _generation) return;
+          if (_disposed || generation != _generation) {
+            return;
+          }
           if (s == HostSessionState.failed) {
             _emit(HostStage.error, message: L10n.t('host.msgSignalDropped'));
           }
@@ -235,14 +243,18 @@ class HostController {
       // stop() waits for startup to settle, then releases capture/session.
       return;
     } on SignalingApiException catch (e) {
-      if (generation != _generation || _disposed) return;
+      if (generation != _generation || _disposed) {
+        return;
+      }
       _emit(
         HostStage.error,
         message: L10n.t('host.msgServerError', {'code': e.code}),
       );
       await _cleanup();
     } catch (e) {
-      if (generation != _generation || _disposed) return;
+      if (generation != _generation || _disposed) {
+        return;
+      }
       _emit(
         HostStage.error,
         message: L10n.t('host.msgStartFailed', {'e': 'HOST_START_FAILED'}),
@@ -253,7 +265,9 @@ class HostController {
 
   /// 用户手动重设访问码
   Future<void> regenerateAccessCode() async {
-    if (_creds == null || !_creds!.isProvisioned) return;
+    if (_creds == null || !_creds!.isProvisioned) {
+      return;
+    }
     final code = HostCredentialStore.generateAccessCode();
     await _api.setAccessCode(
       deviceId: _creds!.deviceId!,
@@ -268,7 +282,9 @@ class HostController {
   void _startHeartbeat() {
     _heartbeatTimer?.cancel();
     _heartbeatTimer = Timer.periodic(const Duration(seconds: 30), (_) async {
-      if (_creds == null || !_creds!.isProvisioned) return;
+      if (_creds == null || !_creds!.isProvisioned) {
+        return;
+      }
       try {
         await _api.heartbeat(
           deviceId: _creds!.deviceId!,
@@ -312,7 +328,9 @@ class HostController {
 
   void _emit(HostStage stage, {String? message}) {
     _stage = stage;
-    if (_disposed || _statusCtrl.isClosed) return;
+    if (_disposed || _statusCtrl.isClosed) {
+      return;
+    }
     _statusCtrl.add(
       HostStatus(
         stage: stage,

@@ -48,7 +48,9 @@ class _HostPageState extends State<HostPage> {
   Future<void> _refreshShizuku() async {
     final running = await _injector.isShizukuRunning();
     final available = await _injector.isShizukuAvailable();
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
     setState(() {
       _shizukuRunning = running;
       _shizukuAvailable = available;
@@ -73,7 +75,9 @@ class _HostPageState extends State<HostPage> {
         .catchError((Object _) {})
         .then((_) async {
           final settings = await AppSettings.load();
-          if (!mounted || generation != _configuration) return;
+          if (!mounted || generation != _configuration) {
+            return;
+          }
           final scope = HostCredentialStore.scopeFor(
             settings.signalingUrl,
             settings.apiKeyOrNull,
@@ -90,7 +94,9 @@ class _HostPageState extends State<HostPage> {
           _subs.clear();
           await old?.stop();
           old?.dispose();
-          if (!mounted || generation != _configuration) return;
+          if (!mounted || generation != _configuration) {
+            return;
+          }
           WakelockPlus.disable();
           final controller = HostController(
             signalingUrl: settings.signalingUrl,
@@ -100,7 +106,9 @@ class _HostPageState extends State<HostPage> {
           _serverScope = scope;
           _subs.add(
             controller.onStatus.listen((status) {
-              if (!mounted || !identical(_controller, controller)) return;
+              if (!mounted || !identical(_controller, controller)) {
+                return;
+              }
               setState(() => _status = status);
               if (status.stage == HostStage.online) {
                 WakelockPlus.enable();
@@ -111,7 +119,9 @@ class _HostPageState extends State<HostPage> {
             }),
           );
           final creds = await controller.loadCredentials();
-          if (!mounted || generation != _configuration) return;
+          if (!mounted || generation != _configuration) {
+            return;
+          }
           setState(() {
             _busy = false;
             _status = HostStatus(
@@ -135,7 +145,9 @@ class _HostPageState extends State<HostPage> {
   }
 
   Future<void> _start() async {
-    if (_controller == null || _busy) return;
+    if (_controller == null || _busy) {
+      return;
+    }
     final generation = _configuration;
     setState(() => _busy = true);
     await _controller!.start();
@@ -143,7 +155,9 @@ class _HostPageState extends State<HostPage> {
   }
 
   Future<void> _stop() async {
-    if (_controller == null || _busy) return;
+    if (_controller == null || _busy) {
+      return;
+    }
     final generation = _configuration;
     setState(() => _busy = true);
     await _controller!.stop();

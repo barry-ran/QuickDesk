@@ -23,11 +23,15 @@ class ConnectionLogAttempt {
     required String deviceId,
     Duration Function()? elapsed,
   }) {
-    if (account == null || !account.isLoggedIn || deviceId.isEmpty) return null;
+    if (account == null || !account.isLoggedIn || deviceId.isEmpty) {
+      return null;
+    }
     // Match the full configuration, not just hostname. In particular never
     // send an old account token after editing the server form.
     final uri = Uri.tryParse(signalingUrl.trim());
-    if (uri == null) return null;
+    if (uri == null) {
+      return null;
+    }
     final base = uri
         .replace(
           scheme: switch (uri.scheme) {
@@ -38,13 +42,16 @@ class ConnectionLogAttempt {
         )
         .toString()
         .replaceFirst(RegExp(r'/+$'), '');
-    if (base != account.httpBase || (apiKey ?? '') != (account.apiKey ?? ''))
+    if (base != account.httpBase || (apiKey ?? '') != (account.apiKey ?? '')) {
       return null;
+    }
     return ConnectionLogAttempt._(account, deviceId, elapsed);
   }
 
   void connected() {
-    if (_finished != null || _connected) return;
+    if (_finished != null || _connected) {
+      return;
+    }
     _connected = true;
     _duration.start();
   }
@@ -68,7 +75,9 @@ class ConnectionLogAttempt {
 
   Future<bool> _write(String? failureCode) async {
     _duration.stop();
-    if (!_account.isLoggedIn || _account.sessionEpoch != _epoch) return false;
+    if (!_account.isLoggedIn || _account.sessionEpoch != _epoch) {
+      return false;
+    }
     final failure = failureCode == null
         ? (_connected ? null : 'CANCELLED')
         : _safeFailures.contains(failureCode)
