@@ -14,6 +14,7 @@ set(MANAGER_SOURCES
     src/manager/ServerManager.cpp
     src/manager/TurnServerManager.cpp
     src/manager/HostManager.cpp
+    src/manager/FileTransferQueue.cpp
     src/manager/ClientManager.cpp
     src/manager/DeviceRecorder.cpp
     src/manager/SharedMemoryManager.cpp
@@ -30,6 +31,8 @@ set(MANAGER_HEADERS
     src/manager/ServerManager.h
     src/manager/TurnServerManager.h
     src/manager/HostManager.h
+    src/manager/ClipboardFiles.h
+    src/manager/FileTransferQueue.h
     src/manager/ClientManager.h
     src/manager/SharedMemoryManager.h
     src/manager/RemoteDeviceManager.h

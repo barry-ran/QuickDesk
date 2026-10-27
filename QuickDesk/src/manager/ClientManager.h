@@ -18,6 +18,7 @@
 #include <QVariantMap>
 
 #include "SharedMemoryManager.h"
+#include "FileTransferQueue.h"
 #include "common/ProcessStatus.h"
 
 namespace quickdesk {
@@ -62,6 +63,7 @@ struct ConnectionInfo {
  */
 class ClientManager : public QObject {
     Q_OBJECT
+    Q_PROPERTY(QVariantList fileTransferTasks READ fileTransferTasks NOTIFY fileTransferTasksChanged)
     Q_PROPERTY(int connectionCount READ connectionCount NOTIFY connectionCountChanged)
     Q_PROPERTY(QString activeDeviceId READ activeDeviceId
                WRITE setActiveDeviceId NOTIFY activeConnectionChanged)
@@ -150,6 +152,10 @@ public:
     Q_INVOKABLE void openContainingFolder(const QString& filePath);
     Q_INVOKABLE bool deleteDownloadedFile(const QString& filePath);
 
+    QVariantList fileTransferTasks() const { return m_fileTransfers.tasks(); }
+    Q_INVOKABLE void cancelFileTask(const QString& taskId);
+    Q_INVOKABLE bool copyDownloadedFile(const QString& taskId);
+
     // Clipboard file paste
     Q_INVOKABLE bool pasteFilesFromClipboard(const QString& deviceId);
 
@@ -173,6 +179,8 @@ public:
                                      const QString& filePath);
 
 signals:
+    void fileTransferTasksChanged();
+    void fileTransferNotice(const QString& deviceId, const QString& message);
     void connectionCountChanged();
     void activeConnectionChanged();
     
@@ -260,6 +268,8 @@ private slots:
     void onMessagingError(const QString& error);
 
 private:
+    FileTransferQueue m_fileTransfers;
+    bool fileTransferReady(const QString& deviceId) const;
     QPointer<NativeMessaging> m_messaging;
     std::unique_ptr<SharedMemoryManager> m_sharedMemoryManager;
     QMap<QString, ConnectionInfo> m_connections;  // key = deviceId
