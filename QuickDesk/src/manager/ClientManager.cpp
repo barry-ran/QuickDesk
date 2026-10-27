@@ -1036,7 +1036,10 @@ void ClientManager::handleConnectionListChanged(const QJsonObject& message)
     for (const auto& old : oldConnections) {
         if (!m_connections.contains(old.deviceId) ||
             m_connections.value(old.deviceId).connectionId != old.connectionId ||
-            m_connections.value(old.deviceId).rtcState != RtcStatus::Connected)
+            m_connections.value(old.deviceId).rtcState == RtcStatus::Disconnected ||
+            m_connections.value(old.deviceId).rtcState == RtcStatus::Failed ||
+            (old.rtcState == RtcStatus::Connected &&
+             m_connections.value(old.deviceId).rtcState != RtcStatus::Connected))
             m_fileTransfers.endSession(old.connectionId);
     }
     for (const auto& current : m_connections)

@@ -189,12 +189,34 @@ void FileTransferQueue::handleMessage(const QJsonObject& message)
     if (!m_sessions.contains(connectionId)) return;
     const QString type = message.value("type").toString();
     const bool download = type.startsWith("fileDownload");
-    if (!download && !type.startsWith("fileTransfer")) return;
+    if (type != "fileDownloadStarted" && type != "fileDownloadProgress" &&
+        type != "fileDownloadComplete" && type != "fileDownloadError" &&
+        type != "fileTransferProgress" && type != "fileTransferComplete" &&
+        type != "fileTransferError") return;
     const QString direction = download ? "download" : "upload";
     const QString transferId = message.value("transferId").toString();
     const QString filename = message.value("filename").toString();
     if (!transferId.isEmpty() &&
         m_retiredTransfers.contains(wireKey(connectionId, direction, transferId))) return;
+
+    if (!download && transferId.isEmpty()) {
+        if (type.endsWith("Error") || type.endsWith("Complete")) {
+            // Without an ID, even a terminal-looking message cannot prove
+            // which dispatch finished. Preserve the slot instead of guessing.
+            for (auto& task : m_tasks) {
+                if (task.connectionId == connectionId && task.direction == "upload" &&
+                    task.status != "queued" && !terminal(task.status)) {
+                    task.status = "uncertain";
+                    task.error = tr("A transfer result arrived without an identifier. "
+                                    "Reconnect to reset this session's queue.");
+                    m_blockedUploads.insert(connectionId);
+                    emit changed();
+                    return;
+                }
+            }
+        }
+        return;
+    }
 
     int index = -1;
     for (int i = 0; i < m_tasks.size(); ++i) {
@@ -234,40 +256,24 @@ void FileTransferQueue::handleMessage(const QJsonObject& message)
             break;
         }
     }
-    if (index < 0 && !download && transferId.isEmpty() && type.endsWith("Error")) {
-        // An ID-less error cannot safely identify an already-bound transfer.
-        for (auto& task : m_tasks) {
-            if (task.connectionId == connectionId && task.direction == "upload" &&
-                task.status != "queued" && !terminal(task.status)) {
-                task.status = "uncertain";
-                task.error = tr("An unidentified transfer error was received. Reconnect to reset the queue.");
-                emit changed();
-                return;
-            }
-        }
+    if (index < 0) {
+        if (download && type == "fileDownloadError" && m_downloadRoots.contains(connectionId))
+            emit notice(m_sessions.value(connectionId),
+                        tr("Download could not start: %1").arg(message.value("errorMessage").toString()));
+        return;
     }
-    if (index < 0) return;
     if (!transferId.isEmpty()) m_tasks[index].transferId = transferId;
     const bool cancelling = m_tasks[index].cancelRequested;
     if (type.endsWith("Complete")) {
-        if (!download && m_tasks[index].transferId.isEmpty()) {
-            m_blockedUploads.insert(connectionId);
-            emit notice(m_tasks[index].deviceId,
-                        tr("The transfer finished without an identifier. Reconnect before the next upload."));
-        }
         if (download) m_tasks[index].savePath = message.value("savePath").toString();
         // A completion that wins the cancellation race is still a completion.
         finish(index, "complete", cancelling ? tr("Completed before cancellation took effect.") : QString());
     } else if (type.endsWith("Error")) {
         QString error = message.value("errorMessage").toString();
         if (error.isEmpty()) error = tr("File transfer failed.");
-        if (transferId.isEmpty()) {
-            // Without an ID the failed dispatch cannot be retired unambiguously.
-            // Do not reuse its slot for another file in this connection.
-            m_blockedUploads.insert(connectionId);
-            error += tr(" Reconnect before starting another upload in this session.");
-        }
-        finish(index, cancelling ? "cancelled" : "error", error);
+        if (cancelling)
+            error = tr("Transfer ended after a cancellation request: %1").arg(error);
+        finish(index, "error", error);
     } else if (type.endsWith("Progress")) {
         const double total = message.value("totalBytes").toDouble();
         const double bytes = message.value(download ? "bytesReceived" : "bytesSent").toDouble();
