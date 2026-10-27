@@ -28,6 +28,8 @@ Rectangle {
     // Optional properties
     property bool active: true
     property bool inputEnabled: true  // Enable/disable input capture
+    property bool filePasteKeyHeld: false
+    property var forwardedKeys: ({})
     // Set by an overlapping local control surface (for example, the tab bar).
     // While active, show the native cursor instead of the remote cursor.
     property bool suppressRemoteCursor: false
@@ -63,9 +65,15 @@ Rectangle {
     // System shortcuts and focus changes can prevent QML from delivering the
     // matching key-up event. Tell the host to clear its authoritative state.
     function releaseRemoteInput() {
+        filePasteKeyHeld = false
+        forwardedKeys = ({})
         if (clientManager && deviceId.length > 0) {
             clientManager.releaseAllInput(deviceId)
         }
+    }
+
+    onInputEnabledChanged: {
+        if (!inputEnabled) releaseRemoteInput()
     }
 
     onActiveFocusChanged: {
@@ -425,29 +433,51 @@ Rectangle {
     Keys.onPressed: function(event) {
         if (!root.inputEnabled || !root.clientManager) return;
 
-        // Intercept Ctrl+V: if clipboard contains files, upload them instead
-        if (event.key === Qt.Key_V && (event.modifiers & Qt.ControlModifier)) {
+        // File paste is local queue submission, not a remote V key. Consume its
+        // repeats and matching release even if the clipboard changes mid-press.
+        if (event.key === Qt.Key_V && root.filePasteKeyHeld) {
+            event.accepted = true
+            return
+        }
+        if (!event.isAutoRepeat && event.key === Qt.Key_V
+                && (event.modifiers & Qt.ControlModifier)) {
             if (root.clientManager.pasteFilesFromClipboard(root.deviceId)) {
+                root.filePasteKeyHeld = true
                 event.accepted = true
                 return
             }
         }
 
+        var nativeKey = KeyboardStateTracker.getLastNativeKeycode()
+        if (event.isAutoRepeat && !root.forwardedKeys[nativeKey]) {
+            event.accepted = true
+            return
+        }
+        root.forwardedKeys[nativeKey] = true
         root.clientManager.sendKeyPress(
-            root.deviceId, KeyboardStateTracker.getLastNativeKeycode(),
-            KeyboardStateTracker.getLockStates());
+            root.deviceId, nativeKey, KeyboardStateTracker.getLockStates());
         event.accepted = true;
     }
 
     Keys.onReleased: function(event) {
+        if (event.key === Qt.Key_V && root.filePasteKeyHeld) {
+            if (!event.isAutoRepeat) root.filePasteKeyHeld = false
+            event.accepted = true
+            return
+        }
         if (!root.inputEnabled || !root.clientManager) return;
 
-        root.clientManager.sendKeyRelease(
-            root.deviceId, KeyboardStateTracker.getLastNativeKeycode(),
-            KeyboardStateTracker.getLockStates());
+        // A focus loss already released the host's authoritative input state.
+        // Never synthesize key-up for an intercepted or no-longer-held key.
+        var nativeKey = KeyboardStateTracker.getLastNativeKeycode()
+        if (root.forwardedKeys[nativeKey]) {
+            if (!event.isAutoRepeat) delete root.forwardedKeys[nativeKey]
+            root.clientManager.sendKeyRelease(
+                root.deviceId, nativeKey, KeyboardStateTracker.getLockStates());
+        }
         event.accepted = true;
     }
-    
+
     // Frame provider connects shared memory to video sink
     VideoFrameProvider {
         id: frameProvider
