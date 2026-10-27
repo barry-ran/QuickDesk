@@ -310,7 +310,9 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
         withData: false, allowMultiple: true,
       );
       if (!mounted || manager != _fileTransfer ||
-          _state != SessionState.connected || result == null) return;
+          _state != SessionState.connected || result == null) {
+        return;
+      }
       for (final picked in result.files) {
         if (picked.path == null) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -322,9 +324,11 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
       }
       if (manager.tasks.isNotEmpty) _showTransferProgress(manager);
     } catch (error) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${L10n.t('file.failed')}: $error')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${L10n.t('file.failed')}: $error')),
+        );
+      }
     }
   }
 
@@ -334,13 +338,17 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     try {
       final dir = await _downloadDir();
       if (!mounted || manager != _fileTransfer ||
-          _state != SessionState.connected) return;
+          _state != SessionState.connected) {
+        return;
+      }
       manager.enqueueDownload(dir);
       _showTransferProgress(manager);
     } catch (error) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${L10n.t('file.failed')}: $error')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${L10n.t('file.failed')}: $error')),
+        );
+      }
     }
   }
 
