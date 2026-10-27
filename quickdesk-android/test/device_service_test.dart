@@ -322,11 +322,9 @@ void main() {
           ? {'access_code': '123456'}
           : {'items': []};
       await devices.setRemark('a/b', 'Office');
-      expect(account.calls.last, (
-        'PATCH',
-        '/v1/me/devices/a%2Fb',
-        {'remark': 'Office'},
-      ));
+      expect(account.calls.last.$1, 'PATCH');
+      expect(account.calls.last.$2, '/v1/me/devices/a%2Fb');
+      expect(account.calls.last.$3, {'remark': 'Office'});
       expect(await devices.accessCode('a/b'), '123456');
       await devices.addFavorite('a', name: 'Home', password: 'secret-fixture');
       expect(
