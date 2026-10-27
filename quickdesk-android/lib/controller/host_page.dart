@@ -9,6 +9,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../core/app_settings.dart';
 import '../host/host_controller.dart';
+import '../host/host_credential_store.dart';
 import '../host/input_injector.dart';
 import '../l10n/app_strings.dart';
 
@@ -23,6 +24,9 @@ class _HostPageState extends State<HostPage> {
   HostController? _controller;
   HostStatus _status = HostStatus(stage: HostStage.idle);
   bool _busy = false;
+  int _configuration = 0;
+  Future<void> _configurationWork = Future<void>.value();
+  String? _serverScope;
   final List<StreamSubscription<HostStatus>> _subs = [];
 
   final InputInjector _injector = InputInjector();
@@ -32,6 +36,7 @@ class _HostPageState extends State<HostPage> {
   @override
   void initState() {
     super.initState();
+    AppSettings.changes.addListener(_init);
     _init();
     _injector.setShizukuPermissionResultHandler((granted) async {
       if (granted) await _injector.bindShizuku();
@@ -61,45 +66,88 @@ class _HostPageState extends State<HostPage> {
     }
   }
 
-  Future<void> _init() async {
-    final settings = await AppSettings.load();
-    final controller = HostController(
-      signalingUrl: settings.signalingUrl,
-      apiKey: settings.apiKeyOrNull,
-    );
-    _subs.add(controller.onStatus.listen((s) {
-      if (!mounted) return;
-      setState(() => _status = s);
-      if (s.stage == HostStage.online) {
-        WakelockPlus.enable();
-      } else if (s.stage == HostStage.idle || s.stage == HostStage.error) {
-        WakelockPlus.disable();
-      }
-    }));
-    final creds = await controller.loadCredentials();
-    if (!mounted) return;
-    setState(() {
-      _controller = controller;
-      _status = HostStatus(
-        stage: HostStage.idle,
-        deviceId: creds.deviceId,
-        accessCode: creds.accessCode,
-      );
-    });
+  void _init() {
+    final generation = ++_configuration;
+    if (mounted) setState(() => _busy = true);
+    _configurationWork = _configurationWork
+        .catchError((Object _) {})
+        .then((_) async {
+          final settings = await AppSettings.load();
+          if (!mounted || generation != _configuration) return;
+          final scope = HostCredentialStore.scopeFor(
+            settings.signalingUrl,
+            settings.apiKeyOrNull,
+          );
+          if (scope == _serverScope && _controller != null) {
+            setState(() => _busy = false);
+            return;
+          }
+          final old = _controller;
+          _controller = null;
+          for (final sub in _subs) {
+            await sub.cancel();
+          }
+          _subs.clear();
+          await old?.stop();
+          old?.dispose();
+          if (!mounted || generation != _configuration) return;
+          WakelockPlus.disable();
+          final controller = HostController(
+            signalingUrl: settings.signalingUrl,
+            apiKey: settings.apiKeyOrNull,
+          );
+          _controller = controller;
+          _serverScope = scope;
+          _subs.add(
+            controller.onStatus.listen((status) {
+              if (!mounted || !identical(_controller, controller)) return;
+              setState(() => _status = status);
+              if (status.stage == HostStage.online) {
+                WakelockPlus.enable();
+              } else if (status.stage == HostStage.idle ||
+                  status.stage == HostStage.error) {
+                WakelockPlus.disable();
+              }
+            }),
+          );
+          final creds = await controller.loadCredentials();
+          if (!mounted || generation != _configuration) return;
+          setState(() {
+            _busy = false;
+            _status = HostStatus(
+              stage: HostStage.idle,
+              deviceId: creds.deviceId,
+              accessCode: creds.accessCode,
+            );
+          });
+        })
+        .catchError((Object _) {
+          if (mounted && generation == _configuration) {
+            setState(() {
+              _busy = false;
+              _status = HostStatus(
+                stage: HostStage.error,
+                message: L10n.t('account.storageFailed'),
+              );
+            });
+          }
+        });
   }
 
   Future<void> _start() async {
-    if (_controller == null) return;
+    if (_controller == null || _busy) return;
+    final generation = _configuration;
     setState(() => _busy = true);
     await _controller!.start();
-    if (mounted) setState(() => _busy = false);
+    if (mounted && generation == _configuration) setState(() => _busy = false);
   }
 
   Future<void> _stop() async {
-    if (_controller == null) return;
+    if (_controller == null || _busy) return;
+    final generation = _configuration;
     setState(() => _busy = true);
     await _controller!.stop();
-    if (mounted) setState(() => _busy = false);
+    if (mounted && generation == _configuration) setState(() => _busy = false);
   }
 
   bool get _online => _status.stage == HostStage.online;
@@ -129,12 +177,16 @@ class _HostPageState extends State<HostPage> {
 
           const SizedBox(height: 24),
           FilledButton.icon(
-            onPressed: _busy
-                ? null
-                : (_online ? _stop : _start),
-            style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16)),
+            onPressed: _busy ? null : (_online ? _stop : _start),
+            style: FilledButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+            ),
             icon: _busy
-                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
                 : Icon(_online ? Icons.stop : Icons.play_arrow),
             label: Text(_online ? L10n.t('host.stop') : L10n.t('host.start')),
           ),
@@ -145,7 +197,9 @@ class _HostPageState extends State<HostPage> {
               _status.message!,
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: _status.stage == HostStage.error ? scheme.error : scheme.outline,
+                color: _status.stage == HostStage.error
+                    ? scheme.error
+                    : scheme.outline,
               ),
             ),
           ],
@@ -163,13 +217,25 @@ class _HostPageState extends State<HostPage> {
   Widget _buildStatusCard(ColorScheme scheme) {
     final (icon, color, text) = switch (_status.stage) {
       HostStage.online when _status.peerCount > 0 => (
-          Icons.cast_connected,
-          scheme.primary,
-          L10n.t('host.controlling', {'n': _status.peerCount})
-        ),
-      HostStage.online => (Icons.wifi_tethering, scheme.primary, L10n.t('host.online')),
-      HostStage.error => (Icons.error_outline, scheme.error, L10n.t('host.offline')),
-      HostStage.idle => (Icons.cloud_off, scheme.outline, L10n.t('host.notStarted')),
+        Icons.cast_connected,
+        scheme.primary,
+        L10n.t('host.controlling', {'n': _status.peerCount}),
+      ),
+      HostStage.online => (
+        Icons.wifi_tethering,
+        scheme.primary,
+        L10n.t('host.online'),
+      ),
+      HostStage.error => (
+        Icons.error_outline,
+        scheme.error,
+        L10n.t('host.offline'),
+      ),
+      HostStage.idle => (
+        Icons.cloud_off,
+        scheme.outline,
+        L10n.t('host.notStarted'),
+      ),
       _ => (Icons.hourglass_top, scheme.tertiary, L10n.t('host.preparing')),
     };
 
@@ -184,9 +250,16 @@ class _HostPageState extends State<HostPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(L10n.t('host.statusTitle'), style: Theme.of(context).textTheme.labelMedium),
+                  Text(
+                    L10n.t('host.statusTitle'),
+                    style: Theme.of(context).textTheme.labelMedium,
+                  ),
                   const SizedBox(height: 4),
-                  Text(text, style: Theme.of(context).textTheme.titleMedium?.copyWith(color: color)),
+                  Text(
+                    text,
+                    style: Theme.of(context).textTheme.titleMedium
+                        ?.copyWith(color: color),
+                  ),
                 ],
               ),
             ),
@@ -203,14 +276,21 @@ class _HostPageState extends State<HostPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _credRow(L10n.t('host.deviceId'), _status.deviceId ?? '-', copyable: true),
+            _credRow(
+              L10n.t('host.deviceId'),
+              _status.deviceId ?? '-',
+              copyable: true,
+            ),
             const Divider(height: 24),
             Row(
               children: [
                 Expanded(
-                    child: _credRow(L10n.t('host.accessCode'),
-                        _status.accessCode ?? L10n.t('host.accessCodeUnset'),
-                        copyable: true)),
+                  child: _credRow(
+                    L10n.t('host.accessCode'),
+                    _status.accessCode ?? L10n.t('host.accessCodeUnset'),
+                    copyable: true,
+                  ),
+                ),
                 IconButton(
                   tooltip: L10n.t('host.regenCode'),
                   onPressed: _online || _busy || _controller == null
@@ -237,9 +317,9 @@ class _HostPageState extends State<HostPage> {
             Text(
               value,
               style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontFeatures: const [FontFeature.tabularFigures()],
-                    letterSpacing: 2,
-                  ),
+                fontFeatures: const [FontFeature.tabularFigures()],
+                letterSpacing: 2,
+              ),
             ),
             if (copyable && value.length > 1) ...[
               const SizedBox(width: 8),
@@ -250,8 +330,9 @@ class _HostPageState extends State<HostPage> {
                   Clipboard.setData(ClipboardData(text: value));
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                        content: Text(L10n.t('common.copied', {'label': label})),
-                        duration: const Duration(seconds: 1)),
+                      content: Text(L10n.t('common.copied', {'label': label})),
+                      duration: const Duration(seconds: 1),
+                    ),
                   );
                 },
                 icon: const Icon(Icons.copy),
@@ -285,10 +366,15 @@ class _HostPageState extends State<HostPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(L10n.t('host.inputMethod', {'label': label}),
-                          style: const TextStyle(fontWeight: FontWeight.bold)),
+                      Text(
+                        L10n.t('host.inputMethod', {'label': label}),
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
                       const SizedBox(height: 2),
-                      Text(desc, style: TextStyle(fontSize: 12, color: scheme.outline)),
+                      Text(
+                        desc,
+                        style: TextStyle(fontSize: 12, color: scheme.outline),
+                      ),
                     ],
                   ),
                 ),
@@ -331,7 +417,10 @@ class _HostPageState extends State<HostPage> {
                 Expanded(
                   child: Text(
                     L10n.t('host.a11yTitle'),
-                    style: TextStyle(color: scheme.onErrorContainer, fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                      color: scheme.onErrorContainer,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
               ],
@@ -354,6 +443,8 @@ class _HostPageState extends State<HostPage> {
 
   @override
   void dispose() {
+    ++_configuration;
+    AppSettings.changes.removeListener(_init);
     for (final s in _subs) {
       s.cancel();
     }

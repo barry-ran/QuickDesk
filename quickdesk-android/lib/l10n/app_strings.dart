@@ -21,6 +21,14 @@ class L10n {
   }
 
   static const Map<String, String> _zh = {
+    'account.bindHost': '绑定本机到当前账户',
+    'account.hostNotReady': '请先在被控页启动本机，完成设备注册后再绑定。',
+    'account.bindConfirm': '将设备 {id} 绑定到 {server} 的账户 {account}？如果设备已有归属，此操作会将所有权从原账户转移到当前账户。登录不会自动执行此操作。',
+    'account.forgotPassword': '忘记密码？',
+    'account.resetExternal':
+        '将在外部浏览器打开服务器配置的页面：\n{url}\n请确认地址可信；HTTP 地址不加密。不会向浏览器传递账户令牌。',
+    'account.error.RESET_UNAVAILABLE': '服务器未配置有效的 WebClient 地址，或无法打开浏览器。',
+
     'account.error.PASSWORD_WEAK': '密码不符合服务器要求',
     'account.logoutOffline': '已清除本机登录，但服务器未确认撤销会话。请在联网后从其他客户端检查账户会话。',
     'account.storageFailed':
@@ -207,6 +215,14 @@ class L10n {
   };
 
   static const Map<String, String> _en = {
+    'account.bindHost': 'Bind this host to my account',
+    'account.hostNotReady':
+        'Start this host on the Host tab to provision it before binding.',
+    'account.bindConfirm': 'Bind device {id} to {account} on {server}? If it already belongs to another account, this transfers ownership to this account. Signing in never does this automatically.',
+    'account.forgotPassword': 'Forgot password?',
+    'account.resetExternal': 'Open this server-configured page in your browser:\n{url}\nCheck that you trust the address. HTTP is unencrypted. No account token is sent to the browser.',
+    'account.error.RESET_UNAVAILABLE': 'The server has no valid WebClient URL, or the browser could not open it.',
+
     'account.error.PASSWORD_WEAK': 'Password does not meet server requirements',
     'account.logoutOffline': 'Signed out locally, but server revocation was not confirmed. Check account sessions from another client when online.',
     'account.storageFailed': 'Secure storage failed. If signing out, the in-memory session is cleared but saved credentials may remain; revoke account sessions from another client.',
