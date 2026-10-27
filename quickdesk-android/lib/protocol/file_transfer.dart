@@ -212,6 +212,7 @@ class FileTransferManager extends ChangeNotifier {
   int _seq = 0;
   bool _disposed = false;
   bool _running = false;
+  final _progressClock = Stopwatch()..start();
 
   FileTransferManager(RTCPeerConnection Function() pcProvider)
       : this.withChannelFactory((label) async => _RtcFileTransferChannel(
@@ -268,6 +269,12 @@ class FileTransferManager extends ChangeNotifier {
 
   void _changed() {
     if (!_disposed) notifyListeners();
+  }
+
+  void _progressChanged() {
+    if (_progressClock.elapsedMilliseconds < 100) return;
+    _progressClock.reset();
+    _changed();
   }
 
   void _pump() {
@@ -382,10 +389,11 @@ class FileTransferManager extends ChangeNotifier {
             if (getStopped()) return;
             task.bytes += chunk.length;
             touch();
-            _changed();
+            _progressChanged();
           }
           if (!getStopped()) {
             sentEnd = true;
+            _changed();
             await send(_encEnd());
             touch();
           }
@@ -430,7 +438,7 @@ class FileTransferManager extends ChangeNotifier {
           await output!.writeFrom(message.data!);
           if (getStopped()) return;
           task.bytes += message.data!.length;
-          _changed();
+          _progressChanged();
         } else if (message.end) {
           if (!metadataReceived || output == null) {
             throw StateError('Incomplete download');
@@ -527,6 +535,7 @@ class FileTransferManager extends ChangeNotifier {
   @override
   void dispose() {
     if (_disposed) return;
+    _disposed = true;
     for (final task in _tasks) {
       if (!task.finished) {
         task.status = FileTransferStatus.cancelled;
@@ -535,7 +544,6 @@ class FileTransferManager extends ChangeNotifier {
       }
     }
     notifyListeners();
-    _disposed = true;
     super.dispose();
   }
 }
