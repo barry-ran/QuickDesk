@@ -22,6 +22,7 @@ class RemoteToolbar extends StatelessWidget {
   final VoidCallback onToggleStats;
   final VoidCallback onUpload;
   final VoidCallback onDownload;
+  final VoidCallback? onTransfers;
   final VoidCallback onDisconnect;
   final VoidCallback onHelp;
   final VoidCallback? onQuality;
@@ -48,6 +49,7 @@ class RemoteToolbar extends StatelessWidget {
     required this.onToggleStats,
     required this.onUpload,
     required this.onDownload,
+    this.onTransfers,
     required this.onDisconnect,
     required this.onHelp,
     this.onQuality,
@@ -124,6 +126,8 @@ class RemoteToolbar extends StatelessWidget {
                     onUpload();
                   case 'download':
                     onDownload();
+                  case 'transfers':
+                    onTransfers?.call();
                   case 'disconnect':
                     onDisconnect();
                 }
@@ -179,6 +183,11 @@ class RemoteToolbar extends StatelessWidget {
                   child: Text(L10n.t('file.download')),
                 ),
               ],
+              if (onTransfers != null)
+                PopupMenuItem(
+                  value: 'transfers',
+                  child: Text(L10n.t('file.transfers')),
+                ),
               const PopupMenuDivider(),
               PopupMenuItem(
                 value: 'disconnect',
