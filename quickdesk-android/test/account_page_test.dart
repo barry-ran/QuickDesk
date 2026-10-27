@@ -10,7 +10,10 @@ import 'package:quickdesk_android/account/account_service.dart';
 import 'package:quickdesk_android/l10n/app_strings.dart';
 
 class _Account extends AccountService {
-  _Account() : super(signalingUrl: 'https://example.test');
+  _Account() : super(signalingUrl: 'https://example.test') {
+    registerEnabled = true;
+    featuresLoaded = true;
+  }
   bool signedIn = false;
   @override
   bool get isLoggedIn => signedIn;
@@ -135,10 +138,7 @@ void main() {
         find.byKey(const Key('account-username')),
         'alice',
       );
-      await tester.enterText(
-        find.byKey(const Key('account-password')),
-        'short',
-      );
+      await tester.enterText(find.byKey(const Key('account-password')), '');
       await tester.ensureVisible(find.byKey(const Key('account-submit')));
       await tester.tap(find.byKey(const Key('account-submit')));
       await tester.pump();
@@ -203,11 +203,13 @@ void main() {
       find.widgetWithText(TextButton, 'Connect'),
     );
     expect(connect.onPressed, isNull); // online is not the same as logged in
+    await tester.ensureVisible(find.text('Edit label'));
     await tester.tap(find.text('Edit label'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
     expect(devices.edits, 0);
+    await tester.ensureVisible(find.text('Edit label'));
     await tester.tap(find.text('Edit label'));
     await tester.pumpAndSettle();
     await AppSettings.save(

@@ -42,11 +42,14 @@ class _AccountPageState extends State<AccountPage> {
   Future<void> _configure() async {
     final request = ++_configurationRequest;
     final settings = await AppSettings.load();
-    if (!mounted || request != _configurationRequest) return;
+    if (!mounted || request != _configurationRequest) {
+      return;
+    }
     if (_account != null &&
         _settings?.signalingUrl == settings.signalingUrl &&
-        _settings?.apiKey == settings.apiKey)
+        _settings?.apiKey == settings.apiKey) {
       return;
+    }
     final generation = ++_generation;
     _release();
     _account = null;
@@ -67,7 +70,9 @@ class _AccountPageState extends State<AccountPage> {
       _account!.addListener(_changed);
       _devices!.addListener(_changed);
       await _account!.initialize();
-      if (!mounted || generation != _generation) return;
+      if (!mounted || generation != _generation) {
+        return;
+      }
       _devices!.start();
     } catch (_) {
       if (mounted && generation == _generation) {
@@ -89,14 +94,20 @@ class _AccountPageState extends State<AccountPage> {
       _account!.isLoggedIn;
 
   void _changed() {
-    if (mounted) setState(() {});
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   void _release() {
     _account?.removeListener(_changed);
     _devices?.removeListener(_changed);
-    if (widget.devices == null) _devices?.dispose();
-    if (widget.account == null) _account?.dispose();
+    if (widget.devices == null) {
+      _devices?.dispose();
+    }
+    if (widget.account == null) {
+      _account?.dispose();
+    }
   }
 
   @override
@@ -108,7 +119,9 @@ class _AccountPageState extends State<AccountPage> {
   }
 
   Future<void> _run(Future<void> Function() action) async {
-    if (_busy) return;
+    if (_busy) {
+      return;
+    }
     final generation = _generation;
     setState(() {
       _busy = true;
@@ -122,12 +135,16 @@ class _AccountPageState extends State<AccountPage> {
           () => _error = L10n.t(
             e is AccountException && e.code == 'LOGOUT_OFFLINE'
                 ? 'account.logoutOffline'
+                : e is AccountException && e.code == 'SECURE_STORAGE'
+                ? 'account.storageFailed'
                 : 'account.actionFailed',
           ),
         );
       }
     } finally {
-      if (mounted && generation == _generation) setState(() => _busy = false);
+      if (mounted && generation == _generation) {
+        setState(() => _busy = false);
+      }
     }
   }
 
@@ -158,7 +175,9 @@ class _AccountPageState extends State<AccountPage> {
       context: context,
       builder: (_) => _FavoriteDialog(row: row, favorite: favorite),
     );
-    if (result == null || !_current(service, generation, epoch)) return;
+    if (result == null || !_current(service, generation, epoch)) {
+      return;
+    }
     await _run(
       () => favorite
           ? service.updateFavorite(
@@ -180,14 +199,21 @@ class _AccountPageState extends State<AccountPage> {
         var code = favorite
             ? (row['access_password'] as String? ?? '')
             : await devices.accessCode(id);
-        if (!_current(devices, generation, epoch)) return;
+        if (!_current(devices, generation, epoch)) {
+          return;
+        }
         if (code.isEmpty) {
+          if (!mounted) {
+            return;
+          }
           final result = await showDialog<List<String>>(
             context: context,
             builder: (_) =>
                 _FavoriteDialog(row: row, favorite: true, connect: true),
           );
-          if (result == null || !_current(devices, generation, epoch)) return;
+          if (result == null || !_current(devices, generation, epoch)) {
+            return;
+          }
           code = result[2];
         }
         final api = SignalingApi(
@@ -195,9 +221,16 @@ class _AccountPageState extends State<AccountPage> {
           apiKey: settings.apiKeyOrNull,
         );
         final token = await api.verifyAccessCode(id, code);
-        if (!_current(devices, generation, epoch)) return;
+        if (!_current(devices, generation, epoch)) {
+          return;
+        }
         final ice = await api.getIceServers();
-        if (!_current(devices, generation, epoch)) return;
+        if (!_current(devices, generation, epoch)) {
+          return;
+        }
+        if (!mounted) {
+          return;
+        }
         await Navigator.of(context).push(
           MaterialPageRoute<void>(
             builder: (_) => RemotePage(
@@ -265,8 +298,9 @@ class _AccountPageState extends State<AccountPage> {
                                       : 'account.unbindConfirm',
                                 ),
                               ) ||
-                              !_current(service, generation, epoch))
+                              !_current(service, generation, epoch)) {
                             return;
+                          }
                           await _run(
                             () => favorite
                                 ? service.removeFavorite(id)
@@ -371,8 +405,9 @@ class _AccountPageState extends State<AccountPage> {
                             if (!await _confirm(
                                   L10n.t('account.logoutConfirm'),
                                 ) ||
-                                !_current(devices, generation, epoch))
+                                !_current(devices, generation, epoch)) {
                               return;
+                            }
                             await _run(() => account.logout());
                           },
                     child: Text(L10n.t('account.logout')),
@@ -407,8 +442,9 @@ class _AccountPageState extends State<AccountPage> {
                                 const _FavoriteDialog(favorite: true),
                           );
                           if (result == null ||
-                              !_current(devices, generation, epoch))
+                              !_current(devices, generation, epoch)) {
                             return;
+                          }
                           await _run(
                             () => devices.addFavorite(
                               result[0],
@@ -545,12 +581,13 @@ class _FavoriteDialogState extends State<_FavoriteDialog> {
       ),
       FilledButton(
         onPressed: () {
-          if (_form.currentState!.validate())
+          if (_form.currentState!.validate()) {
             Navigator.pop(context, [
               _id.text.trim(),
               _name.text.trim(),
               _password.text,
             ]);
+          }
         },
         child: Text(L10n.t('account.confirm')),
       ),
@@ -598,13 +635,17 @@ class _AccountLoginFormState extends State<AccountLoginForm> {
     if (e is AccountException) {
       final key = 'account.error.${e.code}';
       final translated = L10n.t(key);
-      if (translated != key) return translated;
+      if (translated != key) {
+        return translated;
+      }
     }
     return L10n.t('account.actionFailed');
   }
 
   Future<void> _submit() async {
-    if (_busy || !_form.currentState!.validate()) return;
+    if (_busy || !_form.currentState!.validate()) {
+      return;
+    }
     setState(() {
       _busy = true;
       _error = null;
@@ -624,19 +665,27 @@ class _AccountLoginFormState extends State<AccountLoginForm> {
         default:
           await widget.account.login(_username.text.trim(), _password.text);
       }
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       _password.clear();
       _code.clear();
       await widget.onAuthenticated();
     } catch (e) {
-      if (mounted) setState(() => _error = _message(e));
+      if (mounted) {
+        setState(() => _error = _message(e));
+      }
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() => _busy = false);
+      }
     }
   }
 
   Future<void> _sendSms() async {
-    if (_busy || _seconds > 0 || _phone.text.trim().isEmpty) return;
+    if (_busy || _seconds > 0 || _phone.text.trim().isEmpty) {
+      return;
+    }
     setState(() {
       _busy = true;
       _error = null;
@@ -646,7 +695,9 @@ class _AccountLoginFormState extends State<AccountLoginForm> {
         _phone.text.trim(),
         _mode == 'register' ? 'register' : 'login',
       );
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       setState(() => _seconds = 60);
       _timer?.cancel();
       _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
@@ -655,12 +706,18 @@ class _AccountLoginFormState extends State<AccountLoginForm> {
           return;
         }
         setState(() => _seconds--);
-        if (_seconds <= 0) timer.cancel();
+        if (_seconds <= 0) {
+          timer.cancel();
+        }
       });
     } catch (e) {
-      if (mounted) setState(() => _error = _message(e));
+      if (mounted) {
+        setState(() => _error = _message(e));
+      }
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() => _busy = false);
+      }
     }
   }
 
@@ -710,7 +767,9 @@ class _AccountLoginFormState extends State<AccountLoginForm> {
                     : AutofillHints.password,
               ],
               validator: (v) {
-                if (v == null || v.isEmpty) return L10n.t('account.required');
+                if (v == null || v.isEmpty) {
+                  return L10n.t('account.required');
+                }
                 return null;
               },
               onFieldSubmitted: (_) => _submit(),
