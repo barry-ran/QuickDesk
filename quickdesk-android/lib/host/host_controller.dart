@@ -211,12 +211,14 @@ class HostController {
 
       _subs.add(
         session.onPeerCountChange.listen((n) {
+          if (_disposed || generation != _generation) return;
           _peerCount = n;
           _emit(HostStage.online);
         }),
       );
       _subs.add(
         session.onStateChange.listen((s) {
+          if (_disposed || generation != _generation) return;
           if (s == HostSessionState.failed) {
             _emit(HostStage.error, message: L10n.t('host.msgSignalDropped'));
           }
@@ -243,7 +245,7 @@ class HostController {
       if (generation != _generation || _disposed) return;
       _emit(
         HostStage.error,
-        message: L10n.t('host.msgStartFailed', {'e': '$e'}),
+        message: L10n.t('host.msgStartFailed', {'e': 'HOST_START_FAILED'}),
       );
       await _cleanup();
     }
