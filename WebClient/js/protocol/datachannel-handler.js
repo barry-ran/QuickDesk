@@ -12,6 +12,8 @@ import {
     decodeControlMessage, decodeEventMessage
 } from './protobuf-messages.js';
 
+let nextFileTransferId = 1; // Unique across handler/session generations in this page.
+
 export class DataChannelHandler extends EventTarget {
     constructor() {
         super();
@@ -30,7 +32,7 @@ export class DataChannelHandler extends EventTarget {
         this.supportsPrivacyScreen = false;
         this.supportsVirtualDisplay = false;
 
-        this._nextFileTransferId = 1;
+        this._fileTransfersClosed = false;
         this._activeUploads = new Map();
         this._activeDownloads = new Map();
     }
@@ -329,315 +331,258 @@ export class DataChannelHandler extends EventTarget {
      * @returns {string|null} transferId or null on failure
      */
     startFileUpload(file) {
-        if (!this._pc) {
-            console.warn('[DataChannel] No PeerConnection for file transfer');
-            return null;
-        }
-        if (!this.supportsFileTransfer) {
-            console.warn('[DataChannel] Host does not support file transfer');
-            return null;
-        }
-
-        const transferId = String(this._nextFileTransferId++);
-        const channelName = `filetransfer-${transferId}`;
-        const channel = this._pc.createDataChannel(channelName, { ordered: true });
-        channel.binaryType = 'arraybuffer';
-
-        const CHUNK_SIZE = 8192;
-        let offset = 0;
-
+        if (this._fileTransfersClosed || !this._pc || !this.supportsFileTransfer || this._pc.connectionState === 'closed' ||
+            this._pc.connectionState === 'failed') return null;
+        if (!file || !file.name || file.webkitRelativePath || typeof file.slice !== 'function' ||
+            !Number.isSafeInteger(file.size) || file.size < 0) return null;
+        const key = [file.name, file.size, file.lastModified || 0].join('\0');
+        for (const task of this._activeUploads.values())
+            if (task.key === key) return task.transferId;
+        if (this._activeUploads.size >= 256) return null;
+        const transferId = String(nextFileTransferId++);
         const state = {
-            transferId, filename: file.name, totalBytes: file.size,
-            bytesSent: 0, cancelled: false, channel
+            transferId, filename: file.name, totalBytes: file.size, bytesSent: 0,
+            key, file, channel: null, status: 'queued', cancelled: false,
         };
         this._activeUploads.set(transferId, state);
-
         this.dispatchEvent(new CustomEvent('fileTransferStarted', {
-            detail: { transferId, filename: file.name, totalBytes: file.size }
+            detail: { transferId, filename: file.name, totalBytes: file.size, queued: true },
         }));
-
-        channel.onopen = () => {
-            if (state.cancelled) return;
-            console.log(`[DataChannel] File transfer channel opened: ${channelName}`);
-            const metadata = this._encodeFileTransfer({
-                metadata: { filename: file.name, size: file.size }
-            });
-            channel.send(metadata);
-            this._sendNextChunk(channel, file, offset, CHUNK_SIZE, state);
-        };
-
-        channel.onmessage = (event) => {
-            const msg = this._decodeFileTransfer(new Uint8Array(event.data));
-            if (msg.success) {
-                console.log(`[DataChannel] File saved on host: ${file.name}`);
-                this.dispatchEvent(new CustomEvent('fileTransferComplete', {
-                    detail: { transferId, filename: file.name }
-                }));
-                this._activeUploads.delete(transferId);
-            } else if (msg.error) {
-                const errMsg = `Host error type=${msg.error.type}`;
-                console.error(`[DataChannel] File transfer error: ${errMsg}`);
-                this.dispatchEvent(new CustomEvent('fileTransferError', {
-                    detail: { transferId, errorMessage: errMsg }
-                }));
-                this._activeUploads.delete(transferId);
-            }
-        };
-
-        channel.onclose = () => {
-            console.log(`[DataChannel] File transfer channel closed: ${channelName}`);
-        };
-
-        channel.onerror = (event) => {
-            console.error(`[DataChannel] File transfer channel error:`, event);
-            this.dispatchEvent(new CustomEvent('fileTransferError', {
-                detail: { transferId, errorMessage: 'Channel error' }
-            }));
-            this._activeUploads.delete(transferId);
-        };
-
+        this._pumpUploads();
         return transferId;
     }
 
-    /**
-     * Cancel an in-progress file upload.
-     * @param {string} transferId
-     */
+    _pumpUploads() {
+        if (this._fileTransfersClosed || !this._pc || [...this._activeUploads.values()].some(task => task.status === 'running'))
+            return;
+        const state = [...this._activeUploads.values()].find(task => task.status === 'queued');
+        if (!state) return;
+        state.status = 'running';
+        this.dispatchEvent(new CustomEvent('fileTransferState', {
+            detail: { transferId: state.transferId, queued: false },
+        }));
+        try {
+            const channel = this._pc.createDataChannel('filetransfer-' + state.transferId, { ordered: true });
+            state.channel = channel;
+            channel.binaryType = 'arraybuffer';
+            state.openTimer = setTimeout(() => this._finishUpload(state, 'File transfer channel did not open'), 30000);
+            channel.onopen = () => {
+                clearTimeout(state.openTimer);
+                this._sendUpload(state).catch(error => this._finishUpload(state, error.message));
+            };
+            channel.onmessage = event => {
+                if (!this._uploadActive(state)) return;
+                try {
+                    const message = this._decodeFileTransfer(new Uint8Array(event.data));
+                    if (message.success) {
+                        if (!state.sentEnd) throw new Error('Premature upload acknowledgement');
+                        this._finishUpload(state);
+                    } else if (message.error) {
+                        this._finishUpload(state, 'Host error type=' + message.error.type);
+                    }
+                } catch (error) { this._finishUpload(state, error.message); }
+            };
+            channel.onclose = () => this._finishUpload(state, 'Channel closed before upload was confirmed');
+            channel.onerror = () => this._finishUpload(state, 'File transfer channel error');
+        } catch (error) { this._finishUpload(state, error.message); }
+    }
+
+    _uploadActive(state) {
+        return this._activeUploads.get(state.transferId) === state && !state.cancelled;
+    }
+
+    async _sendUpload(state) {
+        if (!this._uploadActive(state)) return;
+        const channel = state.channel;
+        const file = state.file;
+        channel.send(this._encodeFileTransfer({ metadata: { filename: file.name, size: file.size } }));
+        const chunkSize = 8192;
+        let offset = 0;
+        while (offset < file.size) {
+            while (this._uploadActive(state) && channel.bufferedAmount > chunkSize * 8)
+                await new Promise(resolve => setTimeout(resolve, 25));
+            if (!this._uploadActive(state)) return;
+            if (channel.readyState !== 'open') throw new Error('Upload channel is not open');
+            const end = Math.min(offset + chunkSize, file.size);
+            const buffer = await file.slice(offset, end).arrayBuffer();
+            if (!this._uploadActive(state)) return;
+            if (buffer.byteLength !== end - offset) throw new Error('The local file changed during upload');
+            channel.send(this._encodeFileTransfer({ data: { data: new Uint8Array(buffer) } }));
+            offset = end;
+            state.bytesSent = offset;
+            this.dispatchEvent(new CustomEvent('fileTransferProgress', {
+                detail: { transferId: state.transferId, filename: file.name,
+                    bytesSent: offset, totalBytes: file.size },
+            }));
+        }
+        if (!this._uploadActive(state)) return;
+        state.sentEnd = true;
+        // Do not report success merely because all bytes were queued locally.
+        state.finishTimer = setTimeout(() =>
+            this._finishUpload(state, 'Upload acknowledgement timed out; remote result is unconfirmed'), 30000);
+        channel.send(this._encodeFileTransfer({ end: {} }));
+    }
+
+    _finishUpload(state, errorMessage = '') {
+        if (this._activeUploads.get(state.transferId) !== state) return;
+        this._activeUploads.delete(state.transferId);
+        state.cancelled = true;
+        state.file = null;
+        clearTimeout(state.openTimer);
+        clearTimeout(state.finishTimer);
+        try { state.channel?.close(); } catch { /* already closed */ }
+        this.dispatchEvent(new CustomEvent(errorMessage ? 'fileTransferError' : 'fileTransferComplete', {
+            detail: { transferId: state.transferId, filename: state.filename, errorMessage },
+        }));
+        queueMicrotask(() => this._pumpUploads());
+    }
+
     cancelFileUpload(transferId) {
         const state = this._activeUploads.get(transferId);
-        if (!state) {
-            console.warn(`[DataChannel] cancelFileUpload: unknown transfer ${transferId}`);
-            return;
+        if (!state) return;
+        if (state.channel?.readyState === 'open') {
+            try { state.channel.send(this._encodeFileTransfer({ error: { type: 1 } })); } catch {}
         }
-        state.cancelled = true;
-        if (state.channel && state.channel.readyState === 'open') {
-            try {
-                const errMsg = this._encodeFileTransfer({
-                    error: { type: 3 }  // CANCELED
-                });
-                state.channel.send(errMsg);
-            } catch (e) { /* ignore */ }
-            state.channel.close();
-        }
-        this._activeUploads.delete(transferId);
-        this.dispatchEvent(new CustomEvent('fileTransferError', {
-            detail: { transferId, errorMessage: 'Cancelled by user' }
-        }));
+        this._finishUpload(state, state.status === 'queued' ? 'Cancelled before upload started'
+            : 'Stopped locally; a partial remote file may remain');
     }
 
-    /**
-     * Request a file download from the remote host.
-     *
-     * @param {FileSystemFileHandle|null} fileHandle - If provided (from
-     *   showSaveFilePicker), data is streamed directly to disk via the
-     *   File System Access API.  Otherwise falls back to buffering all
-     *   chunks in memory and producing a Blob.
-     * @returns {string|null} transferId or null on failure
-     */
     startFileDownload(fileHandle = null) {
-        if (!this._pc) {
-            console.warn('[DataChannel] No PeerConnection for file download');
-            return null;
-        }
-        if (!this.supportsFileTransfer) {
-            console.warn('[DataChannel] Host does not support file transfer');
-            return null;
-        }
-
-        const transferId = String(this._nextFileTransferId++);
-        const channelName = `filetransfer-${transferId}`;
-        const channel = this._pc.createDataChannel(channelName, { ordered: true });
+        if (this._fileTransfersClosed || !this._pc || !this.supportsFileTransfer || this._pc.connectionState === 'closed' ||
+            this._pc.connectionState === 'failed') return null;
+        const transferId = String(nextFileTransferId++);
+        let channel;
+        try { channel = this._pc.createDataChannel('filetransfer-' + transferId, { ordered: true }); }
+        catch { return null; }
         channel.binaryType = 'arraybuffer';
-
-        const streaming = !!fileHandle;
         const state = {
-            transferId, filename: '', totalBytes: 0,
-            bytesReceived: 0, cancelled: false, channel,
-            chunks: streaming ? null : [],
-            metadataReceived: false,
-            streaming,
-            fileHandle,
-            writable: null,
-            writeQueue: Promise.resolve(),
+            transferId, filename: 'download', totalBytes: 0, bytesReceived: 0,
+            cancelled: false, channel, chunks: fileHandle ? null : [],
+            metadataReceived: false, streaming: !!fileHandle, fileHandle,
+            writable: null, writeQueue: Promise.resolve(), pendingBytes: 0, ending: false,
         };
         this._activeDownloads.set(transferId, state);
-
+        this.dispatchEvent(new CustomEvent('fileDownloadStarted', {
+            detail: { transferId, filename: state.filename, totalBytes: 0, waiting: true },
+        }));
+        state.openTimer = setTimeout(() => this._failDownload(state, 'Download channel did not open'), 30000);
         channel.onopen = async () => {
-            if (state.cancelled) return;
-            console.log(`[DataChannel] Download channel opened: ${channelName}, sending RequestTransfer`);
-
-            if (state.streaming) {
-                try {
-                    state.writable = await state.fileHandle.createWritable();
-                } catch (err) {
-                    console.error('[DataChannel] Failed to create writable stream:', err);
-                    this._failDownload(state, 'Failed to open file for writing');
-                    return;
+            clearTimeout(state.openTimer);
+            try {
+                if (state.streaming) {
+                    const writable = await state.fileHandle.createWritable();
+                    if (!this._downloadActive(state)) { await writable.abort(); return; }
+                    state.writable = writable;
                 }
-            }
-
-            const reqMsg = this._encodeFileTransfer({ requestTransfer: {} });
-            channel.send(reqMsg);
+                if (!this._downloadActive(state)) return;
+                channel.send(this._encodeFileTransfer({ requestTransfer: {} }));
+            } catch (error) { this._failDownload(state, error.message || 'Failed to open destination'); }
         };
-
-        channel.onmessage = (event) => {
-            if (state.cancelled) return;
-            const msg = this._decodeFileTransfer(new Uint8Array(event.data));
-
-            if (msg.metadata) {
-                state.filename = msg.metadata.filename || 'download';
-                state.totalBytes = msg.metadata.size || 0;
-                state.metadataReceived = true;
-                console.log(`[DataChannel] Download metadata: ${state.filename} (${state.totalBytes} bytes)`);
-                this.dispatchEvent(new CustomEvent('fileDownloadStarted', {
-                    detail: { transferId, filename: state.filename, totalBytes: state.totalBytes }
-                }));
-            } else if (msg.data) {
-                state.bytesReceived += msg.data.byteLength;
-
-                if (state.streaming && state.writable) {
-                    state.writeQueue = state.writeQueue.then(async () => {
-                        if (state.cancelled) return;
-                        try {
-                            await state.writable.write(msg.data);
-                        } catch (err) {
-                            console.error('[DataChannel] Stream write error:', err);
-                            this._failDownload(state, 'Disk write error');
-                        }
-                    });
-                } else if (state.chunks) {
-                    state.chunks.push(msg.data);
-                }
-
-                this.dispatchEvent(new CustomEvent('fileDownloadProgress', {
-                    detail: {
-                        transferId, filename: state.filename,
-                        bytesReceived: state.bytesReceived, totalBytes: state.totalBytes
-                    }
-                }));
-            } else if (msg.end) {
-                console.log(`[DataChannel] Download end received: ${state.filename}`);
-                const successMsg = this._encodeFileTransfer({ success: {} });
-                channel.send(successMsg);
-
-                if (state.streaming && state.writable) {
-                    state.writeQueue = state.writeQueue.then(async () => {
-                        if (state.cancelled) return;
-                        try {
-                            await state.writable.close();
-                        } catch (err) {
-                            console.error('[DataChannel] Stream close error:', err);
-                        }
-                        this.dispatchEvent(new CustomEvent('fileDownloadComplete', {
-                            detail: { transferId, filename: state.filename, blob: null, streaming: true }
-                        }));
-                        this._activeDownloads.delete(transferId);
-                    });
-                } else {
-                    const blob = new Blob(state.chunks);
-                    this.dispatchEvent(new CustomEvent('fileDownloadComplete', {
-                        detail: { transferId, filename: state.filename, blob, streaming: false }
+        channel.onmessage = event => {
+            if (!this._downloadActive(state) || state.ending) return;
+            try {
+                const message = this._decodeFileTransfer(new Uint8Array(event.data));
+                if (message.metadata) {
+                    if (state.metadataReceived) throw new Error('Duplicate download metadata');
+                    const size = message.metadata.size;
+                    if (!Number.isSafeInteger(size) || size < 0) throw new Error('Invalid download size');
+                    if (!state.streaming && size > 64 * 1024 * 1024)
+                        throw new Error('This browser limits buffered downloads to 64 MiB; use Save File support for larger files');
+                    state.filename = (message.metadata.filename || 'download').split(/[\\/]/).pop()
+                        .replace(/[\u0000-\u001f]/g, '') || 'download';
+                    state.totalBytes = size;
+                    state.metadataReceived = true;
+                    this.dispatchEvent(new CustomEvent('fileDownloadStarted', {
+                        detail: { transferId, filename: state.filename, totalBytes: size },
                     }));
-                    this._activeDownloads.delete(transferId);
+                } else if (message.data) {
+                    if (!state.metadataReceived) throw new Error('Download data arrived before metadata');
+                    const length = message.data.byteLength;
+                    if (!Number.isSafeInteger(state.bytesReceived + length))
+                        throw new Error('Download byte count exceeds the safe integer range');
+                    state.bytesReceived += length;
+                    if (state.streaming) {
+                        state.pendingBytes += length;
+                        if (state.pendingBytes > 8 * 1024 * 1024)
+                            throw new Error('Disk writes cannot keep up; download stopped to limit memory');
+                        state.writeQueue = state.writeQueue.then(async () => {
+                            if (!this._downloadActive(state)) return;
+                            await state.writable.write(message.data);
+                            state.pendingBytes -= length;
+                        }).catch(error => this._failDownload(state, error.message || 'Disk write error'));
+                    } else {
+                        if (state.bytesReceived > 64 * 1024 * 1024)
+                            throw new Error('Buffered download limit exceeded');
+                        state.chunks.push(message.data);
+                    }
+                    this.dispatchEvent(new CustomEvent('fileDownloadProgress', {
+                        detail: { transferId, filename: state.filename,
+                            bytesReceived: state.bytesReceived, totalBytes: state.totalBytes },
+                    }));
+                } else if (message.end) {
+                    // Metadata.size is advisory in the existing protocol; End is authoritative.
+                    if (!state.metadataReceived) throw new Error('Download ended before metadata');
+                    state.ending = true;
+                    this._completeDownload(state);
+                } else if (message.error) {
+                    this._failDownload(state, 'Host error type=' + message.error.type);
                 }
-            } else if (msg.error) {
-                const errMsg = `Host error type=${msg.error.type}`;
-                console.error(`[DataChannel] Download error: ${errMsg}`);
-                this._failDownload(state, errMsg);
-            }
+            } catch (error) { this._failDownload(state, error.message); }
         };
-
         channel.onclose = () => {
-            console.log(`[DataChannel] Download channel closed: ${channelName}`);
+            if (!state.ending) this._failDownload(state, 'Channel closed before download completed');
         };
-
-        channel.onerror = (event) => {
-            console.error(`[DataChannel] Download channel error:`, event);
-            this._failDownload(state, 'Channel error');
-        };
-
+        channel.onerror = () => this._failDownload(state, 'Download channel error');
         return transferId;
     }
 
-    /** @private */
-    async _failDownload(state, errorMessage) {
-        if (state.cancelled) return;
-        state.cancelled = true;
-        if (state.writable) {
-            try { await state.writable.abort(); } catch (_) {}
-            state.writable = null;
-        }
-        this.dispatchEvent(new CustomEvent('fileDownloadError', {
-            detail: { transferId: state.transferId, errorMessage }
-        }));
-        this._activeDownloads.delete(state.transferId);
+    _downloadActive(state) {
+        return this._activeDownloads.get(state.transferId) === state && !state.cancelled;
     }
 
-    /**
-     * Cancel an in-progress file download.
-     * @param {string} transferId
-     */
+    async _completeDownload(state) {
+        try {
+            await state.writeQueue;
+            if (!this._downloadActive(state)) return;
+            if (state.writable) await state.writable.close();
+            if (!this._downloadActive(state)) return;
+            const blob = state.streaming ? null : new Blob(state.chunks);
+            state.channel.send(this._encodeFileTransfer({ success: {} }));
+            this._activeDownloads.delete(state.transferId);
+            state.chunks = null;
+            state.writable = null;
+            try { state.channel.close(); } catch {}
+            this.dispatchEvent(new CustomEvent('fileDownloadComplete', {
+                detail: { transferId: state.transferId, filename: state.filename,
+                    blob, streaming: state.streaming },
+            }));
+        } catch (error) { this._failDownload(state, error.message || 'Download could not be saved'); }
+    }
+
+    async _failDownload(state, errorMessage) {
+        if (!this._downloadActive(state)) return;
+        state.cancelled = true;
+        this._activeDownloads.delete(state.transferId);
+        clearTimeout(state.openTimer);
+        state.chunks = null;
+        try { state.channel.close(); } catch {}
+        const writable = state.writable;
+        state.writable = null;
+        this.dispatchEvent(new CustomEvent('fileDownloadError', {
+            detail: { transferId: state.transferId, errorMessage },
+        }));
+        if (writable) {
+            try { await writable.abort(); } catch {}
+        }
+    }
+
     cancelFileDownload(transferId) {
         const state = this._activeDownloads.get(transferId);
-        if (!state) {
-            console.warn(`[DataChannel] cancelFileDownload: unknown transfer ${transferId}`);
-            return;
+        if (!state) return;
+        if (state.channel.readyState === 'open') {
+            try { state.channel.send(this._encodeFileTransfer({ error: { type: 1 } })); } catch {}
         }
-        state.cancelled = true;
-        if (state.writable) {
-            state.writable.abort().catch(() => {});
-            state.writable = null;
-        }
-        if (state.channel && state.channel.readyState === 'open') {
-            try {
-                const errMsg = this._encodeFileTransfer({ error: { type: 1 } });  // CANCELED
-                state.channel.send(errMsg);
-            } catch (e) { /* ignore */ }
-            state.channel.close();
-        }
-        this._activeDownloads.delete(transferId);
-        this.dispatchEvent(new CustomEvent('fileDownloadError', {
-            detail: { transferId, errorMessage: 'Cancelled by user' }
-        }));
-    }
-
-    /** @private */
-    _sendNextChunk(channel, file, offset, chunkSize, state) {
-        if (state.cancelled) return;
-
-        if (offset >= file.size) {
-            const end = this._encodeFileTransfer({ end: {} });
-            channel.send(end);
-            console.log(`[DataChannel] File upload sent all bytes: ${file.name}`);
-            return;
-        }
-
-        const slice = file.slice(offset, Math.min(offset + chunkSize, file.size));
-        const reader = new FileReader();
-        reader.onload = () => {
-            if (state.cancelled) return;
-            const chunk = new Uint8Array(reader.result);
-            const data = this._encodeFileTransfer({ data: { data: chunk } });
-            channel.send(data);
-            offset += chunk.length;
-            state.bytesSent = offset;
-
-            this.dispatchEvent(new CustomEvent('fileTransferProgress', {
-                detail: {
-                    transferId: state.transferId,
-                    filename: state.filename,
-                    bytesSent: offset,
-                    totalBytes: state.totalBytes
-                }
-            }));
-
-            if (channel.bufferedAmount > chunkSize * 8) {
-                setTimeout(() => this._sendNextChunk(channel, file, offset, chunkSize, state), 50);
-            } else {
-                this._sendNextChunk(channel, file, offset, chunkSize, state);
-            }
-        };
-        reader.readAsArrayBuffer(slice);
+        this._failDownload(state, 'Stopped locally; no completed download was saved');
     }
 
     /**
@@ -761,7 +706,8 @@ export class DataChannelHandler extends EventTarget {
                 let val = 0, shift = 0;
                 while (pos < data.length) {
                     const b = data[pos++];
-                    val |= (b & 0x7F) << shift;
+                    val += (b & 0x7F) * 2 ** shift;
+                    if (!Number.isSafeInteger(val) || shift > 49) throw new Error('Invalid file size varint');
                     if (!(b & 0x80)) break;
                     shift += 7;
                 }
@@ -809,12 +755,13 @@ export class DataChannelHandler extends EventTarget {
      * @private
      */
     _encodeVarint(value) {
+        if (!Number.isSafeInteger(value) || value < 0) throw new Error('Invalid file transfer integer');
         const bytes = [];
         while (value > 0x7F) {
-            bytes.push((value & 0x7F) | 0x80);
-            value >>>= 7;
+            bytes.push((value % 128) | 0x80);
+            value = Math.floor(value / 128);
         }
-        bytes.push(value & 0x7F);
+        bytes.push(value);
         return bytes;
     }
 
@@ -874,7 +821,17 @@ export class DataChannelHandler extends EventTarget {
     /**
      * 清理
      */
+    closeFileTransfers() {
+        this._fileTransfersClosed = true;
+        for (const state of [...this._activeUploads.values()])
+            this._finishUpload(state, 'Disconnected; upload completion was not confirmed');
+        for (const state of [...this._activeDownloads.values()])
+            this._failDownload(state, 'Disconnected; download was not completed');
+    }
+
     destroy() {
+        this.closeFileTransfers();
+        this._pc = null;
         if (this.controlChannel) {
             this.controlChannel.close();
             this.controlChannel = null;
