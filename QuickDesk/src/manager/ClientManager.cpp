@@ -905,8 +905,7 @@ QString ClientManager::findDeviceId(const QString& connectionId) const
 
 QString ClientManager::generateConnectionId()
 {
-    return QString("conn_%1_%2").arg(++m_connectionCounter)
-        .arg(QUuid::createUuid().toString(QUuid::WithoutBraces));
+    return QString("conn_%1").arg(++m_connectionCounter);
 }
 
 void ClientManager::removeConnection(const QString& deviceId)
