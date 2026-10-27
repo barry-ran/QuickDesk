@@ -9,8 +9,9 @@ import 'package:quickdesk_android/protocol/proto/wire.dart';
 class FakeFileChannel implements FileTransferChannel {
   @override
   bool isOpen = true;
-  @override
   int bufferedAmount = 0;
+  @override
+  Future<int> bufferedBytes() async => bufferedAmount;
   @override
   void Function()? onOpen;
   @override
