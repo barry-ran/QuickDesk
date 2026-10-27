@@ -175,6 +175,7 @@ qt_add_qml_module(QuickDesk
     URI QuickDesk
     VERSION 1.0
     QML_FILES
+        qml/util/DeviceSort.js
         qml/views/MainEntry.qml
         qml/views/MainWindow.qml
         qml/views/RemoteWindow.qml

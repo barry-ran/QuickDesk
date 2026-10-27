@@ -1,0 +1,45 @@
+{
+  "contract": "v1: devices online first; remark/name/ID, favorites name/ID; ASCII trim/fold, natural digit runs (fewer leading zeroes first), UTF-16 lexical remainder, raw ID tie-break; no timestamps",
+  "cases": [
+    {
+      "name": "presence and natural names", "favorites": false,
+      "rows": [
+        {"device_id":"6", "device_name":"PC 10", "online":true},
+        {"device_id":"5", "device_name":"PC 02", "online":true},
+        {"device_id":"4", "device_name":"pc 2", "online":true, "logged_in":false},
+        {"device_id":"3", "device_name":"A", "online":false},
+        {"device_id":"2", "device_name":"Z", "remark":" PC 1 \t", "online":true},
+        {"device_id":"1", "device_name":"B"}
+      ], "expected":["2","4","5","6","3","1"]
+    },
+    {
+      "name":"favorites ignore presence, remarks and timestamps", "favorites":true,
+      "rows":[
+        {"device_id":"3", "device_name":"Node 10", "online":true, "remark":"A", "updated_at":"2099-01-01"},
+        {"device_id":"2", "device_name":"node 2", "online":false},
+        {"device_id":"1", "device_name":"NODE 2", "updated_at":null}
+      ], "expected":["1","2","3"]
+    },
+    {
+      "name":"fallback and sparse events", "favorites":false,
+      "rows":[
+        {"device_id":"10", "device_name":" \n", "remark":null},
+        {"device_id":"2"},
+        {"device_id":"3", "device_name":"  ", "remark":"\t"},
+        {"device_id":"1", "device_name":"Beta", "remark":"Alpha"}
+      ], "expected":["2","3","10","1"]
+    },
+    {
+      "name":"locale independent unicode and arbitrary precision numbers", "favorites":true,
+      "rows":[
+        {"device_id":"7", "device_name":"😀"},
+        {"device_id":"6", "device_name":"\ue000"},
+        {"device_id":"5", "device_name":"设备"},
+        {"device_id":"4", "device_name":"ä"},
+        {"device_id":"3", "device_name":"Z"},
+        {"device_id":"2", "device_name":"PC 999999999999999999999999"},
+        {"device_id":"1", "device_name":"pc 1000000000000000000000000"}
+      ], "expected":["2","1","3","4","5","7","6"]
+    }
+  ]
+}

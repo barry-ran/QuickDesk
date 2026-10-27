@@ -52,10 +52,10 @@ class _ConnectPageState extends State<ConnectPage> {
   }
 
   Future<void> _savePrefs() => AppSettings.save(
-        signalingUrl: _serverCtrl.text,
-        apiKey: _apiKeyCtrl.text,
-        lastDeviceId: _deviceIdCtrl.text,
-      );
+    signalingUrl: _serverCtrl.text,
+    apiKey: _apiKeyCtrl.text,
+    lastDeviceId: _deviceIdCtrl.text,
+  );
 
   Future<void> _connect() async {
     final deviceId = _deviceIdCtrl.text.trim().replaceAll(' ', '');
@@ -73,8 +73,10 @@ class _ConnectPageState extends State<ConnectPage> {
     });
     await _savePrefs();
 
-    final api = SignalingApi(serverUrl,
-        apiKey: _apiKeyCtrl.text.trim().isEmpty ? null : _apiKeyCtrl.text.trim());
+    final api = SignalingApi(
+      serverUrl,
+      apiKey: _apiKeyCtrl.text.trim().isEmpty ? null : _apiKeyCtrl.text.trim(),
+    );
 
     try {
       // 1. 校验访问码换 signal_token
@@ -83,24 +85,28 @@ class _ConnectPageState extends State<ConnectPage> {
       final iceServers = await api.getIceServers();
 
       if (!mounted) return;
-      await Navigator.of(context).push(MaterialPageRoute(
-        builder: (_) => RemotePage(
-          signalingUrl: serverUrl,
-          deviceId: deviceId,
-          accessCode: accessCode,
-          signalToken: signalToken,
-          iceServers: iceServers,
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => RemotePage(
+            signalingUrl: serverUrl,
+            deviceId: deviceId,
+            accessCode: accessCode,
+            signalToken: signalToken,
+            iceServers: iceServers,
+          ),
         ),
-      ));
+      );
       await _loadHistory();
     } on SignalingApiException catch (e) {
-      setState(() => _error = switch (e.code) {
-            'DEVICE_NOT_FOUND' => L10n.t('connect.errDeviceNotFound'),
-            'HOST_OFFLINE' => L10n.t('connect.errHostOffline'),
-            'INVALID_CODE' => L10n.t('connect.errInvalidCode'),
-            'TOO_MANY_ATTEMPTS' => L10n.t('connect.errTooManyAttempts'),
-            _ => L10n.t('connect.errGeneric', {'code': e.code}),
-          });
+      setState(
+        () => _error = switch (e.code) {
+          'DEVICE_NOT_FOUND' => L10n.t('connect.errDeviceNotFound'),
+          'HOST_OFFLINE' => L10n.t('connect.errHostOffline'),
+          'INVALID_CODE' => L10n.t('connect.errInvalidCode'),
+          'TOO_MANY_ATTEMPTS' => L10n.t('connect.errTooManyAttempts'),
+          _ => L10n.t('connect.errGeneric', {'code': e.code}),
+        },
+      );
     } catch (e) {
       setState(() => _error = L10n.t('connect.errGeneric', {'code': '$e'}));
     } finally {
@@ -151,12 +157,14 @@ class _ConnectPageState extends State<ConnectPage> {
                   FilledButton.icon(
                     onPressed: _connecting ? null : _connect,
                     style: FilledButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16)),
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                    ),
                     icon: _connecting
                         ? const SizedBox(
                             width: 18,
                             height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2))
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
                         : const Icon(Icons.cast_connected),
                     label: Text(L10n.t('connect.connect')),
                   ),
@@ -164,10 +172,17 @@ class _ConnectPageState extends State<ConnectPage> {
                     const SizedBox(height: 12),
                     Row(
                       children: [
-                        Icon(Icons.error_outline, size: 16, color: scheme.error),
+                        Icon(
+                          Icons.error_outline,
+                          size: 16,
+                          color: scheme.error,
+                        ),
                         const SizedBox(width: 6),
                         Expanded(
-                          child: Text(_error!, style: TextStyle(color: scheme.error)),
+                          child: Text(
+                            _error!,
+                            style: TextStyle(color: scheme.error),
+                          ),
                         ),
                       ],
                     ),
@@ -196,20 +211,39 @@ class _ConnectPageState extends State<ConnectPage> {
                 TextField(
                   controller: _apiKeyCtrl,
                   obscureText: true,
-                  decoration: InputDecoration(labelText: L10n.t('connect.apiKey')),
+                  decoration: InputDecoration(
+                    labelText: L10n.t('connect.apiKey'),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                FilledButton.tonal(
+                  onPressed: _connecting
+                      ? null
+                      : () async {
+                          await _savePrefs();
+                          if (!mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text(L10n.t('account.saved'))),
+                          );
+                        },
+                  child: Text(L10n.t('account.save')),
                 ),
               ],
             ),
           ),
           if (_entries.isNotEmpty) ...[
             const SizedBox(height: 24),
-            Text(L10n.t('connect.recentAndFav'),
-                style: Theme.of(context).textTheme.titleMedium),
+            Text(
+              L10n.t('connect.recentAndFav'),
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
             const SizedBox(height: 8),
             Card(
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Column(children: _entries.map(_buildHistoryTile).toList()),
+                child: Column(
+                  children: _entries.map(_buildHistoryTile).toList(),
+                ),
               ),
             ),
           ],
@@ -235,13 +269,16 @@ class _ConnectPageState extends State<ConnectPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(L10n.t('connect.title'),
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      )),
+              Text(
+                L10n.t('connect.title'),
+                style: Theme.of(context).textTheme.titleLarge
+                    ?.copyWith(fontWeight: FontWeight.w600),
+              ),
               const SizedBox(height: 2),
-              Text('QuickDesk',
-                  style: TextStyle(color: scheme.outline, fontSize: 13)),
+              Text(
+                'QuickDesk',
+                style: TextStyle(color: scheme.outline, fontSize: 13),
+              ),
             ],
           ),
         ),
@@ -267,9 +304,13 @@ class _ConnectPageState extends State<ConnectPage> {
       child: ListTile(
         contentPadding: EdgeInsets.zero,
         leading: IconButton(
-          icon: Icon(e.favorite ? Icons.star : Icons.star_border,
-              color: e.favorite ? Colors.amber : null),
-          tooltip: e.favorite ? L10n.t('connect.unfavorite') : L10n.t('connect.favorite'),
+          icon: Icon(
+            e.favorite ? Icons.star : Icons.star_border,
+            color: e.favorite ? Colors.amber : null,
+          ),
+          tooltip: e.favorite
+              ? L10n.t('connect.unfavorite')
+              : L10n.t('connect.favorite'),
           onPressed: () async {
             await _store.toggleFavorite(e.deviceId);
             await _loadHistory();
