@@ -5,19 +5,24 @@ library;
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../api/signaling_api.dart';
 import '../controller/remote/remote_page.dart';
 import '../core/app_settings.dart';
 import '../l10n/app_strings.dart';
 import 'account_service.dart';
+import 'account_scope.dart';
+import 'connection_log.dart';
+import '../host/host_credential_store.dart';
 import 'device_service.dart';
 import 'device_sort.dart';
 
 class AccountPage extends StatefulWidget {
-  const AccountPage({super.key, this.account, this.devices});
+  const AccountPage({super.key, this.account, this.devices, this.hostStore});
   final AccountService? account;
   final DeviceService? devices;
+  final HostCredentialStore Function(AccountService)? hostStore;
 
   @override
   State<AccountPage> createState() => _AccountPageState();
@@ -66,6 +71,7 @@ class _AccountPageState extends State<AccountPage> {
             signalingUrl: settings.signalingUrl,
             apiKey: settings.apiKeyOrNull,
           );
+      AccountScope.current = _account;
       _devices = widget.devices ?? DeviceService(_account!);
       _account!.addListener(_changed);
       _devices!.addListener(_changed);
@@ -100,6 +106,7 @@ class _AccountPageState extends State<AccountPage> {
   }
 
   void _release() {
+    if (identical(AccountScope.current, _account)) AccountScope.current = null;
     _account?.removeListener(_changed);
     _devices?.removeListener(_changed);
     if (widget.devices == null) {
@@ -133,7 +140,9 @@ class _AccountPageState extends State<AccountPage> {
       if (mounted && generation == _generation) {
         setState(
           () => _error = L10n.t(
-            e is AccountException && e.code == 'LOGOUT_OFFLINE'
+            e is AccountException && e.code == 'HOST_NOT_READY'
+                ? 'account.hostNotReady'
+                : e is AccountException && e.code == 'LOGOUT_OFFLINE'
                 ? 'account.logoutOffline'
                 : e is AccountException && e.code == 'SECURE_STORAGE'
                 ? 'account.storageFailed'
@@ -167,6 +176,77 @@ class _AccountPageState extends State<AccountPage> {
       ) ??
       false;
 
+  HostCredentialStore _hostStore(AccountService account) =>
+      widget.hostStore?.call(account) ??
+      HostCredentialStore(
+        signalingUrl: account.signalingUrl,
+        apiKey: account.apiKey,
+      );
+
+  Future<void> _bindHost() => _run(() async {
+    final account = _account!;
+    final devices = _devices!;
+    final generation = _generation;
+    final epoch = account.sessionEpoch;
+    final store = _hostStore(account);
+    final credentials = await store.load();
+    if (!_current(devices, generation, epoch)) return;
+    if (!credentials.isProvisioned) {
+      throw const AccountException(
+        0,
+        'HOST_NOT_READY',
+        'Start this host first.',
+      );
+    }
+    if (!await _confirm(
+          L10n.t('account.bindConfirm', {
+            'id': credentials.deviceId!,
+            'account': account.username,
+            'server': account.httpBase,
+          }),
+        ) ||
+        !_current(devices, generation, epoch))
+      return;
+    // Device reprovisioning while the confirmation was open invalidates consent.
+    final latest = await store.load();
+    if (!_current(devices, generation, epoch) ||
+        !latest.isProvisioned ||
+        latest.deviceId != credentials.deviceId ||
+        latest.deviceUuid != credentials.deviceUuid)
+      return;
+    await devices.bind(credentials.deviceId!);
+  });
+
+  Future<void> _logout(
+    AccountService account,
+    DeviceService devices,
+    int generation,
+    int epoch,
+  ) async {
+    HostCredentials? credentials;
+    var hostReadFailed = false;
+    try {
+      credentials = await _hostStore(account).load();
+    } catch (_) {
+      hostReadFailed = true;
+    }
+    if (!_current(devices, generation, epoch)) return;
+    // Never block account logout on an unrelated Host Keystore failure.
+    // Server checks ownership; DELETE session changes logged_in, not ownership.
+    await account.logout(
+      deviceId: credentials?.isProvisioned == true
+          ? credentials!.deviceId
+          : null,
+    );
+    if (hostReadFailed) {
+      throw const AccountException(
+        0,
+        'LOGOUT_OFFLINE',
+        'Signed out, but host session revocation could not be confirmed.',
+      );
+    }
+  }
+
   Future<void> _edit(Map<String, dynamic> row, bool favorite) async {
     final service = _devices!;
     final generation = _generation;
@@ -189,33 +269,40 @@ class _AccountPageState extends State<AccountPage> {
     );
   }
 
-  Future<void> _connect(Map<String, dynamic> row, bool favorite) =>
-      _run(() async {
-        final devices = _devices!;
-        final settings = _settings!;
-        final generation = _generation;
-        final epoch = _account!.sessionEpoch;
-        final id = row['device_id'] as String;
-        var code = favorite
-            ? (row['access_password'] as String? ?? '')
-            : await devices.accessCode(id);
-        if (!_current(devices, generation, epoch)) {
+  Future<void> _connect(Map<String, dynamic> row, bool favorite) => _run(
+    () async {
+      final devices = _devices!;
+      final settings = _settings!;
+      final generation = _generation;
+      final epoch = _account!.sessionEpoch;
+      final id = row['device_id'] as String;
+      var code = favorite
+          ? (row['access_password'] as String? ?? '')
+          : await devices.accessCode(id);
+      if (!_current(devices, generation, epoch)) {
+        return;
+      }
+      if (code.isEmpty) {
+        if (!mounted) {
           return;
         }
-        if (code.isEmpty) {
-          if (!mounted) {
-            return;
-          }
-          final result = await showDialog<List<String>>(
-            context: context,
-            builder: (_) =>
-                _FavoriteDialog(row: row, favorite: true, connect: true),
-          );
-          if (result == null || !_current(devices, generation, epoch)) {
-            return;
-          }
-          code = result[2];
+        final result = await showDialog<List<String>>(
+          context: context,
+          builder: (_) =>
+              _FavoriteDialog(row: row, favorite: true, connect: true),
+        );
+        if (result == null || !_current(devices, generation, epoch)) {
+          return;
         }
+        code = result[2];
+      }
+      final attempt = ConnectionLogAttempt.capture(
+        account: _account,
+        signalingUrl: settings.signalingUrl,
+        apiKey: settings.apiKeyOrNull,
+        deviceId: id,
+      );
+      try {
         final api = SignalingApi(
           settings.signalingUrl,
           apiKey: settings.apiKeyOrNull,
@@ -239,10 +326,23 @@ class _AccountPageState extends State<AccountPage> {
               accessCode: code,
               signalToken: token,
               iceServers: ice,
+              connectionLog: attempt,
             ),
           ),
         );
-      });
+      } on SignalingApiException catch (error) {
+        await attempt?.finish(failureCode: error.code);
+        rethrow;
+      } catch (error) {
+        await attempt?.finish(
+          failureCode: error is TimeoutException ? 'TIMEOUT' : 'SESSION_FAILED',
+        );
+        rethrow;
+      } finally {
+        await attempt?.finish();
+      }
+    },
+  );
 
   Widget _row(Map<String, dynamic> row, bool favorite) {
     final id = row['device_id'] as String? ?? '';
@@ -392,6 +492,12 @@ class _AccountPageState extends State<AccountPage> {
                 spacing: 8,
                 children: [
                   OutlinedButton.icon(
+                    key: const Key('account-bind-host'),
+                    onPressed: _busy ? null : _bindHost,
+                    icon: const Icon(Icons.link),
+                    label: Text(L10n.t('account.bindHost')),
+                  ),
+                  OutlinedButton.icon(
                     onPressed: _busy ? null : () => _run(devices.refresh),
                     icon: const Icon(Icons.refresh),
                     label: Text(L10n.t('account.refresh')),
@@ -408,7 +514,10 @@ class _AccountPageState extends State<AccountPage> {
                                 !_current(devices, generation, epoch)) {
                               return;
                             }
-                            await _run(() => account.logout());
+                            await _run(
+                              () =>
+                                  _logout(account, devices, generation, epoch),
+                            );
                           },
                     child: Text(L10n.t('account.logout')),
                   ),
@@ -601,9 +710,11 @@ class AccountLoginForm extends StatefulWidget {
     super.key,
     required this.account,
     required this.onAuthenticated,
+    this.openUrl,
   });
   final AccountService account;
   final Future<void> Function() onAuthenticated;
+  final Future<bool> Function(Uri)? openUrl;
   @override
   State<AccountLoginForm> createState() => _AccountLoginFormState();
 }
@@ -718,6 +829,53 @@ class _AccountLoginFormState extends State<AccountLoginForm> {
       if (mounted) {
         setState(() => _busy = false);
       }
+    }
+  }
+
+  Future<void> _forgotPassword() async {
+    if (_busy) return;
+    final epoch = widget.account.sessionEpoch;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final uri = await widget.account.passwordResetUri();
+      if (!mounted || epoch != widget.account.sessionEpoch) return;
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(L10n.t('account.forgotPassword')),
+          content: Text(
+            L10n.t('account.resetExternal', {'url': uri.toString()}),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: Text(L10n.t('common.cancel')),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: Text(L10n.t('account.confirm')),
+            ),
+          ],
+        ),
+      );
+      if (!mounted || confirmed != true || epoch != widget.account.sessionEpoch)
+        return;
+      final opened =
+          await (widget.openUrl?.call(uri) ??
+              launchUrl(uri, mode: LaunchMode.externalApplication));
+      if (!opened)
+        throw const AccountException(
+          0,
+          'RESET_UNAVAILABLE',
+          'Cannot open WebClient.',
+        );
+    } catch (error) {
+      if (mounted) setState(() => _error = _message(error));
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 
@@ -862,6 +1020,12 @@ class _AccountLoginFormState extends State<AccountLoginForm> {
           Wrap(
             spacing: 8,
             children: [
+              if (_mode != 'register')
+                TextButton(
+                  key: const Key('account-forgot-password'),
+                  onPressed: _busy ? null : _forgotPassword,
+                  child: Text(L10n.t('account.forgotPassword')),
+                ),
               if (_mode != 'login')
                 TextButton(
                   onPressed: _busy ? null : () => _switch('login'),

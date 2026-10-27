@@ -9,8 +9,14 @@
 ///     → shared_preferences
 library;
 
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'dart:convert';
+
+import 'package:crypto/crypto.dart';
+
+import '../account/account_service.dart';
+
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/foundation.dart';
 
 import '../core/rand_id.dart';
 
@@ -28,18 +34,45 @@ class HostCredentials {
   });
 
   bool get isProvisioned =>
-      deviceId != null && deviceId!.isNotEmpty && deviceSecret != null && deviceSecret!.isNotEmpty;
+      deviceId != null &&
+      deviceId!.isNotEmpty &&
+      deviceSecret != null &&
+      deviceSecret!.isNotEmpty;
 }
 
 class HostCredentialStore {
-  static const _kUuid = 'host_device_uuid';
-  static const _kDeviceId = 'host_device_id';
-  static const _kDeviceSecret = 'host_device_secret';
-  static const _kAccessCode = 'host_access_code';
+  final AccountTokenStore secure;
+  final String scope;
+  static final changes = ValueNotifier<int>(0);
 
-  // flutter_secure_storage v10：Android 默认走 Keystore 加密（自定义 cipher），
-  // 无需再显式开启 encryptedSharedPreferences（已废弃）。
-  static const _secure = FlutterSecureStorage();
+  HostCredentialStore({
+    required String signalingUrl,
+    String? apiKey,
+    AccountTokenStore? secure,
+  }) : secure = secure ?? const SecureAccountTokenStore(),
+       scope = scopeFor(signalingUrl, apiKey);
+
+  /// No migration: legacy host credentials have no trustworthy server origin.
+  /// A fresh UUID prevents provisioning the old device on another server.
+  static String scopeFor(String url, String? apiKey) {
+    final uri = Uri.parse(url.trim());
+    final base = uri
+        .replace(
+          scheme: uri.scheme == 'wss'
+              ? 'https'
+              : uri.scheme == 'ws'
+              ? 'http'
+              : uri.scheme,
+        )
+        .toString()
+        .replaceFirst(RegExp(r'/+$'), '');
+    return 'host_v2_${sha256.convert(utf8.encode('$base\n${apiKey ?? ''}'))}';
+  }
+
+  String get _kUuid => '${scope}_uuid';
+  String get _kDeviceId => '${scope}_id';
+  String get _kDeviceSecret => '${scope}_secret';
+  String get _kAccessCode => '${scope}_access_code';
 
   Future<HostCredentials> load() async {
     final prefs = await SharedPreferences.getInstance();
@@ -49,12 +82,16 @@ class HostCredentialStore {
       await prefs.setString(_kUuid, uuid);
     }
 
-    // 安全存储在个别设备（Keystore 失效等）可能抛异常，读失败按未注册处理。
+    // Fail closed: a Keystore error must not silently reprovision an existing host.
     String? secret;
     try {
-      secret = await _secure.read(key: _kDeviceSecret);
+      secret = await secure.read(_kDeviceSecret);
     } catch (_) {
-      secret = null;
+      throw const AccountException(
+        0,
+        'SECURE_STORAGE',
+        'Unable to read host credentials securely.',
+      );
     }
 
     return HostCredentials(
@@ -65,15 +102,20 @@ class HostCredentialStore {
     );
   }
 
-  Future<void> saveProvision({required String deviceId, required String deviceSecret}) async {
+  Future<void> saveProvision({
+    required String deviceId,
+    required String deviceSecret,
+  }) async {
     final prefs = await SharedPreferences.getInstance();
+    await secure.write(_kDeviceSecret, deviceSecret);
     await prefs.setString(_kDeviceId, deviceId);
-    await _secure.write(key: _kDeviceSecret, value: deviceSecret);
+    changes.value++;
   }
 
   Future<void> saveAccessCode(String accessCode) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_kAccessCode, accessCode);
+    changes.value++;
   }
 
   /// 生成一个随机 6 位数字访问码

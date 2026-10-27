@@ -24,8 +24,8 @@ enum HostStage {
   provisioning,
   needAccessibility, // 无障碍未开启，等待用户授权
   requestingCapture, // 等待屏幕采集授权
-  connecting,        // 连接信令
-  online,            // 已上线待命/被控中
+  connecting, // 连接信令
+  online, // 已上线待命/被控中
   error,
 }
 
@@ -51,10 +51,20 @@ class HostController {
   final String signalingUrl;
   final String? apiKey;
 
-  final HostCredentialStore _store = HostCredentialStore();
-  final ScreenCapture _capture = ScreenCapture();
-  final InputInjector _injector = InputInjector();
-  late final HostApi _api = HostApi(signalingUrl, apiKey: apiKey);
+  final HostCredentialStore? _providedStore;
+  final HostApi? _providedApi;
+  late final HostCredentialStore _store =
+      _providedStore ??
+      HostCredentialStore(signalingUrl: signalingUrl, apiKey: apiKey);
+  final ScreenCapture _capture;
+  final InputInjector _injector;
+  late final HostApi _api =
+      _providedApi ?? HostApi(signalingUrl, apiKey: apiKey);
+
+  Future<void>? _starting;
+  Future<void>? _stopping;
+  int _generation = 0;
+  bool _disposed = false;
 
   HostCredentials? _creds;
   HostSession? _session;
@@ -67,7 +77,17 @@ class HostController {
   HostStage _stage = HostStage.idle;
   int _peerCount = 0;
 
-  HostController({required this.signalingUrl, this.apiKey});
+  HostController({
+    required this.signalingUrl,
+    this.apiKey,
+    HostCredentialStore? credentialStore,
+    HostApi? api,
+    ScreenCapture? capture,
+    InputInjector? injector,
+  }) : _providedStore = credentialStore,
+       _providedApi = api,
+       _capture = capture ?? ScreenCapture(),
+       _injector = injector ?? InputInjector();
 
   String? get deviceId => _creds?.deviceId;
   String? get accessCode => _creds?.accessCode;
@@ -79,12 +99,31 @@ class HostController {
 
   /// 启动被控：完整流程。调用前应确保无障碍已开启（否则会停在 needAccessibility）。
   Future<void> start() async {
+    if (_disposed || _starting != null || _stopping != null || _session != null)
+      return;
+    final generation = ++_generation;
+    final work = _start(generation);
+    _starting = work;
+    try {
+      await work;
+    } finally {
+      _starting = null;
+    }
+  }
+
+  void _check(int generation) {
+    if (_disposed || generation != _generation) throw const _HostCancelled();
+  }
+
+  Future<void> _start(int generation) async {
     try {
       _creds ??= await _store.load();
+      _check(generation);
 
       // 0. 无障碍开关检查（输入注入前提）
       _emit(HostStage.requestingCapture, message: L10n.t('host.msgCheckA11y'));
       final a11y = await _injector.isAccessibilityEnabled();
+      _check(generation);
       if (!a11y) {
         _emit(HostStage.needAccessibility, message: L10n.t('host.msgNeedA11y'));
         return;
@@ -94,8 +133,14 @@ class HostController {
       if (!_creds!.isProvisioned) {
         _emit(HostStage.provisioning, message: L10n.t('host.msgProvisioning'));
         final result = await _api.provision(deviceUuid: _creds!.deviceUuid);
-        await _store.saveProvision(deviceId: result.deviceId, deviceSecret: result.deviceSecret);
+        // Persist the one-time secret even if stop was requested in flight.
+        await _store.saveProvision(
+          deviceId: result.deviceId,
+          deviceSecret: result.deviceSecret,
+        );
+        _check(generation);
         _creds = await _store.load();
+        _check(generation);
       }
 
       // 2. 访问码（无则生成并上报）
@@ -109,30 +154,45 @@ class HostController {
         );
         await _store.saveAccessCode(accessCode);
         _creds = await _store.load();
+        _check(generation);
       }
 
       // 3. 屏幕采集授权
-      _emit(HostStage.requestingCapture, message: L10n.t('host.msgRequestCapture'));
+      _emit(
+        HostStage.requestingCapture,
+        message: L10n.t('host.msgRequestCapture'),
+      );
       // 旋转/分辨率变化 → 更新会话屏幕尺寸并向所有客户端重发 VideoLayout
       _capture.onSizeChanged = (w, h) => _session?.updateScreenSize(w, h);
       final capture = await _capture.start();
+      _check(generation);
 
       // 4. ICE 配置 + host signal_token
       _emit(HostStage.connecting, message: L10n.t('host.msgConnecting'));
-      final iceServers = await _api.getIceServers(deviceSecret: _creds!.deviceSecret!);
+      final iceServers = await _api.getIceServers(
+        deviceSecret: _creds!.deviceSecret!,
+      );
+      _check(generation);
       final signalToken = await _api.issueSignalToken(
         deviceId: _creds!.deviceId!,
         deviceSecret: _creds!.deviceSecret!,
       );
 
+      _check(generation);
+
       // 5. Host 身份证书 + SPAKE2 共享密钥哈希。
-      final hostCertificate = await _identityChannel.invokeMethod<String>('getCertificate');
+      final hostCertificate = await _identityChannel.invokeMethod<String>(
+        'getCertificate',
+      );
+      _check(generation);
       if (hostCertificate == null || hostCertificate.isEmpty) {
         throw StateError('Android host certificate is unavailable');
       }
       final deviceId = _creds!.deviceId!;
-      final sharedSecretHash =
-          spake2.getSharedSecretHash(deviceId, deviceId + accessCode);
+      final sharedSecretHash = spake2.getSharedSecretHash(
+        deviceId,
+        deviceId + accessCode,
+      );
 
       // 6. 建立 HostSession
       final session = HostSession(
@@ -149,27 +209,43 @@ class HostController {
       );
       _session = session;
 
-      _subs.add(session.onPeerCountChange.listen((n) {
-        _peerCount = n;
-        _emit(HostStage.online);
-      }));
-      _subs.add(session.onStateChange.listen((s) {
-        if (s == HostSessionState.failed) {
-          _emit(HostStage.error, message: L10n.t('host.msgSignalDropped'));
-        }
-      }));
+      _subs.add(
+        session.onPeerCountChange.listen((n) {
+          _peerCount = n;
+          _emit(HostStage.online);
+        }),
+      );
+      _subs.add(
+        session.onStateChange.listen((s) {
+          if (s == HostSessionState.failed) {
+            _emit(HostStage.error, message: L10n.t('host.msgSignalDropped'));
+          }
+        }),
+      );
 
       await session.listen(signalToken);
+      _check(generation);
 
       // 7. 心跳保活
       _startHeartbeat();
       _emit(HostStage.online, message: L10n.t('host.msgOnline'));
+    } on _HostCancelled {
+      // stop() waits for startup to settle, then releases capture/session.
+      return;
     } on SignalingApiException catch (e) {
-      _emit(HostStage.error, message: L10n.t('host.msgServerError', {'code': e.code}));
-      await stop();
+      if (generation != _generation || _disposed) return;
+      _emit(
+        HostStage.error,
+        message: L10n.t('host.msgServerError', {'code': e.code}),
+      );
+      await _cleanup();
     } catch (e) {
-      _emit(HostStage.error, message: L10n.t('host.msgStartFailed', {'e': '$e'}));
-      await stop();
+      if (generation != _generation || _disposed) return;
+      _emit(
+        HostStage.error,
+        message: L10n.t('host.msgStartFailed', {'e': '$e'}),
+      );
+      await _cleanup();
     }
   }
 
@@ -202,7 +278,17 @@ class HostController {
     });
   }
 
-  Future<void> stop() async {
+  Future<void> stop() {
+    ++_generation;
+    return _stopping ??= _stop().whenComplete(() => _stopping = null);
+  }
+
+  Future<void> _stop() async {
+    await _starting;
+    await _cleanup();
+  }
+
+  Future<void> _cleanup() async {
     _heartbeatTimer?.cancel();
     _heartbeatTimer = null;
     for (final s in _subs) {
@@ -219,21 +305,29 @@ class HostController {
     }
   }
 
-  Future<void> openAccessibilitySettings() => _injector.openAccessibilitySettings();
+  Future<void> openAccessibilitySettings() =>
+      _injector.openAccessibilitySettings();
 
   void _emit(HostStage stage, {String? message}) {
     _stage = stage;
-    _statusCtrl.add(HostStatus(
-      stage: stage,
-      deviceId: _creds?.deviceId,
-      accessCode: _creds?.accessCode,
-      peerCount: _peerCount,
-      message: message,
-    ));
+    if (_disposed || _statusCtrl.isClosed) return;
+    _statusCtrl.add(
+      HostStatus(
+        stage: stage,
+        deviceId: _creds?.deviceId,
+        accessCode: _creds?.accessCode,
+        peerCount: _peerCount,
+        message: message,
+      ),
+    );
   }
 
   void dispose() {
-    stop();
-    _statusCtrl.close();
+    _disposed = true;
+    unawaited(stop().whenComplete(_statusCtrl.close));
   }
+}
+
+class _HostCancelled implements Exception {
+  const _HostCancelled();
 }
