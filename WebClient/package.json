@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "test": "node --test test/*.test.mjs",
     "test:e2e:file-manager": "node --test test/e2e/file-manager.e2e.mjs",
-    "test:e2e:mobile": "node --test test/e2e/mobile-controls.e2e.mjs"
+    "test:e2e:mobile": "node --test test/e2e/mobile-controls.e2e.mjs",
+    "test:e2e:file-transfer": "node --test test/e2e/native-file-transfer.e2e.mjs"
   },
   "dependencies": {
     "@noble/curves": "^1.8.1",

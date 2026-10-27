@@ -7,6 +7,9 @@
 const STORAGE_KEY = 'quickdesk_lang';
 
 const zh = {
+    'files.folderUnsupported': '暂不支持文件夹，请选择普通文件',
+    'files.transferUnavailable': '文件传输不可用、队列已满或文件无效',
+    'files.transfer.queued': '排队中',
     // ========== index.html ==========
     'app.title': 'QuickDesk Web Client',
     'nav.remote': '远程控制',
@@ -311,6 +314,9 @@ const zh = {
 };
 
 const en = {
+    'files.folderUnsupported': 'Folders are not supported; select regular files',
+    'files.transferUnavailable': 'File transfer unavailable, queue full or invalid file',
+    'files.transfer.queued': 'Queued',
     // ========== index.html ==========
     'app.title': 'QuickDesk Web Client',
     'nav.remote': 'Remote',
