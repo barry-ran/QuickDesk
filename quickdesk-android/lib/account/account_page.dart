@@ -190,7 +190,9 @@ class _AccountPageState extends State<AccountPage> {
     final epoch = account.sessionEpoch;
     final store = _hostStore(account);
     final credentials = await store.load();
-    if (!_current(devices, generation, epoch)) return;
+    if (!_current(devices, generation, epoch)) {
+      return;
+    }
     if (!credentials.isProvisioned) {
       throw const AccountException(
         0,
@@ -205,15 +207,17 @@ class _AccountPageState extends State<AccountPage> {
             'server': account.httpBase,
           }),
         ) ||
-        !_current(devices, generation, epoch))
+        !_current(devices, generation, epoch)) {
       return;
+    }
     // Device reprovisioning while the confirmation was open invalidates consent.
     final latest = await store.load();
     if (!_current(devices, generation, epoch) ||
         !latest.isProvisioned ||
         latest.deviceId != credentials.deviceId ||
-        latest.deviceUuid != credentials.deviceUuid)
+        latest.deviceUuid != credentials.deviceUuid) {
       return;
+    }
     await devices.bind(credentials.deviceId!);
   });
 
@@ -230,7 +234,9 @@ class _AccountPageState extends State<AccountPage> {
     } catch (_) {
       hostReadFailed = true;
     }
-    if (!_current(devices, generation, epoch)) return;
+    if (!_current(devices, generation, epoch)) {
+      return;
+    }
     // Never block account logout on an unrelated Host Keystore failure.
     // Server checks ownership; DELETE session changes logged_in, not ownership.
     await account.logout(
@@ -833,7 +839,9 @@ class _AccountLoginFormState extends State<AccountLoginForm> {
   }
 
   Future<void> _forgotPassword() async {
-    if (_busy) return;
+    if (_busy) {
+      return;
+    }
     final epoch = widget.account.sessionEpoch;
     setState(() {
       _busy = true;
@@ -841,7 +849,9 @@ class _AccountLoginFormState extends State<AccountLoginForm> {
     });
     try {
       final uri = await widget.account.passwordResetUri();
-      if (!mounted || epoch != widget.account.sessionEpoch) return;
+      if (!mounted || epoch != widget.account.sessionEpoch) {
+        return;
+      }
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
@@ -861,17 +871,21 @@ class _AccountLoginFormState extends State<AccountLoginForm> {
           ],
         ),
       );
-      if (!mounted || confirmed != true || epoch != widget.account.sessionEpoch)
+      if (!mounted ||
+          confirmed != true ||
+          epoch != widget.account.sessionEpoch) {
         return;
+      }
       final opened =
           await (widget.openUrl?.call(uri) ??
               launchUrl(uri, mode: LaunchMode.externalApplication));
-      if (!opened)
+      if (!opened) {
         throw const AccountException(
           0,
           'RESET_UNAVAILABLE',
           'Cannot open WebClient.',
         );
+      }
     } catch (error) {
       if (mounted) setState(() => _error = _message(error));
     } finally {
