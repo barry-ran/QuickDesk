@@ -445,21 +445,8 @@ Window {
                     onFilesDropped: function(urls) {
                         var devId = delegateItem.deviceId
                         if (!devId || !remoteWindow.clientManager) return
-                        for (var i = 0; i < urls.length; i++) {
+                        for (var i = 0; i < urls.length; i++)
                             remoteWindow.clientManager.startFileUpload(devId, urls[i])
-                            var fname = urls[i].toString().split('/').pop()
-                            transferModel.append({
-                                transferId: "",
-                                deviceId: devId,
-                                filename: decodeURIComponent(fname),
-                                progress: 0,
-                                status: "uploading",
-                                errorMessage: "",
-                                direction: "upload",
-                                savePath: ""
-                            })
-                        }
-                        fileTransferDrawer.open()
                     }
 
                     // Monitor video size changes (frameRate and ping updated from PerformanceTracker)
@@ -758,7 +745,10 @@ Window {
             activeTransferCount: remoteWindow.activeTransferCount
 
             onUploadFileRequested: {
-                fileDialog.open()
+                // Keep the destination stable while the native dialog is open.
+                fileDialog.targetDeviceId = currentTabIndex >= 0 && currentTabIndex < connectionModel.count
+                    ? connectionModel.deviceIdAt(currentTabIndex) : ""
+                if (fileDialog.targetDeviceId) fileDialog.open()
             }
 
             onDownloadFileRequested: {
@@ -969,161 +959,97 @@ Window {
         }
     }
 
-    // File upload dialog (supports multiple file selection)
+    // All entry points submit to the C++ queue; QML never guesses transfer identity.
     FileDialog {
         id: fileDialog
+        property string targetDeviceId: ""
         title: qsTr("Select Files to Upload")
         fileMode: FileDialog.OpenFiles
         onAccepted: {
-            var devId = currentTabIndex >= 0 && currentTabIndex < connectionModel.count
-                ? connectionModel.deviceIdAt(currentTabIndex) : ""
+            var devId = targetDeviceId
+            targetDeviceId = ""
             if (devId && remoteWindow.clientManager) {
-                for (var i = 0; i < selectedFiles.length; i++) {
+                for (var i = 0; i < selectedFiles.length; i++)
                     remoteWindow.clientManager.startFileUpload(devId, selectedFiles[i])
-                    var fname = selectedFiles[i].toString().split('/').pop()
-                    transferModel.append({
-                        transferId: "",
-                        deviceId: devId,
-                        filename: decodeURIComponent(fname),
-                        progress: 0,
-                        status: "uploading",
-                        errorMessage: "",
-                        direction: "upload",
-                        savePath: ""
-                    })
-                }
-                fileTransferDrawer.open()
             }
         }
+        onRejected: targetDeviceId = ""
     }
 
-    // File transfer data model
     ListModel {
         id: transferModel
+    }
+
+    // Dismissal/deletion are local presentation choices, not transport state.
+    property var clearedTransferTasks: ({})
+    property var deletedTransferTasks: ({})
+    property bool transferViewReady: false
+
+    function transferIsActive(status) {
+        return status === "queued" || status === "uploading" || status === "downloading"
+            || status === "cancelling" || status === "uncertain"
     }
 
     property int activeTransferCount: {
         var count = 0
         for (var i = 0; i < transferModel.count; i++) {
-            var s = transferModel.get(i).status
-            if (s === "uploading" || s === "downloading") count++
+            if (transferIsActive(transferModel.get(i).status)) count++
         }
         return count
     }
 
-    function findTransferIndex(transferId) {
+    function findTransferTask(taskId) {
         for (var i = 0; i < transferModel.count; i++) {
-            if (transferModel.get(i).transferId === transferId) return i
+            if (transferModel.get(i).taskId === taskId) return i
         }
         return -1
     }
 
-    function findTransferByFilename(filename) {
-        for (var i = transferModel.count - 1; i >= 0; i--) {
-            var item = transferModel.get(i)
-            if (item.filename === filename && item.transferId === "") return i
+    function syncTransferTasks() {
+        if (!transferViewReady) return
+        var tasks = clientManager ? clientManager.fileTransferTasks : []
+        var present = ({})
+        var added = false
+        for (var i = 0; i < tasks.length; i++) {
+            var source = tasks[i]
+            var id = source.taskId
+            if (!id || clearedTransferTasks[id]) continue
+            present[id] = true
+            var item = {
+                taskId: id, transferId: source.transferId || "",
+                deviceId: source.deviceId || "", filename: source.filename || "",
+                direction: source.direction || "upload", progress: source.progress || 0,
+                status: deletedTransferTasks[id] ? "deleted" : source.status,
+                errorMessage: deletedTransferTasks[id] ? qsTr("File deleted") : (source.errorMessage || ""),
+                savePath: source.savePath || ""
+            }
+            var index = findTransferTask(id)
+            if (index < 0) {
+                transferModel.append(item)
+                added = true
+            } else {
+                transferModel.set(index, item)
+            }
         }
-        return -1
+        for (var j = transferModel.count - 1; j >= 0; j--) {
+            if (!present[transferModel.get(j).taskId]) transferModel.remove(j)
+        }
+        if (added) fileTransferDrawer.open()
     }
 
-    // File transfer event handlers
+    Component.onCompleted: {
+        transferViewReady = true
+        syncTransferTasks()
+    }
+    onClientManagerChanged: syncTransferTasks()
+
     Connections {
         target: remoteWindow.clientManager
-
-        function onFileTransferProgress(deviceId, transferId, filename, bytesSent, totalBytes) {
-            var idx = remoteWindow.findTransferIndex(transferId)
-            if (idx < 0) {
-                idx = remoteWindow.findTransferByFilename(filename)
-                if (idx >= 0) {
-                    transferModel.setProperty(idx, "transferId", transferId)
-                } else {
-                    transferModel.append({
-                        transferId: transferId,
-                        deviceId: deviceId,
-                        filename: filename,
-                        progress: 0,
-                        status: "uploading",
-                        errorMessage: "",
-                        direction: "upload",
-                        savePath: ""
-                    })
-                    idx = transferModel.count - 1
-                }
-            }
-            var pct = totalBytes > 0 ? bytesSent / totalBytes : 0
-            transferModel.setProperty(idx, "progress", pct)
+        function onFileTransferTasksChanged() {
+            remoteWindow.syncTransferTasks()
         }
-
-        function onFileTransferComplete(deviceId, transferId, filename) {
-            var idx = remoteWindow.findTransferIndex(transferId)
-            if (idx < 0) idx = remoteWindow.findTransferByFilename(filename)
-            if (idx >= 0) {
-                transferModel.setProperty(idx, "status", "complete")
-                transferModel.setProperty(idx, "progress", 1)
-                if (transferModel.get(idx).transferId === "")
-                    transferModel.setProperty(idx, "transferId", transferId)
-            }
-            toast.show(qsTr("Upload complete: %1").arg(filename), QDToast.Type.Success)
-        }
-
-        function onFileTransferError(deviceId, transferId, errorMessage) {
-            var idx = remoteWindow.findTransferIndex(transferId)
-            if (idx < 0) {
-                for (var i = transferModel.count - 1; i >= 0; i--) {
-                    if (transferModel.get(i).status === "uploading" && transferModel.get(i).transferId === "") {
-                        idx = i
-                        break
-                    }
-                }
-            }
-            if (idx >= 0) {
-                transferModel.setProperty(idx, "status", "error")
-                transferModel.setProperty(idx, "errorMessage", errorMessage)
-                if (transferId && transferModel.get(idx).transferId === "")
-                    transferModel.setProperty(idx, "transferId", transferId)
-            }
-            toast.show(qsTr("Upload failed: %1").arg(errorMessage), QDToast.Type.Error)
-        }
-
-        function onFileDownloadStarted(deviceId, transferId, filename, totalBytes) {
-            transferModel.append({
-                transferId: transferId,
-                deviceId: deviceId,
-                filename: filename,
-                progress: 0,
-                status: "downloading",
-                errorMessage: "",
-                direction: "download",
-                savePath: ""
-            })
-            fileTransferDrawer.open()
-        }
-
-        function onFileDownloadProgress(deviceId, transferId, filename, bytesReceived, totalBytes) {
-            var idx = remoteWindow.findTransferIndex(transferId)
-            if (idx >= 0) {
-                var pct = totalBytes > 0 ? bytesReceived / totalBytes : 0
-                transferModel.setProperty(idx, "progress", pct)
-            }
-        }
-
-        function onFileDownloadComplete(deviceId, transferId, filename, savePath) {
-            var idx = remoteWindow.findTransferIndex(transferId)
-            if (idx >= 0) {
-                transferModel.setProperty(idx, "status", "complete")
-                transferModel.setProperty(idx, "progress", 1)
-                transferModel.setProperty(idx, "savePath", savePath)
-            }
-            toast.show(qsTr("Download complete: %1").arg(filename), QDToast.Type.Success)
-        }
-
-        function onFileDownloadError(deviceId, transferId, errorMessage) {
-            var idx = remoteWindow.findTransferIndex(transferId)
-            if (idx >= 0) {
-                transferModel.setProperty(idx, "status", "error")
-                transferModel.setProperty(idx, "errorMessage", errorMessage)
-            }
-            toast.show(qsTr("Download failed: %1").arg(errorMessage), QDToast.Type.Error)
+        function onFileTransferNotice(deviceId, message) {
+            toast.show(deviceId ? deviceId + ": " + message : message, QDToast.Type.Error)
         }
     }
 
@@ -1203,32 +1129,25 @@ Window {
 
                             // Status / action
                             Text {
-                                visible: model.status === "uploading" || model.status === "downloading"
-                                text: Math.round(model.progress * 100) + "%"
+                                visible: remoteWindow.transferIsActive(model.status)
+                                text: model.status === "queued" ? qsTr("Queued")
+                                    : model.status === "cancelling" ? qsTr("Cancelling")
+                                    : model.status === "uncertain" ? qsTr("Waiting")
+                                    : Math.round(model.progress * 100) + "%"
                                 font.family: Theme.fontFamily
                                 font.pixelSize: Theme.fontSizeSmall
                                 color: Theme.textSecondary
                             }
 
-                            // Cancel button (for uploading or downloading)
+                            // Cancel uses our stable local task ID, including before a wire ID exists.
                             QDIconButton {
-                                visible: model.status === "uploading" || model.status === "downloading"
+                                visible: model.status === "queued" || model.status === "uploading" || model.status === "downloading"
                                 iconSource: FluentIconGlyph.cancelGlyph
                                 buttonSize: QDIconButton.Size.Small
                                 buttonStyle: QDIconButton.Style.Transparent
                                 onClicked: {
-                                    var item = transferModel.get(index)
-                                    if (item.transferId && remoteWindow.clientManager) {
-                                        if (item.direction === "download") {
-                                            remoteWindow.clientManager.cancelFileDownload(
-                                                item.deviceId, item.transferId)
-                                        } else {
-                                            remoteWindow.clientManager.cancelFileUpload(
-                                                item.deviceId, item.transferId)
-                                        }
-                                    }
-                                    transferModel.setProperty(index, "status", "cancelled")
-                                    transferModel.setProperty(index, "errorMessage", qsTr("Cancelled"))
+                                    if (remoteWindow.clientManager)
+                                        remoteWindow.clientManager.cancelFileTask(model.taskId)
                                 }
                             }
 
@@ -1236,6 +1155,18 @@ Window {
                             Row {
                                 visible: model.status === "complete" && model.direction === "download" && model.savePath !== ""
                                 spacing: 2
+
+                                QDIconButton {
+                                    iconSource: FluentIconGlyph.copyGlyph
+                                    buttonSize: QDIconButton.Size.Small
+                                    buttonStyle: QDIconButton.Style.Transparent
+                                    ToolTip.visible: hovered
+                                    ToolTip.text: qsTr("Copy Downloaded File")
+                                    onClicked: {
+                                        if (remoteWindow.clientManager.copyDownloadedFile(model.taskId))
+                                            toast.show(qsTr("File copied to clipboard"), QDToast.Type.Success)
+                                    }
+                                }
 
                                 QDIconButton {
                                     iconSource: FluentIconGlyph.openFileGlyph
@@ -1263,8 +1194,8 @@ Window {
                                     ToolTip.text: qsTr("Delete File")
                                     onClicked: {
                                         if (remoteWindow.clientManager.deleteDownloadedFile(model.savePath)) {
-                                            transferModel.setProperty(index, "status", "deleted")
-                                            transferModel.setProperty(index, "errorMessage", qsTr("File deleted"))
+                                            remoteWindow.deletedTransferTasks[model.taskId] = true
+                                            remoteWindow.syncTransferTasks()
                                         }
                                     }
                                 }
@@ -1289,6 +1220,16 @@ Window {
                             }
                         }
 
+                        Text {
+                            Layout.fillWidth: true
+                            text: qsTr("Device: %1").arg(model.deviceId)
+                            textFormat: Text.PlainText
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.fontSizeSmall
+                            color: Theme.textSecondary
+                            elide: Text.ElideMiddle
+                        }
+
                         // Progress bar (for uploading or downloading)
                         QDProgressBar {
                             visible: model.status === "uploading" || model.status === "downloading"
@@ -1300,13 +1241,14 @@ Window {
 
                         // Status message
                         Text {
-                            visible: (model.status === "error" || model.status === "cancelled" || model.status === "deleted") && model.errorMessage !== ""
+                            visible: model.errorMessage !== "" || model.status === "uncertain"
                             Layout.fillWidth: true
-                            text: model.errorMessage
+                            text: model.errorMessage || qsTr("Transfer state is uncertain. Reconnect before starting another transfer.")
                             font.family: Theme.fontFamily
                             font.pixelSize: Theme.fontSizeSmall
                             color: model.status === "deleted" ? Theme.textSecondary : Theme.error
-                            elide: Text.ElideRight
+                            wrapMode: Text.Wrap
+                            textFormat: Text.PlainText
                         }
                     }
                 }
@@ -1325,7 +1267,8 @@ Window {
                     onClicked: {
                         for (var i = transferModel.count - 1; i >= 0; i--) {
                             var s = transferModel.get(i).status
-                            if (s === "complete" || s === "error" || s === "cancelled" || s === "deleted") {
+                            if (!remoteWindow.transferIsActive(s)) {
+                                remoteWindow.clearedTransferTasks[transferModel.get(i).taskId] = true
                                 transferModel.remove(i)
                             }
                         }
