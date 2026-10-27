@@ -9,6 +9,7 @@ import { Session, SessionState } from './protocol/session.js';
 import { DataChannelHandler } from './protocol/datachannel-handler.js';
 import { MouseHandler } from './input/mouse-handler.js';
 import { KeyboardHandler } from './input/keyboard-handler.js';
+import { MobileKeyboard } from './input/mobile-keyboard.js';
 import { TouchHandler } from './input/touch-handler.js';
 import { ClipboardHandler } from './input/clipboard-handler.js';
 import { CursorRenderer } from './ui/cursor-renderer.js';
@@ -594,6 +595,12 @@ class RemoteDesktopApp {
             this.touchHandler = new TouchHandler(videoContainer || video, video, this.dcHandler);
             this.touchHandler.setRemoteResolution(w, h);
             this.touchHandler.enable();
+            const dragButton = document.getElementById('btnDrag');
+            this.touchHandler.onDragStateChanged = () => {
+                const held = this.touchHandler?.isDragging || false;
+                dragButton?.setAttribute('aria-pressed', String(held));
+                dragButton?.classList.toggle('active', held);
+            };
         } else {
             this.mouseHandler = new MouseHandler(video, this.dcHandler, videoContainer || video);
             this.mouseHandler.setRemoteResolution(w, h);
@@ -622,6 +629,10 @@ class RemoteDesktopApp {
         if (this.mouseHandler) { this.mouseHandler.destroy(); this.mouseHandler = null; }
         if (this.keyboardHandler) { this.keyboardHandler.destroy(); this.keyboardHandler = null; }
         if (this.touchHandler) { this.touchHandler.destroy(); this.touchHandler = null; }
+        this._mobileKeyboard?.destroy();
+        this._mobileKeyboard = null;
+        this._keyboardResizeCleanup?.();
+        this._keyboardResizeCleanup = null;
         this._mobileKbInput = null;
         if (this.clipboardHandler) { this.clipboardHandler.destroy(); this.clipboardHandler = null; }
         if (this.cursorRenderer) { this.cursorRenderer.destroy(); this.cursorRenderer = null; }
@@ -1343,21 +1354,50 @@ class RemoteDesktopApp {
 
         const keyInput = document.getElementById('mobileKeyInput');
 
-        document.getElementById('btnKeyboard')?.addEventListener('click', () => {
+        const keyboardButton = document.getElementById('btnKeyboard');
+        keyboardButton?.setAttribute('aria-pressed', 'false');
+        keyboardButton?.addEventListener('pointerdown', e => e.preventDefault());
+        const keyRow = document.getElementById('mobileKeyRow');
+        keyInput?.addEventListener('focus', () => {
+            keyboardButton?.setAttribute('aria-pressed', 'true');
+            if (keyRow) keyRow.hidden = false;
+        });
+        keyInput?.addEventListener('blur', () => {
+            keyboardButton?.setAttribute('aria-pressed', 'false');
+            if (keyRow) keyRow.hidden = true;
+        });
+        keyRow?.querySelectorAll('[data-remote-key]').forEach(button => {
+            button.addEventListener('pointerdown', event => event.preventDefault());
+            button.addEventListener('click', () => {
+                if (!this._mobileKeyboard || this._mobileKeyboard.composing) return;
+                this._mobileKeyboard.flush();
+                this._mobileKeyboard.sendKey(Number(button.dataset.remoteKey));
+            });
+        });
+        keyboardButton?.addEventListener('click', () => {
             if (!keyInput) return;
+            if (document.activeElement === keyInput) { keyInput.blur(); return; }
             keyInput.style.pointerEvents = 'auto';
             keyInput.focus();
             keyInput.style.pointerEvents = 'none';
         });
 
+        document.getElementById('btnLeftClick')?.addEventListener('click', () => {
+            this.touchHandler?.click(MouseButton.BUTTON_LEFT);
+        });
+        document.getElementById('btnDrag')?.addEventListener('click', () => {
+            this.touchHandler?.toggleDrag();
+        });
         document.getElementById('btnRightClick')?.addEventListener('click', () => {
-            if (!this.touchHandler || !this.dcHandler) return;
-            const x = Math.round(this.touchHandler._cursorX);
-            const y = Math.round(this.touchHandler._cursorY);
-            this.dcHandler.sendMouseEvent({ x, y, button: MouseButton.BUTTON_RIGHT, buttonDown: true });
-            this.dcHandler.sendMouseEvent({ x, y, button: MouseButton.BUTTON_RIGHT, buttonDown: false });
+            this.touchHandler?.click(MouseButton.BUTTON_RIGHT);
         });
 
+        const help = document.getElementById('mobileGestureHelp');
+        const helpButton = document.getElementById('btnGestureHelp');
+        helpButton?.addEventListener('click', () => {
+            help.hidden = !help.hidden;
+            helpButton.setAttribute('aria-expanded', String(!help.hidden));
+        });
         document.getElementById('btnLogs')?.addEventListener('click', () => {
             this._toggleLogDrawer();
         });
@@ -1383,93 +1423,30 @@ class RemoteDesktopApp {
         const keyInput = document.getElementById('mobileKeyInput');
         if (!keyInput || !this.dcHandler || this._mobileKbInput) return;
         this._mobileKbInput = keyInput;
-        this._isComposing = false;
-        this._inputTimer = null;
-        this._lastSentValue = '';
-
-        keyInput.addEventListener('compositionstart', () => {
-            this._isComposing = true;
-        });
-
-        keyInput.addEventListener('compositionend', (e) => {
-            this._isComposing = false;
-            clearTimeout(this._inputTimer);
-            keyInput.value = '';
-            if (e.data) {
-                this._sendTextAsKeys(e.data);
-            }
-        });
-
-        keyInput.addEventListener('input', () => {
-            if (this._isComposing) return;
-            clearTimeout(this._inputTimer);
-            this._inputTimer = setTimeout(() => {
-                const text = keyInput.value;
-                if (!text) return;
-                keyInput.value = '';
-                this._sendTextAsKeys(text);
-            }, 60);
-        });
-
-        keyInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Backspace' || e.key === 'Enter') {
-                e.preventDefault();
-                const usb = e.key === 'Backspace' ? 0x07002A : 0x070028;
-                this.dcHandler.sendKeyEvent({ pressed: true, usbKeycode: usb });
-                this.dcHandler.sendKeyEvent({ pressed: false, usbKeycode: usb });
-            }
-        });
-
+        this._mobileKeyboard = new MobileKeyboard(keyInput, this.dcHandler);
         this._setupKeyboardResize();
     }
 
-    _sendTextAsKeys(text) {
-        let asciiBuffer = '';
-        for (const ch of text) {
-            if (CHAR_TO_USB[ch] || CHAR_TO_USB[ch.toLowerCase()]) {
-                asciiBuffer += ch;
-            } else {
-                if (asciiBuffer) {
-                    for (const c of asciiBuffer) this._sendCharAsKey(c);
-                    asciiBuffer = '';
-                }
-                // Non-ASCII (中文等): use TextEvent protocol
-                this.dcHandler.sendTextEvent(ch);
-            }
-        }
-        if (asciiBuffer) {
-            for (const c of asciiBuffer) this._sendCharAsKey(c);
-        }
-    }
-
     _setupKeyboardResize() {
+        this._keyboardResizeCleanup?.();
         const vv = window.visualViewport;
         if (!vv) return;
-        let lastHeight = vv.height;
-
-        vv.addEventListener('resize', () => {
-            const h = vv.height;
-            if (Math.abs(h - lastHeight) < 50) return;
-            lastHeight = h;
-            document.body.style.height = `${h}px`;
-            requestAnimationFrame(() => {
+        let frame;
+        const resize = () => {
+            document.body.style.height = `${vv.height}px`;
+            cancelAnimationFrame(frame);
+            frame = requestAnimationFrame(() => {
                 window.scrollTo(0, 0);
-                if (this.touchHandler?.isZoomed) {
-                    this.touchHandler._autoPanToFollow();
-                }
+                this.touchHandler?._autoPanToFollow();
             });
-        });
-    }
-
-    _sendCharAsKey(ch) {
-        const usb = CHAR_TO_USB[ch] || CHAR_TO_USB[ch.toLowerCase()];
-        if (!usb) return;
-        const needShift = (ch >= 'A' && ch <= 'Z') || SHIFT_CHARS.has(ch);
-        const SHIFT_USB = 0x0700E1;
-        if (needShift) this.dcHandler.sendKeyEvent({ pressed: true, usbKeycode: SHIFT_USB });
-        this.dcHandler.sendKeyEvent({ pressed: true, usbKeycode: usb });
-        this.dcHandler.sendKeyEvent({ pressed: false, usbKeycode: usb });
-        if (needShift) this.dcHandler.sendKeyEvent({ pressed: false, usbKeycode: SHIFT_USB });
+        };
+        vv.addEventListener('resize', resize);
+        resize();
+        this._keyboardResizeCleanup = () => {
+            vv.removeEventListener('resize', resize);
+            cancelAnimationFrame(frame);
+            document.body.style.height = '';
+        };
     }
 
     // ==================== Session recording ====================
@@ -1751,31 +1728,6 @@ class RemoteDesktopApp {
         console.log(`[RemoteDesktop] ${message}`);
     }
 }
-
-// Character → USB HID keycode mapping for mobile virtual keyboard input
-const P = 0x070000;
-const CHAR_TO_USB = {
-    'a':P|0x04,'b':P|0x05,'c':P|0x06,'d':P|0x07,'e':P|0x08,'f':P|0x09,
-    'g':P|0x0A,'h':P|0x0B,'i':P|0x0C,'j':P|0x0D,'k':P|0x0E,'l':P|0x0F,
-    'm':P|0x10,'n':P|0x11,'o':P|0x12,'p':P|0x13,'q':P|0x14,'r':P|0x15,
-    's':P|0x16,'t':P|0x17,'u':P|0x18,'v':P|0x19,'w':P|0x1A,'x':P|0x1B,
-    'y':P|0x1C,'z':P|0x1D,
-    '1':P|0x1E,'2':P|0x1F,'3':P|0x20,'4':P|0x21,'5':P|0x22,'6':P|0x23,
-    '7':P|0x24,'8':P|0x25,'9':P|0x26,'0':P|0x27,
-    ' ':P|0x2C,'-':P|0x2D,'=':P|0x2E,'[':P|0x2F,']':P|0x30,'\\':P|0x31,
-    ';':P|0x33,"'":P|0x34,'`':P|0x35,',':P|0x36,'.':P|0x37,'/':P|0x38,
-    '\t':P|0x2B,
-};
-// Shift symbols → base key mapping
-const SHIFT_CHAR_MAP = {
-    '~':'`','!':'1','@':'2','#':'3','$':'4','%':'5','^':'6','&':'7',
-    '*':'8','(':'9',')':'0','_':'-','+':'=','{':'[','}':']','|':'\\',
-    ':':';','"':"'",'<':',','>':'.','?':'/',
-};
-for (const [shifted, base] of Object.entries(SHIFT_CHAR_MAP)) {
-    if (CHAR_TO_USB[base]) CHAR_TO_USB[shifted] = CHAR_TO_USB[base];
-}
-const SHIFT_CHARS = new Set(Object.keys(SHIFT_CHAR_MAP));
 
 document.addEventListener('DOMContentLoaded', () => {
     const app = new RemoteDesktopApp();
