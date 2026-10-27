@@ -14,6 +14,8 @@ export class ClipboardHandler {
         this._enabled = false;
         this._lastClipboardText = '';
         this._pollInterval = null;
+        this._generation = 0;
+        this._remoteClipboardListener = event => this._onRemoteClipboard(event);
     }
 
     /**
@@ -22,9 +24,10 @@ export class ClipboardHandler {
     enable() {
         if (this._enabled) return;
         this._enabled = true;
+        this._generation++;
 
         // 监听来自 Host 的剪贴板事件
-        this.dcHandler.addEventListener('clipboardEvent', this._onRemoteClipboard.bind(this));
+        this.dcHandler.addEventListener('clipboardEvent', this._remoteClipboardListener);
 
         // 定时轮询本地剪贴板 (Clipboard API 没有 change 事件)
         this._pollInterval = setInterval(() => this._pollClipboard(), 1000);
@@ -36,6 +39,8 @@ export class ClipboardHandler {
     disable() {
         if (!this._enabled) return;
         this._enabled = false;
+        this._generation++;
+        this.dcHandler.removeEventListener('clipboardEvent', this._remoteClipboardListener);
 
         if (this._pollInterval) {
             clearInterval(this._pollInterval);
@@ -48,11 +53,14 @@ export class ClipboardHandler {
      * @private
      */
     async _pollClipboard() {
+        if (!this._enabled) return;
+        const generation = this._generation;
         try {
             // 需要文档有焦点才能读取剪贴板
             if (!document.hasFocus()) return;
 
             const text = await navigator.clipboard.readText();
+            if (!this._enabled || generation !== this._generation || !document.hasFocus()) return;
             if (text && text !== this._lastClipboardText) {
                 this._lastClipboardText = text;
                 this._sendToRemote(text);
@@ -85,6 +93,7 @@ export class ClipboardHandler {
      * @private
      */
     async _onRemoteClipboard(event) {
+        if (!this._enabled) return;
         const { mimeType, data } = event.detail;
         
         if (mimeType === 'text/plain' && data) {

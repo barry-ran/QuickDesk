@@ -3,7 +3,7 @@
  * 
  * 与 Qt native client (RemoteDesktopView.qml) 保持一致的策略：
  * 普通按键保持直接转发；浏览器粘贴快捷键先等待原生 paste 事件，
- * 文件粘贴只进入上传队列，文本粘贴再发送配对的远端 Ctrl+V。
+ * 文件粘贴只进入上传队列，文本粘贴再发送配对的原始 Ctrl/Cmd+V 修饰键组合。
  */
 
 export class KeyboardHandler {
@@ -50,12 +50,26 @@ export class KeyboardHandler {
 
     /** @private */
     _onKeyDown(event) {
+        if (event.target?.isContentEditable ||
+            event.target?.closest?.('input, textarea, [contenteditable]:not([contenteditable="false"])')) return;
         const code = event.code;
         // Let the browser produce a paste event before deciding whether this is
         // a local file upload or an ordinary remote clipboard paste.
-        if (code === 'KeyV' && (event.ctrlKey || event.metaKey)) {
+        if (code === 'KeyV' && (event.ctrlKey || event.metaKey) && !event.altKey) {
             if (this._browserPaste || event.repeat) event.preventDefault();
-            else this._browserPaste = { handled: false, locks: this._getLockStates(event) };
+            else {
+                const modifiers = [];
+                for (const [active, left, right] of [
+                    [event.ctrlKey, 'ControlLeft', 'ControlRight'],
+                    [event.metaKey, 'MetaLeft', 'MetaRight'],
+                    [event.shiftKey, 'ShiftLeft', 'ShiftRight'],
+                ]) {
+                    if (!active) continue;
+                    const held = [left, right].filter(key => this._pressedKeys.has(key));
+                    modifiers.push(...(held.length ? held : [left]));
+                }
+                this._browserPaste = { handled: false, locks: this._getLockStates(event), modifiers };
+            }
             event.stopPropagation();
             return;
         }
@@ -76,6 +90,9 @@ export class KeyboardHandler {
     /** @private */
     _onKeyUp(event) {
         const code = event.code;
+        if ((event.target?.isContentEditable ||
+            event.target?.closest?.('input, textarea, [contenteditable]:not([contenteditable="false"])')) &&
+            !this._pressedKeys.has(code) && !this._browserPaste) return;
         if (code === 'KeyV' && this._browserPaste) {
             if (!this._browserPaste.handled) this.forwardBrowserPaste();
             this._browserPaste = null;
@@ -103,22 +120,26 @@ export class KeyboardHandler {
     }
 
     forwardBrowserPaste() {
-        const locks = this._browserPaste?.locks || {};
+        if (!this._browserPaste) return false;
+        const { locks, modifiers } = this._browserPaste;
         this.consumeBrowserPaste();
-        // Control may have been released before paste/KeyV-up. Use an explicit
-        // pair when necessary rather than accidentally typing a plain 'v'.
-        const heldControl = this._pressedKeys.has('ControlLeft') || this._pressedKeys.has('ControlRight');
-        const heldMeta = ['MetaLeft', 'MetaRight'].filter(key => this._pressedKeys.has(key));
-        for (const key of heldMeta)
-            this.dcHandler.sendKeyEvent({ pressed: false, usbKeycode: this._mapKeyCode(key), ...locks });
-        if (!heldControl)
-            this.dcHandler.sendKeyEvent({ pressed: true, usbKeycode: this._mapKeyCode('ControlLeft'), ...locks });
-        this.dcHandler.sendKeyEvent({ pressed: true, usbKeycode: this._mapKeyCode('KeyV'), ...locks });
-        this.dcHandler.sendKeyEvent({ pressed: false, usbKeycode: this._mapKeyCode('KeyV'), ...locks });
-        if (!heldControl)
-            this.dcHandler.sendKeyEvent({ pressed: false, usbKeycode: this._mapKeyCode('ControlLeft'), ...locks });
-        for (const key of heldMeta)
-            this.dcHandler.sendKeyEvent({ pressed: true, usbKeycode: this._mapKeyCode(key), ...locks });
+        // Preserve the original Ctrl/Cmd/Shift chord; the host OS is unknown.
+        // Recreate only modifiers released before paste/KeyV-up, then restore
+        // the actual currently-held state. Never translate Cmd into Ctrl.
+        const current = ['ControlLeft', 'ControlRight', 'MetaLeft', 'MetaRight',
+            'ShiftLeft', 'ShiftRight'].filter(key => this._pressedKeys.has(key));
+        const released = current.filter(key => !modifiers.includes(key));
+        const synthesized = modifiers.filter(key => !current.includes(key));
+        const send = (key, pressed) => this.dcHandler.sendKeyEvent({
+            pressed, usbKeycode: this._mapKeyCode(key), ...locks,
+        });
+        released.forEach(key => send(key, false));
+        synthesized.forEach(key => send(key, true));
+        send('KeyV', true);
+        send('KeyV', false);
+        synthesized.slice().reverse().forEach(key => send(key, false));
+        released.forEach(key => send(key, true));
+        return true;
     }
 
     /** @private */

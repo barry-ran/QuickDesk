@@ -960,7 +960,8 @@ export class RemoteDesktopApp {
         if (!target) return;
         this._fileInputAbort ||= new AbortController();
         target.addEventListener('paste', (e) => {
-            if (e.target.closest?.('input, textarea, [contenteditable="true"]')) return;
+            if (e.defaultPrevented || e.target.isContentEditable ||
+                e.target.closest?.('input, textarea, [contenteditable]:not([contenteditable="false"])')) return;
             const selection = filesFromDataTransfer(e.clipboardData);
             if (selection.files.length || selection.directories) {
                 e.preventDefault();
@@ -973,9 +974,10 @@ export class RemoteDesktopApp {
                 // existing remote Ctrl+V action. Input widgets were excluded above.
                 if (Array.from(e.clipboardData?.types || []).includes('text/plain'))
                     this.clipboardHandler?.syncText(e.clipboardData.getData('text/plain'));
-                this.keyboardHandler.forwardBrowserPaste();
-                e.preventDefault();
-                e.stopPropagation();
+                if (this.keyboardHandler.forwardBrowserPaste()) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
             }
         }, { signal: this._fileInputAbort.signal });
     }
