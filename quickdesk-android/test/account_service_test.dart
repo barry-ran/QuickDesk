@@ -445,4 +445,114 @@ void main() {
     }
     service.dispose();
   });
+
+  test(
+    'password reset uses public preset without bearer and Qt hash route',
+    () async {
+      final requests = <http.Request>[];
+      final service = AccountService(
+        signalingUrl: 'wss://example.test/base',
+        apiKey: 'api-key',
+        tokenStore: MemoryTokens(),
+        client: MockClient((request) async {
+          requests.add(request);
+          return request.url.path.endsWith('/auth/sessions')
+              ? ok(tokens())
+              : ok({'webclient_url': 'https://web.example/client///'});
+        }),
+      );
+      await service.login('user', 'password');
+      final uri = await service.passwordResetUri();
+      expect(uri.toString(), 'https://web.example/client/#/reset-password');
+      expect(
+        requests.last.url.toString(),
+        'https://example.test/base/v1/preset',
+      );
+      expect(requests.last.method, 'GET');
+      expect(requests.last.headers['X-API-Key'], 'api-key');
+      expect(requests.last.headers.containsKey('Authorization'), false);
+      expect(requests.last.body, isEmpty);
+      service.dispose();
+    },
+  );
+
+  test('password reset rejects missing and unsafe configured URLs', () async {
+    for (final value in <dynamic>[
+      null,
+      42,
+      '',
+      'relative/path',
+      '//web.example/path',
+      'javascript:alert(1)',
+      'file:///tmp/reset',
+      'ftp://web.example/',
+      'https:///path',
+      'https://user:secret@web.example/',
+      'https://web.example/?token=secret',
+      'https://web.example/#login',
+    ]) {
+      final service = AccountService(
+        signalingUrl: 'wss://example.test',
+        tokenStore: MemoryTokens(),
+        client: MockClient((_) async => ok({'webclient_url': value})),
+      );
+      await expectLater(
+        service.passwordResetUri(),
+        throwsA(
+          isA<AccountException>().having(
+            (e) => e.code,
+            'code',
+            'RESET_UNAVAILABLE',
+          ),
+        ),
+      );
+      service.dispose();
+    }
+  });
+
+  test(
+    'password reset preserves configured HTTP origin without credentials',
+    () async {
+      final service = AccountService(
+        signalingUrl: 'wss://example.test',
+        tokenStore: MemoryTokens(),
+        client: MockClient(
+          (_) async => ok({'webclient_url': 'http://web.example:8080'}),
+        ),
+      );
+      expect(
+        (await service.passwordResetUri()).toString(),
+        'http://web.example:8080/#/reset-password',
+      );
+      service.dispose();
+    },
+  );
+
+  test(
+    'password reset discards stale preset after account epoch changes',
+    () async {
+      final response = Completer<http.Response>();
+      final started = Completer<void>();
+      final service = AccountService(
+        signalingUrl: 'wss://example.test',
+        tokenStore: MemoryTokens(),
+        client: MockClient((_) {
+          started.complete();
+          return response.future;
+        }),
+      );
+      final result = service.passwordResetUri();
+      final rejected = expectLater(
+        result,
+        throwsA(
+          isA<AccountException>().having((e) => e.code, 'code', 'CANCELLED'),
+        ),
+      );
+      await started.future;
+      await service.clearSession();
+      response.complete(ok({'webclient_url': 'https://old.example'}));
+      await rejected;
+      service.dispose();
+    },
+  );
 }

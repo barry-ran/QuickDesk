@@ -21,6 +21,7 @@ dependencies:
   http: ^1.2.0
 
   # App
+  url_launcher: ^6.3.1
   shared_preferences: ^2.2.0
   wakelock_plus: ^1.2.0
   cupertino_icons: ^1.0.8

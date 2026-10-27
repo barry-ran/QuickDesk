@@ -1,9 +1,13 @@
 /// connect_page.dart - 连接页：输入设备 ID + 访问码发起连接
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../api/signaling_api.dart';
+import '../account/account_scope.dart';
+import '../account/connection_log.dart';
 import '../core/app_settings.dart';
 import '../l10n/app_strings.dart';
 import 'connection_store.dart';
@@ -58,6 +62,7 @@ class _ConnectPageState extends State<ConnectPage> {
   );
 
   Future<void> _connect() async {
+    if (_connecting) return;
     final deviceId = _deviceIdCtrl.text.trim().replaceAll(' ', '');
     final accessCode = _accessCodeCtrl.text.trim();
     final serverUrl = _serverCtrl.text.trim();
@@ -71,7 +76,12 @@ class _ConnectPageState extends State<ConnectPage> {
       _connecting = true;
       _error = null;
     });
-    await _savePrefs();
+    final attempt = ConnectionLogAttempt.capture(
+      account: AccountScope.current,
+      signalingUrl: serverUrl,
+      apiKey: _apiKeyCtrl.text.trim(),
+      deviceId: deviceId,
+    );
 
     final api = SignalingApi(
       serverUrl,
@@ -79,6 +89,7 @@ class _ConnectPageState extends State<ConnectPage> {
     );
 
     try {
+      await _savePrefs();
       // 1. 校验访问码换 signal_token
       final signalToken = await api.verifyAccessCode(deviceId, accessCode);
       // 2. 拉取 ICE 配置
@@ -93,11 +104,14 @@ class _ConnectPageState extends State<ConnectPage> {
             accessCode: accessCode,
             signalToken: signalToken,
             iceServers: iceServers,
+            connectionLog: attempt,
           ),
         ),
       );
       await _loadHistory();
     } on SignalingApiException catch (e) {
+      await attempt?.finish(failureCode: e.code);
+      if (!mounted) return;
       setState(
         () => _error = switch (e.code) {
           'DEVICE_NOT_FOUND' => L10n.t('connect.errDeviceNotFound'),
@@ -107,9 +121,16 @@ class _ConnectPageState extends State<ConnectPage> {
           _ => L10n.t('connect.errGeneric', {'code': e.code}),
         },
       );
-    } catch (e) {
-      setState(() => _error = L10n.t('connect.errGeneric', {'code': '$e'}));
+    } catch (error) {
+      await attempt?.finish(
+        failureCode: error is TimeoutException ? 'TIMEOUT' : 'NETWORK_ERROR',
+      );
+      if (!mounted) return;
+      setState(
+        () => _error = L10n.t('connect.errGeneric', {'code': 'NETWORK_ERROR'}),
+      );
     } finally {
+      await attempt?.finish();
       if (mounted) setState(() => _connecting = false);
     }
   }
