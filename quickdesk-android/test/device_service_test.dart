@@ -86,7 +86,7 @@ void main() {
   test(
     'list pagination collects all pages and encodes opaque cursor',
     () async {
-      account.handler = (_, path, _) async {
+      account.handler = (method, path, body) async {
         if (path == '/v1/me/devices') {
           return {
             'items': [
@@ -113,7 +113,8 @@ void main() {
   );
 
   test('repeated pagination cursor fails safely instead of looping', () async {
-    account.handler = (_, path, _) async => path.startsWith('/v1/me/devices')
+    account.handler = (method, path, body) async =>
+        path.startsWith('/v1/me/devices')
         ? {'items': [], 'next_cursor': 'same'}
         : {'items': []};
     devices.start();
@@ -175,7 +176,7 @@ void main() {
 
   test('HTTP response cannot replace a newer realtime snapshot', () async {
     final pending = Completer<Map<String, dynamic>>();
-    account.handler = (_, path, _) async =>
+    account.handler = (method, path, body) async =>
         path == '/v1/me/devices' ? pending.future : {'items': []};
     devices.start();
     await settle();
@@ -206,7 +207,7 @@ void main() {
     });
     await settle();
     final pending = Completer<Map<String, dynamic>>();
-    account.handler = (_, path, _) async =>
+    account.handler = (method, path, body) async =>
         path == '/v1/me/devices' ? pending.future : {'items': []};
     final refresh = devices.refresh();
     await account.handleSessionRevoked();
@@ -237,12 +238,12 @@ void main() {
   test('failure preserves data and retry clears error', () async {
     devices.start();
     await settle();
-    account.handler = (_, _, _) async =>
+    account.handler = (method, path, body) async =>
         throw const AccountException(503, 'UNAVAILABLE', 'Try again');
     await devices.refresh();
     expect(devices.error, isA<AccountException>());
     expect(devices.loading, false);
-    account.handler = (_, _, _) async => {'items': []};
+    account.handler = (method, path, body) async => {'items': []};
     await devices.refresh();
     expect(devices.error, isNull);
   });
@@ -261,7 +262,7 @@ void main() {
       socket.frame('bootstrap_done', 1, {});
       await settle();
       devices.stop();
-      account.handler = (_, path, _) async => {
+      account.handler = (method, path, body) async => {
         'items': path == '/v1/me/devices'
             ? [
                 {'device_id': 'fresh'},
@@ -277,7 +278,7 @@ void main() {
     devices.start();
     await settle();
     final pending = Completer<Map<String, dynamic>>();
-    account.handler = (method, _, _) async =>
+    account.handler = (method, path, body) async =>
         method == 'DELETE' ? pending.future : {'items': []};
     final removal = devices.unbind('a');
     socket.frame('device.bound', 1, {'device_id': 'a', 'online': true});
@@ -316,7 +317,8 @@ void main() {
     () async {
       devices.start();
       await settle();
-      account.handler = (_, path, _) async => path == '/v1/me/devices/a%2Fb'
+      account.handler = (method, path, body) async =>
+          path == '/v1/me/devices/a%2Fb'
           ? {'access_code': '123456'}
           : {'items': []};
       await devices.setRemark('a/b', 'Office');

@@ -23,6 +23,8 @@ class L10n {
   static const Map<String, String> _zh = {
     'account.error.PASSWORD_WEAK': '密码不符合服务器要求',
     'account.logoutOffline': '已清除本机登录，但服务器未确认撤销会话。请在联网后从其他客户端检查账户会话。',
+    'account.storageFailed':
+        '安全存储操作失败。若正在退出登录，已清除内存会话，但保存的凭据可能未清除；请在其他客户端撤销账户会话。',
     'account.history': '最近的云连接记录',
     'account.noHistory': '暂无连接记录。',
     'account.success': '成功',
@@ -207,6 +209,7 @@ class L10n {
   static const Map<String, String> _en = {
     'account.error.PASSWORD_WEAK': 'Password does not meet server requirements',
     'account.logoutOffline': 'Signed out locally, but server revocation was not confirmed. Check account sessions from another client when online.',
+    'account.storageFailed': 'Secure storage failed. If signing out, the in-memory session is cleared but saved credentials may remain; revoke account sessions from another client.',
     'account.history': 'Recent cloud connections',
     'account.noHistory': 'No connection records.',
     'account.success': 'Success',
