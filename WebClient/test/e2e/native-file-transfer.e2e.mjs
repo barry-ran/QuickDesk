@@ -92,9 +92,23 @@ test('actual remote-view handlers queue browser files, reject folders and render
             document.querySelector('[data-transfer-id="' + queuedId + '"] .transfer-item-cancel').click();
             const plain = new DataTransfer();
             plain.setData('text/plain', 'leave ordinary clipboard paste alone');
+            target.dispatchEvent(new KeyboardEvent('keydown', { code: 'ControlLeft', bubbles: true, cancelable: true }));
+            target.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyV', ctrlKey: true, bubbles: true, cancelable: true }));
             const textPaste = new ClipboardEvent('paste', { clipboardData: plain, bubbles: true, cancelable: true });
             target.dispatchEvent(textPaste);
+            target.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyV', ctrlKey: true, bubbles: true }));
+            target.dispatchEvent(new KeyboardEvent('keyup', { code: 'ControlLeft', bubbles: true }));
+            const localInput = document.createElement('input');
+            target.appendChild(localInput);
+            const beforeLocal = inputEvents.length;
+            const localDown = new KeyboardEvent('keydown', { code: 'KeyV', ctrlKey: true, bubbles: true, cancelable: true });
+            localInput.dispatchEvent(localDown);
+            const localPaste = new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true });
+            localInput.dispatchEvent(localPaste);
+            localInput.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyV', bubbles: true }));
             const snapshot = {
+                editableIgnored: !localDown.defaultPrevented && !localPaste.defaultPrevented
+                    && inputEvents.length === beforeLocal,
                 handled: pasted.defaultPrevented,
                 keydownPrevented: vdown.defaultPrevented,
                 filePasteVEvents,
@@ -119,6 +133,7 @@ test('actual remote-view handlers queue browser files, reject folders and render
             return snapshot;
         });
         assert.equal(result.handled, true);
+        assert.equal(result.editableIgnored, true);
         assert.equal(result.textHandled, true);
         assert.equal(result.keydownPrevented, false);
         assert.equal(result.filePasteVEvents, 0);

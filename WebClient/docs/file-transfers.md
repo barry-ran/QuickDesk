@@ -35,7 +35,8 @@ different IDs in the same page. No remoting or wire-protocol changes are needed.
 - File paste is integrated with the actual KeyboardHandler: Ctrl/Cmd+V permits
   the browser paste event first; files consume V without sending a remote V-up.
   Text is sent through the existing clipboard synchronization before a remote
-  Ctrl+V pair. If no paste event is provided, key-up falls back to pasting the
+  original Ctrl/Cmd(+Shift)+V chord, without guessing the remote OS. If no paste
+  event is provided, key-up falls back to pasting the
   remote clipboard, not to reading local file paths. Input-widget paste is left
   alone. Transfer DOM listeners are removed when input handlers are replaced.
 - Metadata size is advisory in the existing protocol. End followed by successful

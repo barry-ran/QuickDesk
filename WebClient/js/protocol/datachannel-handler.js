@@ -563,8 +563,8 @@ export class DataChannelHandler extends EventTarget {
                 detail: { transferId: state.transferId },
             }));
             if (state.writable) await state.writable.close();
-            state.committed = true;
             const blob = state.streaming ? null : new Blob(state.chunks);
+            state.committed = true;
             let acknowledgementSent = false;
             try {
                 state.channel.send(this._encodeFileTransfer({ success: {} }));
@@ -837,6 +837,7 @@ export class DataChannelHandler extends EventTarget {
         this._eventReady = false;
         this._actionsReady = false;
         this._activeUploads.clear();
-        this._activeDownloads.clear();
+        // closeFileTransfers removed non-committing downloads. Keep committing
+        // entries until close resolves/rejects so their final result stays observable.
     }
 }
