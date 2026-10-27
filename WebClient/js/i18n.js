@@ -83,9 +83,18 @@ const zh = {
 
     // Mobile toolbar
     'mobile.keyboard': '键盘',
+    'mobile.click': '左键',
+    'mobile.drag': '拖拽',
+    'mobile.help': '手势',
+    'mobile.backspace': '退格',
+    'mobile.left': '向左',
+    'mobile.right': '向右',
+    'mobile.up': '向上',
+    'mobile.down': '向下',
+    'mobile.gestures': '触控板：单指滑动移动光标；轻点为左键，连点两次为双击，轻点后再次按住滑动可拖拽，抬手释放。长按为右键。双指滑动始终滚动；双指捏合缩放，画面自动跟随光标。也可点“拖拽”后单指滑动，抬手释放；点“适应屏幕”恢复全貌。',
     'mobile.rightClick': '右键',
     'mobile.logs': '日志',
-    'mobile.zoom': '缩放',
+    'mobile.zoom': '适应屏幕',
     'mobile.fullscreen': '全屏',
     'mobile.close': '关闭',
 
@@ -378,9 +387,18 @@ const en = {
 
     // Mobile toolbar
     'mobile.keyboard': 'Keyboard',
+    'mobile.click': 'Click',
+    'mobile.drag': 'Drag',
+    'mobile.help': 'Help',
+    'mobile.backspace': 'Backspace',
+    'mobile.left': 'Left arrow',
+    'mobile.right': 'Right arrow',
+    'mobile.up': 'Up arrow',
+    'mobile.down': 'Down arrow',
+    'mobile.gestures': 'Touchpad: slide one finger to move the cursor; tap to click; tap twice to double-click; tap then drag to hold the left button, lift to release. Hold for right-click. Slide two fingers to scroll at any zoom. Pinch to zoom; the view follows the cursor. Or tap Drag, swipe one finger, and lift to release. Fit resets the view.',
     'mobile.rightClick': 'Right Click',
     'mobile.logs': 'Logs',
-    'mobile.zoom': 'Zoom',
+    'mobile.zoom': 'Fit',
     'mobile.fullscreen': 'Fullscreen',
     'mobile.close': 'Close',
 
@@ -665,6 +683,9 @@ export function applyI18n() {
     document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
         const key = el.getAttribute('data-i18n-placeholder');
         if (key) el.placeholder = t(key);
+    });
+    document.querySelectorAll('[data-i18n-aria-label]').forEach(el => {
+        el.setAttribute('aria-label', t(el.getAttribute('data-i18n-aria-label')));
     });
     document.querySelectorAll('[data-i18n-title]').forEach(el => {
         const key = el.getAttribute('data-i18n-title');

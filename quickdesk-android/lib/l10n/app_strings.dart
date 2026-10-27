@@ -66,8 +66,17 @@ class L10n {
     'remote.switchDisplay': '切换显示器',
     'remote.display': '显示器 {n}',
     'remote.rotate': '切换横竖屏',
-    'remote.resetZoom': '重置缩放',
-    'remote.leftHold': '左键按住中 · 再点松开',
+    'remote.resetZoom': '适应屏幕',
+    'remote.leftHold': '正在拖拽 · 抬手释放',
+    'remote.gestureHelp': '触控板操作指南',
+    'remote.gestureInstructions': '单指滑动：移动光标\n轻点：左键；双击：双击\n轻点后再次按住并滑动：拖拽，抬手释放\n长按：右键\n双指滑动：滚动（放大后也可用）\n双指捏合：缩放；继续移动双指平移画面\n放大后移动光标：画面自动跟随\n适应屏幕：恢复完整画面\n键盘：输入文字；更多菜单：Esc、Tab、方向键等',
+    'remote.leftClick': '左键点击',
+    'remote.rightClick': '右键点击',
+    'remote.armDrag': '拖拽：下次滑动时按住左键',
+    'remote.cancelDrag': '取消拖拽',
+    'remote.dragArmed': '拖拽就绪 · 单指滑动，抬手释放',
+    'remote.more': '更多操作',
+    'remote.hideKeyboard': '收起键盘',
     'remote.keyboard': '键盘',
     'remote.sendClipboard': '把本机剪贴板发送到远端',
     'remote.clipboardSent': '已发送剪贴板',
@@ -112,7 +121,8 @@ class L10n {
     'host.regenCode': '重新生成访问码',
     'host.start': '开启被控',
     'host.stop': '停止被控',
-    'host.hint': '开启后，其他设备可用上方「设备 ID + 访问码」控制本机。'
+    'host.hint':
+        '开启后，其他设备可用上方「设备 ID + 访问码」控制本机。'
         '被控依赖无障碍服务注入点击/滑动，屏幕采集需系统授权。',
     'host.inputMethod': '输入方式：{label}',
     'host.backendShizuku': '增强档（Shizuku）',
@@ -122,7 +132,8 @@ class L10n {
     'host.enableShizuku': '启用 Shizuku 增强',
     'host.shizukuHint': '提示：安装并启动 Shizuku 后可解锁增强档（更流畅、支持完整键盘）。',
     'host.a11yTitle': '需要开启无障碍服务',
-    'host.a11yDesc': '被控时需要「QuickDesk 被控输入」无障碍服务来执行远程点击与滑动。'
+    'host.a11yDesc':
+        '被控时需要「QuickDesk 被控输入」无障碍服务来执行远程点击与滑动。'
         '点击下方按钮前往系统设置开启，然后重新点「开启被控」。',
     'host.a11yGo': '前往无障碍设置',
     // 被控端 controller 状态消息
@@ -179,8 +190,17 @@ class L10n {
     'remote.switchDisplay': 'Switch display',
     'remote.display': 'Display {n}',
     'remote.rotate': 'Toggle orientation',
-    'remote.resetZoom': 'Reset zoom',
-    'remote.leftHold': 'Left button held · tap to release',
+    'remote.resetZoom': 'Fit screen',
+    'remote.leftHold': 'Dragging · lift to release',
+    'remote.gestureHelp': 'Trackpad guide',
+    'remote.gestureInstructions': 'One finger: move cursor\nTap: click; double tap: double-click\nTap, then touch and slide: drag; lift to release\nLong press: right-click\nTwo-finger slide: scroll at any zoom\nPinch: zoom; keep moving both fingers to pan\nMove cursor when zoomed: view follows automatically\nFit screen: show the entire desktop\nKeyboard: type text; More: Esc, Tab, arrows and other actions',
+    'remote.leftClick': 'Left click',
+    'remote.rightClick': 'Right click',
+    'remote.armDrag': 'Drag: hold left button on next swipe',
+    'remote.cancelDrag': 'Cancel drag',
+    'remote.dragArmed': 'Drag ready · swipe, then lift to release',
+    'remote.more': 'More actions',
+    'remote.hideKeyboard': 'Hide keyboard',
     'remote.keyboard': 'Keyboard',
     'remote.sendClipboard': 'Send local clipboard to remote',
     'remote.clipboardSent': 'Clipboard sent',
@@ -222,24 +242,29 @@ class L10n {
     'host.regenCode': 'Regenerate access code',
     'host.start': 'Start sharing',
     'host.stop': 'Stop sharing',
-    'host.hint': 'Once started, other devices can control this phone with the '
+    'host.hint':
+        'Once started, other devices can control this phone with the '
         'Device ID + access code above. Input uses the accessibility service; '
         'screen capture requires system permission.',
     'host.inputMethod': 'Input: {label}',
     'host.backendShizuku': 'Enhanced (Shizuku)',
-    'host.backendShizukuDesc': 'Real touch events, smooth drag and full keyboard',
+    'host.backendShizukuDesc':
+        'Real touch events, smooth drag and full keyboard',
     'host.backendA11y': 'Standard (Accessibility)',
     'host.backendA11yDesc': 'Injects taps/swipes via accessibility gestures',
     'host.enableShizuku': 'Enable Shizuku',
-    'host.shizukuHint': 'Tip: install & start Shizuku to unlock the enhanced backend '
+    'host.shizukuHint':
+        'Tip: install & start Shizuku to unlock the enhanced backend '
         '(smoother, full keyboard).',
     'host.a11yTitle': 'Accessibility service required',
-    'host.a11yDesc': 'Sharing needs the "QuickDesk input" accessibility service to '
+    'host.a11yDesc':
+        'Sharing needs the "QuickDesk input" accessibility service to '
         'perform remote taps and swipes. Tap below to enable it in system settings, '
         'then tap "Start sharing" again.',
     'host.a11yGo': 'Open accessibility settings',
     'host.msgCheckA11y': 'Checking accessibility permission',
-    'host.msgNeedA11y': 'Please enable the QuickDesk accessibility service first',
+    'host.msgNeedA11y':
+        'Please enable the QuickDesk accessibility service first',
     'host.msgProvisioning': 'Registering device',
     'host.msgRequestCapture': 'Please allow screen capture',
     'host.msgConnecting': 'Connecting to signaling server',
