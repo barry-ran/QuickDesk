@@ -81,8 +81,9 @@ class TouchPointerRouter {
   }
 
   void cancel() {
-    if (_frame != null)
+    if (_frame != null) {
       SchedulerBinding.instance.cancelFrameCallbackWithId(_frame!);
+    }
     _frame = null;
     _positions.clear();
     controller.onPointerCancel(0);
