@@ -151,6 +151,32 @@ class AccountService extends ChangeNotifier {
     return work;
   }
 
+  /// Same preset and route as Qt LoginDialog; never derive a reset endpoint
+  /// from the signaling origin or append account credentials to the URL.
+  Future<Uri> passwordResetUri() async {
+    final generation = _generation;
+    final preset = await _raw('GET', '/v1/preset');
+    _check(generation);
+    final value = preset['webclient_url'];
+    final uri = value is String ? Uri.tryParse(value.trim()) : null;
+    if (uri == null ||
+        !{'https', 'http'}.contains(uri.scheme) ||
+        uri.host.isEmpty ||
+        uri.userInfo.isNotEmpty ||
+        uri.hasQuery ||
+        uri.hasFragment) {
+      throw const AccountException(
+        0,
+        'RESET_UNAVAILABLE',
+        'The server has not configured a safe WebClient URL.',
+      );
+    }
+    return uri.replace(
+      path: '${uri.path.replaceFirst(RegExp(r'/+$'), '')}/',
+      fragment: '/reset-password',
+    );
+  }
+
   Future<void> fetchFeatures() async {
     final generation = _generation;
     final data = await _raw('GET', '/v1/features');

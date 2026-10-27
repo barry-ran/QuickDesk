@@ -15,6 +15,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../../api/signaling_api.dart';
+import '../../account/connection_log.dart';
 import '../../core/geometry.dart';
 import '../../l10n/app_strings.dart';
 import '../../protocol/client_session.dart';
@@ -38,6 +39,7 @@ class RemotePage extends StatefulWidget {
   final String accessCode;
   final String signalToken;
   final List<IceServerEntry> iceServers;
+  final ConnectionLogAttempt? connectionLog;
 
   const RemotePage({
     super.key,
@@ -46,6 +48,7 @@ class RemotePage extends StatefulWidget {
     required this.accessCode,
     required this.signalToken,
     required this.iceServers,
+    this.connectionLog,
   });
 
   @override
@@ -170,7 +173,16 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
           };
         });
         if (s != SessionState.connected) _cancelAllInput();
+        if (s == SessionState.failed) {
+          unawaited(
+            widget.connectionLog?.finish(failureCode: 'SESSION_FAILED'),
+          );
+        }
+        if (s == SessionState.closed) {
+          unawaited(widget.connectionLog?.finish());
+        }
         if (s == SessionState.connected) {
+          widget.connectionLog?.connected();
           _onConnected();
         }
         if (s == SessionState.closed && mounted) {
@@ -233,6 +245,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
         widget.signalToken,
       );
     } catch (_) {
+      unawaited(widget.connectionLog?.finish(failureCode: 'SESSION_FAILED'));
       // 状态流里已处理
     }
   }
@@ -841,6 +854,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    unawaited(widget.connectionLog?.finish());
     WidgetsBinding.instance.removeObserver(this);
     _touch.onCursorMoved = null;
     _touch.onTransformChanged = null;
