@@ -7,6 +7,9 @@
 const STORAGE_KEY = 'quickdesk_lang';
 
 const zh = {
+    'files.transfer.finalizing': '正在保存',
+    'files.downloadReceived': '已接收 {filename}；已请求浏览器下载，保存结果请查看浏览器',
+    'files.downloadAckFailed': '文件已在本地接收/保存，但远端确认未发送成功',
     'files.folderUnsupported': '暂不支持文件夹，请选择普通文件',
     'files.transferUnavailable': '文件传输不可用、队列已满或文件无效',
     'files.transfer.queued': '排队中',
@@ -314,6 +317,9 @@ const zh = {
 };
 
 const en = {
+    'files.transfer.finalizing': 'Saving',
+    'files.downloadReceived': 'Received {filename}; browser download requested. Check the browser for its save result.',
+    'files.downloadAckFailed': 'File received/saved locally, but the host acknowledgement could not be sent',
     'files.folderUnsupported': 'Folders are not supported; select regular files',
     'files.transferUnavailable': 'File transfer unavailable, queue full or invalid file',
     'files.transfer.queued': 'Queued',
