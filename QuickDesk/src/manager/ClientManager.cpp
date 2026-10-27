@@ -44,8 +44,8 @@ ClientManager::ClientManager(QObject* parent)
     connect(this, &ClientManager::connectionStateChanged, this,
             [this](const QString& deviceId, const QString& state, const QJsonObject&) {
         const QString id = connectionIdFor(deviceId);
-        if (state == "connected") m_fileTransfers.beginSession(id, deviceId);
-        else if (state == "disconnected" || state == "failed") m_fileTransfers.endSession(id);
+        m_fileTransfers.reconcileSession(id, deviceId, state == "connected",
+                                         state == "disconnected" || state == "failed");
     });
 }
 
@@ -592,7 +592,16 @@ void ClientManager::startFileUpload(const QString& deviceId, const QUrl& fileUrl
     }
     const QString connectionId = connectionIdFor(deviceId);
     m_fileTransfers.beginSession(connectionId, deviceId);
+    if (!m_fileTransfers.sessionActive(connectionId)) {
+        emit fileTransferNotice(deviceId, tr("Disconnect and reconnect to reset this session's file queue."));
+        return;
+    }
     m_fileTransfers.enqueueUpload(connectionId, fileUrl);
+}
+
+void ClientManager::clearCompletedFileTasks()
+{
+    m_fileTransfers.clearCompleted();
 }
 
 void ClientManager::cancelFileTask(const QString& taskId)
@@ -649,6 +658,10 @@ void ClientManager::startFileDownload(const QString& deviceId)
 
     QJsonObject message;
     m_fileTransfers.beginSession(connId, deviceId);
+    if (!m_fileTransfers.sessionActive(connId)) {
+        emit fileTransferNotice(deviceId, tr("Disconnect and reconnect to reset this session's file queue."));
+        return;
+    }
     m_fileTransfers.registerDownload(connId, saveDir);
     message["type"] = "startFileDownload";
     message["connectionId"] = connId;
@@ -1035,16 +1048,13 @@ void ClientManager::handleConnectionListChanged(const QJsonObject& message)
 
     for (const auto& old : oldConnections) {
         if (!m_connections.contains(old.deviceId) ||
-            m_connections.value(old.deviceId).connectionId != old.connectionId ||
-            m_connections.value(old.deviceId).rtcState == RtcStatus::Disconnected ||
-            m_connections.value(old.deviceId).rtcState == RtcStatus::Failed ||
-            (old.rtcState == RtcStatus::Connected &&
-             m_connections.value(old.deviceId).rtcState != RtcStatus::Connected))
+            m_connections.value(old.deviceId).connectionId != old.connectionId)
             m_fileTransfers.endSession(old.connectionId);
     }
     for (const auto& current : m_connections)
-        if (current.rtcState == RtcStatus::Connected)
-            m_fileTransfers.beginSession(current.connectionId, current.deviceId);
+        m_fileTransfers.reconcileSession(current.connectionId, current.deviceId,
+            current.rtcState == RtcStatus::Connected,
+            current.rtcState == RtcStatus::Disconnected || current.rtcState == RtcStatus::Failed);
 
     emit connectionCountChanged();
     emit connectionListChanged();
