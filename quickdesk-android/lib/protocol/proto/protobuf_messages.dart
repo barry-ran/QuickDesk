@@ -93,25 +93,23 @@ class ControlMessage {
 // ==================== 消息编码 ====================
 
 Uint8List encodeMouseEvent(MouseEventMsg e) => concatBytes([
-      if (e.x != null) varintField(1, e.x),
-      if (e.y != null) varintField(2, e.y),
-      if (e.button != null) varintField(5, e.button),
-      if (e.buttonDown != null) varintField(6, e.buttonDown),
-      if (e.wheelDeltaX != null) floatField(7, e.wheelDeltaX),
-      if (e.wheelDeltaY != null) floatField(8, e.wheelDeltaY),
-      if (e.wheelTicksX != null) floatField(9, e.wheelTicksX),
-      if (e.wheelTicksY != null) floatField(10, e.wheelTicksY),
-    ]);
+  if (e.x != null) varintField(1, e.x),
+  if (e.y != null) varintField(2, e.y),
+  if (e.button != null) varintField(5, e.button),
+  if (e.buttonDown != null) varintField(6, e.buttonDown),
+  if (e.wheelDeltaX != null) floatField(7, e.wheelDeltaX),
+  if (e.wheelDeltaY != null) floatField(8, e.wheelDeltaY),
+  if (e.wheelTicksX != null) floatField(9, e.wheelTicksX),
+  if (e.wheelTicksY != null) floatField(10, e.wheelTicksY),
+]);
 
-Uint8List encodeKeyEvent(KeyEventMsg e) => concatBytes([
-      varintField(2, e.pressed),
-      varintField(3, e.usbKeycode),
-    ]);
+Uint8List encodeKeyEvent(KeyEventMsg e) =>
+    concatBytes([varintField(2, e.pressed), varintField(3, e.usbKeycode)]);
 
 Uint8List encodeClipboardEvent(ClipboardEventMsg e) => concatBytes([
-      lengthDelimitedField(1, e.mimeType),
-      lengthDelimitedField(2, e.data),
-    ]);
+  lengthDelimitedField(1, e.mimeType),
+  lengthDelimitedField(2, e.data),
+]);
 
 /// EventMessage 包装（internal.proto: timestamp=1, key=3, mouse=4, text=5）
 Uint8List encodeEventMessage({
@@ -119,54 +117,62 @@ Uint8List encodeEventMessage({
   KeyEventMsg? keyEvent,
   MouseEventMsg? mouseEvent,
   String? textEventText,
-}) =>
-    concatBytes([
-      if (timestamp != null) varintField(1, timestamp),
-      if (keyEvent != null) lengthDelimitedField(3, encodeKeyEvent(keyEvent)),
-      if (mouseEvent != null)
-        lengthDelimitedField(4, encodeMouseEvent(mouseEvent)),
-      if (textEventText != null)
-        lengthDelimitedField(5, lengthDelimitedField(1, textEventText)),
-    ]);
+}) => concatBytes([
+  if (timestamp != null) varintField(1, timestamp),
+  if (keyEvent != null) lengthDelimitedField(3, encodeKeyEvent(keyEvent)),
+  if (mouseEvent != null) lengthDelimitedField(4, encodeMouseEvent(mouseEvent)),
+  if (textEventText != null)
+    lengthDelimitedField(5, lengthDelimitedField(1, textEventText)),
+]);
 
 Uint8List encodeVideoTrackLayout(VideoTrackLayout t) => concatBytes([
-      if (t.mediaStreamId != null) lengthDelimitedField(1, t.mediaStreamId),
-      if (t.positionX != null) varintField(2, t.positionX),
-      if (t.positionY != null) varintField(3, t.positionY),
-      if (t.width != null) varintField(4, t.width),
-      if (t.height != null) varintField(5, t.height),
-      if (t.xDpi != null) varintField(6, t.xDpi),
-      if (t.yDpi != null) varintField(7, t.yDpi),
-      if (t.screenId != null) varintField(8, t.screenId),
-      if (t.displayName != null) lengthDelimitedField(9, t.displayName),
-    ]);
+  if (t.mediaStreamId != null) lengthDelimitedField(1, t.mediaStreamId),
+  if (t.positionX != null) varintField(2, t.positionX),
+  if (t.positionY != null) varintField(3, t.positionY),
+  if (t.width != null) varintField(4, t.width),
+  if (t.height != null) varintField(5, t.height),
+  if (t.xDpi != null) varintField(6, t.xDpi),
+  if (t.yDpi != null) varintField(7, t.yDpi),
+  if (t.screenId != null) varintField(8, t.screenId),
+  if (t.displayName != null) lengthDelimitedField(9, t.displayName),
+]);
 
 Uint8List encodeVideoLayout(VideoLayoutMsg layout) => concatBytes([
-      for (final t in layout.videoTracks)
-        lengthDelimitedField(1, encodeVideoTrackLayout(t)),
-      if (layout.supportsFullDesktopCapture != null)
-        varintField(2, layout.supportsFullDesktopCapture),
-      if (layout.primaryScreenId != null)
-        varintField(3, layout.primaryScreenId),
-    ]);
+  for (final t in layout.videoTracks)
+    lengthDelimitedField(1, encodeVideoTrackLayout(t)),
+  if (layout.supportsFullDesktopCapture != null)
+    varintField(2, layout.supportsFullDesktopCapture),
+  if (layout.primaryScreenId != null) varintField(3, layout.primaryScreenId),
+]);
 
 /// ControlMessage 包装（internal.proto 字段号对照 JS 版本）
 Uint8List encodeControlMessage({
   ClipboardEventMsg? clipboardEvent,
+  int? targetFramerate,
+  int? preferredMinBitrateBps,
+  ClientResolutionMsg? clientResolution,
   bool? audioControlEnable,
   String? capabilities,
   VideoLayoutMsg? videoLayout,
-}) =>
-    concatBytes([
-      if (clipboardEvent != null)
-        lengthDelimitedField(1, encodeClipboardEvent(clipboardEvent)),
-      if (audioControlEnable != null)
-        lengthDelimitedField(5, varintField(1, audioControlEnable)),
-      if (capabilities != null)
-        lengthDelimitedField(6, lengthDelimitedField(1, capabilities)),
-      if (videoLayout != null)
-        lengthDelimitedField(10, encodeVideoLayout(videoLayout)),
-    ]);
+}) => concatBytes([
+  if (clipboardEvent != null)
+    lengthDelimitedField(1, encodeClipboardEvent(clipboardEvent)),
+  if (clientResolution != null)
+    lengthDelimitedField(2, encodeClientResolution(clientResolution)),
+  if (targetFramerate != null)
+    lengthDelimitedField(
+      3,
+      concatBytes([varintField(1, true), varintField(5, targetFramerate)]),
+    ),
+  if (preferredMinBitrateBps != null)
+    lengthDelimitedField(14, varintField(1, preferredMinBitrateBps)),
+  if (audioControlEnable != null)
+    lengthDelimitedField(5, varintField(1, audioControlEnable)),
+  if (capabilities != null)
+    lengthDelimitedField(6, lengthDelimitedField(1, capabilities)),
+  if (videoLayout != null)
+    lengthDelimitedField(10, encodeVideoLayout(videoLayout)),
+]);
 
 // ==================== 消息解码 ====================
 
@@ -368,3 +374,23 @@ EventMessage decodeEventMessage(Uint8List data) {
   }
   return result;
 }
+
+/// control.proto ClientResolution; DPI is not field 3/4 (legacy fields).
+class ClientResolutionMsg {
+  final int width, height, dpi;
+  final int? screenId;
+  const ClientResolutionMsg(
+    this.width,
+    this.height, {
+    this.dpi = 96,
+    this.screenId,
+  });
+}
+
+Uint8List encodeClientResolution(ClientResolutionMsg value) => concatBytes([
+  varintField(1, value.width),
+  varintField(2, value.height),
+  varintField(5, value.dpi),
+  varintField(6, value.dpi),
+  if (value.screenId != null) varintField(7, value.screenId),
+]);
