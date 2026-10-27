@@ -32,6 +32,8 @@ import 'datachannel_config.dart';
 import 'datachannel_handler.dart';
 import 'host_input.dart';
 import 'peer/candidates.dart';
+import 'host_clients.dart';
+export 'host_clients.dart' show ConnectedHostClient;
 import 'peer/peer_connection.dart';
 import 'peer/serial_queue.dart';
 import 'proto/protobuf_messages.dart';
@@ -49,13 +51,7 @@ enum HostSessionState {
 }
 
 /// 单个客户端的连接状态
-enum HostPeerState {
-  negotiating,
-  authenticating,
-  connected,
-  closed,
-  failed,
-}
+enum HostPeerState { negotiating, authenticating, connected, closed, failed }
 
 class HostSession {
   final String signalingUrl;
@@ -86,6 +82,7 @@ class HostSession {
   String? failureReason;
 
   WebSocketTransport? _transport;
+  bool _stopping = false;
   final Map<String, _HostPeer> _peers = {}; // client_id -> peer
 
   final _stateCtrl = StreamController<HostSessionState>.broadcast();
@@ -95,6 +92,30 @@ class HostSession {
   Stream<HostSessionState> get onStateChange => _stateCtrl.stream;
   Stream<int> get onPeerCountChange => _peerCtrl.stream;
   Stream<String> get onLog => _logCtrl.stream;
+
+  List<ConnectedHostClient> get connectedClients => List.unmodifiable(
+    _peers.values
+        .where((p) => p.state == HostPeerState.connected && !p._closing)
+        .map(
+          (p) => ConnectedHostClient(
+            clientId: p.clientId,
+            connectedAt: p.connectedAt!,
+          ),
+        ),
+  );
+
+  Future<void> disconnectClient(
+    String clientId, {
+    DateTime? connectedAt,
+  }) async {
+    if (await disconnectHostClient(
+      _peers,
+      clientId,
+      connectedAt: connectedAt,
+    )) {
+      if (!_peerCtrl.isClosed) _peerCtrl.add(peerCount);
+    }
+  }
 
   int get peerCount =>
       _peers.values.where((p) => p.state == HostPeerState.connected).length;
@@ -116,6 +137,7 @@ class HostSession {
 
   /// 连接信令并进入监听状态。[signalToken] 由 HostApi.issueSignalToken 换取（一次性）。
   Future<void> listen(String signalToken) async {
+    if (_stopping) return;
     _transport = WebSocketTransport(
       signalingUrl: signalingUrl,
       onMessage: _onSignalingMessage,
@@ -134,10 +156,16 @@ class HostSession {
       signalToken: signalToken,
       role: 'host',
     );
+    if (_stopping) {
+      _transport?.disconnect();
+      return;
+    }
     _setState(HostSessionState.listening);
   }
 
   Future<void> stop() async {
+    _stopping = true;
+    _setState(HostSessionState.closed);
     for (final peer in _peers.values.toList()) {
       await peer.close(sendTerminate: true);
     }
@@ -161,7 +189,9 @@ class HostSession {
   // ==================== 信令入口 ====================
 
   void _onSignalingMessage(String message, String? fromClientId) {
+    if (state != HostSessionState.listening) return;
     final clientId = fromClientId ?? '';
+    if (clientId.isEmpty) return;
     final trimmed = message.trim();
 
     if (trimmed.startsWith('{')) {
@@ -174,7 +204,7 @@ class HostSession {
           if (peer != null) {
             peer.close(sendTerminate: false);
             _peers.remove(clientId);
-            _peerCtrl.add(peerCount);
+            if (!_peerCtrl.isClosed) _peerCtrl.add(peerCount);
           }
         }
       } catch (_) {}
@@ -186,6 +216,7 @@ class HostSession {
     // 每个客户端的消息串行处理
     var peer = _peers[clientId];
     if (peer == null) {
+      if (JingleParser().parse(trimmed)?.action != 'session-initiate') return;
       peer = _HostPeer(session: this, clientId: clientId);
       _peers[clientId] = peer;
     }
@@ -199,24 +230,25 @@ class HostSession {
     _transport!.send(xml, targetClientId: clientId);
   }
 
-  void _onPeerClosed(String clientId) {
-    _peers.remove(clientId);
-    _peerCtrl.add(peerCount);
+  void _onPeerClosed(_HostPeer peer) {
+    if (!identical(_peers[peer.clientId], peer)) return;
+    _peers.remove(peer.clientId);
+    if (!_peerCtrl.isClosed) _peerCtrl.add(peerCount);
   }
 
   void _onPeerConnected() {
-    _peerCtrl.add(peerCount);
+    if (!_peerCtrl.isClosed) _peerCtrl.add(peerCount);
   }
 
   void _setState(HostSessionState s) {
     state = s;
-    _stateCtrl.add(s);
+    if (!_stateCtrl.isClosed) _stateCtrl.add(s);
   }
 
   void _log(String message) {
     // ignore: avoid_print
     print('[HostSession] $message');
-    _logCtrl.add(message);
+    if (!_logCtrl.isClosed) _logCtrl.add(message);
   }
 
   void dispose() {
@@ -228,7 +260,7 @@ class HostSession {
 }
 
 /// 单客户端连接：一套 Jingle sid + RTCPeerConnection + SPAKE2 Bob。
-class _HostPeer {
+class _HostPeer implements HostClientConnection {
   final HostSession session;
   final String clientId;
 
@@ -255,8 +287,9 @@ class _HostPeer {
   /// 本端 candidate：签名 offer 发出且 setLocal 完成前缓冲。
   /// Chromium 会把认证后的 transport-info 直接交给 WebrtcTransport，
   /// 必须保证签名 offer 先到，candidate 不能抢在 offer 前面。
-  late final LocalCandidateGate _localCandidates =
-      LocalCandidateGate(_sendLocalCandidate);
+  late final LocalCandidateGate _localCandidates = LocalCandidateGate(
+    _sendLocalCandidate,
+  );
 
   // 逐条串行处理信令
   late final SerialTaskQueue<String> _queue = SerialTaskQueue(
@@ -273,7 +306,15 @@ class _HostPeer {
 
   _HostPeer({required this.session, required this.clientId});
 
-  void enqueue(String xml) => _queue.add(xml);
+  @override
+  DateTime? connectedAt;
+
+  @override
+  bool get isConnected => state == HostPeerState.connected && !_closing;
+
+  void enqueue(String xml) {
+    if (!_closing) _queue.add(xml);
+  }
 
   Future<void> _process(String xml) async {
     final parsed = _parser.parse(xml);
@@ -281,6 +322,7 @@ class _HostPeer {
   }
 
   Future<void> _handle(JingleMessage message) async {
+    if (_closing) return;
     // 过滤不属于本会话的消息
     if (message.sid.isNotEmpty &&
         _jingle.sessionId != null &&
@@ -289,7 +331,9 @@ class _HostPeer {
           message.iqId.isNotEmpty &&
           message.from.isNotEmpty) {
         session._sendToClient(
-            clientId, _jingle.buildIqResult(message.iqId, message.from));
+          clientId,
+          _jingle.buildIqResult(message.iqId, message.from),
+        );
       }
       return;
     }
@@ -301,7 +345,9 @@ class _HostPeer {
         message.iqId.isNotEmpty &&
         message.from.isNotEmpty) {
       session._sendToClient(
-          clientId, _jingle.buildIqResult(message.iqId, message.from));
+        clientId,
+        _jingle.buildIqResult(message.iqId, message.from),
+      );
     }
 
     switch (message.action) {
@@ -315,10 +361,12 @@ class _HostPeer {
         await _handleTransportInfo(message);
         break;
       case 'session-terminate':
-        session._log('peer[$clientId] terminated by client: '
-            '${message.terminateInfo?.describe() ?? 'unknown'}');
+        session._log(
+          'peer[$clientId] terminated by client: '
+          '${message.terminateInfo?.describe() ?? 'unknown'}',
+        );
         await close(sendTerminate: false);
-        session._onPeerClosed(clientId);
+        session._onPeerClosed(this);
         break;
       case '_iq_response':
         break;
@@ -395,19 +443,24 @@ class _HostPeer {
     // 兼容旧版 Android/Web 客户端：它们在 session-initiate 中就携带
     // 基础 offer。先应答该 offer，认证后再由 Host 发起带视频的重协商。
     await _createPeerConnection();
+    if (_closing) return;
     try {
       await _pc!.setRemoteDescription(
         RTCSessionDescription(initialSdp.sdp, 'offer'),
       );
+      if (_closing) return;
       final answer = await _pc!.createAnswer();
+      if (_closing) return;
       await _pc!.setLocalDescription(answer);
+      if (_closing) return;
 
       session._sendToClient(
         clientId,
         _jingle.buildSessionAccept(answer.sdp, authMsg),
       );
-      session
-          ._log('peer[$clientId] sent legacy session-accept (answer + auth)');
+      session._log(
+        'peer[$clientId] sent legacy session-accept (answer + auth)',
+      );
 
       await _remoteCandidates.markReady();
     } catch (e) {
@@ -421,8 +474,7 @@ class _HostPeer {
     final st = driveAuthExchange(
       _auth!,
       message.authMessage!,
-      (next) =>
-          session._sendToClient(clientId, _jingle.buildSessionInfo(next)),
+      (next) => session._sendToClient(clientId, _jingle.buildSessionInfo(next)),
     );
 
     if (st == AuthState.rejected) {
@@ -455,7 +507,10 @@ class _HostPeer {
     // client 的 answer（对 host offer 的应答）
     if (message.sdp != null && message.sdp!.type == 'answer') {
       if (!_verifySignature(
-          message.sdp!.sdp, 'answer', message.sdp!.signature)) {
+        message.sdp!.sdp,
+        'answer',
+        message.sdp!.signature,
+      )) {
         await _fail('answer signature mismatch');
         return;
       }
@@ -482,7 +537,12 @@ class _HostPeer {
   Future<void> _createPeerConnection() async {
     if (_pc != null) return;
 
-    _pc = await createRemotingPeerConnection(session.iceServers);
+    final pc = await createRemotingPeerConnection(session.iceServers);
+    if (_closing) {
+      await pc.close();
+      return;
+    }
+    _pc = pc;
 
     _pc!.onIceCandidate = _localCandidates.add;
 
@@ -512,6 +572,10 @@ class _HostPeer {
 
     // client 会创建 'event' DataChannel（输入事件）
     _pc!.onDataChannel = (channel) {
+      if (_closing) {
+        unawaited(channel.close());
+        return;
+      }
       session._log(
         'peer[$clientId] incoming datachannel: ${channel.label} '
         '(sid=${channel.id}, state=${channel.state})',
@@ -524,11 +588,12 @@ class _HostPeer {
 
   /// 认证完成后：创建连接、加视频轨和 control 通道，再生成签名 offer。
   Future<void> _startMediaNegotiation() async {
-    if (_mediaNegotiationStarted) return;
+    if (_mediaNegotiationStarted || _closing) return;
     _mediaNegotiationStarted = true;
 
     try {
       await _createPeerConnection();
+      if (_closing) return;
 
       // 加入屏幕视频轨（sendonly）
       final stream = session.screenStreamProvider();
@@ -547,6 +612,7 @@ class _HostPeer {
           session._log('peer[$clientId] screen track ended: ${track.id}');
         };
         await _pc!.addTrack(track, stream);
+        if (_closing) return;
       }
 
       // host 创建 'control' 通道（下发 cursor/clipboard/capabilities/VideoLayout）
@@ -554,6 +620,10 @@ class _HostPeer {
         'control',
         createRemotingDataChannelInit(),
       );
+      if (_closing) {
+        await controlChannel.close();
+        return;
+      }
       session._log(
         'peer[$clientId] created control datachannel: '
         'sid=${controlChannel.id}',
@@ -563,6 +633,7 @@ class _HostPeer {
       _channels.handleDataChannel(controlChannel);
 
       final offer = await _pc!.createOffer();
+      if (_closing) return;
       final sdp = offer.sdp;
       if (sdp == null || sdp.isEmpty) {
         throw StateError('createOffer returned empty SDP');
@@ -581,7 +652,7 @@ class _HostPeer {
       session._log('peer[$clientId] sent signed offer (transport-info)');
 
       await _pc!.setLocalDescription(offer);
-      _localCandidates.open();
+      if (!_closing) _localCandidates.open();
     } catch (e) {
       await _fail('media negotiation failed: $e');
     }
@@ -590,6 +661,7 @@ class _HostPeer {
   // ==================== 通道回调 ====================
 
   void _onControlOpen() {
+    if (_closing || session.state != HostSessionState.listening) return;
     if (!_initialControlMessagesSent) {
       _initialControlMessagesSent = true;
       if (session.capabilities.isNotEmpty) {
@@ -606,9 +678,15 @@ class _HostPeer {
   }
 
   void _notifyIfChannelsReady() {
-    if (!_channels.controlReady || !_channels.eventReady || _closing) return;
+    if (!_authenticated ||
+        !_channels.controlReady ||
+        !_channels.eventReady ||
+        _closing) {
+      return;
+    }
     if (state == HostPeerState.connected) return;
 
+    connectedAt = DateTime.now();
     state = HostPeerState.connected;
     session._log(
       'peer[$clientId] connected: control/event datachannels are open',
@@ -624,30 +702,40 @@ class _HostPeer {
     final layout = VideoLayoutMsg()
       ..supportsFullDesktopCapture = false
       ..primaryScreenId = 0;
-    layout.videoTracks.add(VideoTrackLayout()
-      ..mediaStreamId = streamId
-      ..positionX = 0
-      ..positionY = 0
-      ..width = width
-      ..height = height
-      ..screenId = 0);
+    layout.videoTracks.add(
+      VideoTrackLayout()
+        ..mediaStreamId = streamId
+        ..positionX = 0
+        ..positionY = 0
+        ..width = width
+        ..height = height
+        ..screenId = 0,
+    );
     _channels.sendVideoLayout(layout);
   }
 
   void _dispatchInput(EventMessage event) {
+    if (_closing ||
+        !_authenticated ||
+        state != HostPeerState.connected ||
+        session.state != HostSessionState.listening) {
+      return;
+    }
     final sink = session.onInput;
     if (sink == null) return;
 
     if (event.mouseEvent != null) {
       final m = event.mouseEvent!;
-      sink(HostInputEvent.mouse(
-        x: m.x,
-        y: m.y,
-        button: m.button,
-        buttonDown: m.buttonDown,
-        wheelDeltaX: m.wheelDeltaX,
-        wheelDeltaY: m.wheelDeltaY,
-      ));
+      sink(
+        HostInputEvent.mouse(
+          x: m.x,
+          y: m.y,
+          button: m.button,
+          buttonDown: m.buttonDown,
+          wheelDeltaX: m.wheelDeltaX,
+          wheelDeltaY: m.wheelDeltaY,
+        ),
+      );
     }
     if (event.keyEvent != null) {
       final k = event.keyEvent!;
@@ -661,13 +749,16 @@ class _HostPeer {
   // ==================== 发送/工具 ====================
 
   void _sendLocalCandidate(RTCIceCandidate candidate) {
+    if (_closing) return;
     session._sendToClient(
       clientId,
-      _jingle.buildTransportInfo(IceCandidateInfo(
-        candidate: candidate.candidate!,
-        sdpMid: candidate.sdpMid ?? '',
-        sdpMLineIndex: candidate.sdpMLineIndex ?? 0,
-      )),
+      _jingle.buildTransportInfo(
+        IceCandidateInfo(
+          candidate: candidate.candidate!,
+          sdpMid: candidate.sdpMid ?? '',
+          sdpMLineIndex: candidate.sdpMLineIndex ?? 0,
+        ),
+      ),
     );
   }
 
@@ -678,14 +769,16 @@ class _HostPeer {
   }
 
   Future<void> _fail(String reason) async {
+    if (_closing) return;
     if (_closing || state == HostPeerState.closed) return;
     session._log('peer[$clientId] failed: $reason');
     state = HostPeerState.failed;
     // 失败用 general-error，客户端（含 Chromium 端）才会按错误而非正常断开处理
     await close(sendTerminate: true, terminateReason: 'general-error');
-    session._onPeerClosed(clientId);
+    session._onPeerClosed(this);
   }
 
+  @override
   Future<void> close({
     required bool sendTerminate,
     String terminateReason = 'success',
@@ -695,7 +788,9 @@ class _HostPeer {
     if (sendTerminate && _jingle.sessionId != null) {
       try {
         session._sendToClient(
-            clientId, _jingle.buildSessionTerminate(terminateReason));
+          clientId,
+          _jingle.buildSessionTerminate(terminateReason),
+        );
       } catch (_) {}
     }
     _queue.clear();

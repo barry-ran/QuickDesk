@@ -12,6 +12,7 @@ import '../host/host_controller.dart';
 import '../host/host_credential_store.dart';
 import '../host/input_injector.dart';
 import '../l10n/app_strings.dart';
+import '../protocol/host_session.dart';
 
 class HostPage extends StatefulWidget {
   const HostPage({super.key});
@@ -164,6 +165,51 @@ class _HostPageState extends State<HostPage> {
     if (mounted && generation == _configuration) setState(() => _busy = false);
   }
 
+  Future<void> _regenerateCode() async {
+    if (_busy || _online) return;
+    final generation = _configuration;
+    setState(() => _busy = true);
+    try {
+      await _controller?.regenerateAccessCode();
+    } catch (_) {
+      if (mounted && generation == _configuration) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(L10n.t('host.codeFailed'))));
+      }
+    } finally {
+      if (mounted && generation == _configuration) {
+        setState(() => _busy = false);
+      }
+    }
+  }
+
+  Future<void> _disconnectClient(ConnectedHostClient client) async {
+    final controller = _controller;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(L10n.t('host.disconnectClient')),
+        content: Text(L10n.t('host.disconnectConfirm')),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(L10n.t('quality.close')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(L10n.t('host.disconnectClient')),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && mounted && identical(controller, _controller)) {
+      await controller?.disconnectClient(
+        client.clientId,
+        connectedAt: client.connectedAt,
+      );
+    }
+  }
+
   bool get _online => _status.stage == HostStage.online;
 
   @override
@@ -183,6 +229,44 @@ class _HostPageState extends State<HostPage> {
 
           const SizedBox(height: 16),
           _buildBackendCard(scheme),
+          const SizedBox(height: 16),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    L10n.t('host.clients'),
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  if (_status.clients.isEmpty) Text(L10n.t('host.noClients')),
+                  for (final client in _status.clients)
+                    ListTile(
+                      title: Text(
+                        client.clientId,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      subtitle: Text(
+                        client.connectedAt
+                            .toLocal()
+                            .toString()
+                            .split('.')
+                            .first,
+                      ),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.link_off),
+                        tooltip: L10n.t('host.disconnectClient'),
+                        onPressed: _busy
+                            ? null
+                            : () => _disconnectClient(client),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
 
           if (_status.stage == HostStage.needAccessibility) ...[
             const SizedBox(height: 16),
@@ -296,6 +380,10 @@ class _HostPageState extends State<HostPage> {
               copyable: true,
             ),
             const Divider(height: 24),
+            Text(
+              L10n.t('host.rotateHint'),
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
             Row(
               children: [
                 Expanded(
@@ -309,7 +397,7 @@ class _HostPageState extends State<HostPage> {
                   tooltip: L10n.t('host.regenCode'),
                   onPressed: _online || _busy || _controller == null
                       ? null
-                      : () => _controller!.regenerateAccessCode(),
+                      : _regenerateCode,
                   icon: const Icon(Icons.refresh),
                 ),
               ],
