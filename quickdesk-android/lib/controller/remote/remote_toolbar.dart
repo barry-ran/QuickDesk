@@ -23,6 +23,12 @@ class RemoteToolbar extends StatelessWidget {
   final VoidCallback onUpload;
   final VoidCallback onDownload;
   final VoidCallback onDisconnect;
+  final VoidCallback onHelp;
+  final VoidCallback onLeftClick;
+  final VoidCallback onRightClick;
+  final VoidCallback onToggleDrag;
+  final bool dragArmed;
+  final ValueChanged<int> onControlKey;
 
   const RemoteToolbar({
     super.key,
@@ -42,6 +48,12 @@ class RemoteToolbar extends StatelessWidget {
     required this.onUpload,
     required this.onDownload,
     required this.onDisconnect,
+    required this.onHelp,
+    required this.onLeftClick,
+    required this.onRightClick,
+    required this.onToggleDrag,
+    required this.dragArmed,
+    required this.onControlKey,
   });
 
   @override
@@ -49,95 +61,121 @@ class RemoteToolbar extends StatelessWidget {
     return Material(
       color: Colors.black54,
       borderRadius: BorderRadius.circular(24),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
+      child: Wrap(
+        alignment: WrapAlignment.end,
         children: [
-          if (displays.length > 1)
-            PopupMenuButton<int>(
-              icon: const Icon(Icons.desktop_windows, color: Colors.white),
-              tooltip: L10n.t('remote.switchDisplay'),
-              onSelected: onSelectDisplay,
-              itemBuilder: (context) => [
-                for (var i = 0; i < displays.length; i++)
-                  PopupMenuItem<int>(
-                    value: i,
-                    child: Row(
-                      children: [
-                        Icon(
-                          i == activeDisplayIndex
-                              ? Icons.radio_button_checked
-                              : Icons.radio_button_unchecked,
-                          size: 18,
-                        ),
-                        const SizedBox(width: 8),
-                        Text('${L10n.t('remote.display', {'n': i + 1})}'
-                            '${(displays[i].width ?? 0) > 0 ? '  ${displays[i].width}×${displays[i].height}' : ''}'),
-                      ],
-                    ),
-                  ),
-              ],
-            ),
+          IconButton(
+            icon: const Icon(Icons.mouse, color: Colors.white),
+            tooltip: L10n.t('remote.leftClick'),
+            onPressed: onLeftClick,
+          ),
+          IconButton(
+            icon: const Icon(Icons.ads_click, color: Colors.white),
+            tooltip: L10n.t('remote.rightClick'),
+            onPressed: onRightClick,
+          ),
           IconButton(
             icon: Icon(
-              landscape
-                  ? Icons.stay_current_portrait
-                  : Icons.stay_current_landscape,
-              color: Colors.white,
+              Icons.pan_tool,
+              color: dragArmed ? Colors.lightBlueAccent : Colors.white,
             ),
-            tooltip: L10n.t('remote.rotate'),
-            onPressed: onToggleOrientation,
+            tooltip: L10n.t(dragArmed ? 'remote.cancelDrag' : 'remote.armDrag'),
+            onPressed: onToggleDrag,
           ),
-          if (zoomed)
-            IconButton(
-              icon: const Icon(Icons.zoom_out_map, color: Colors.white),
-              tooltip: L10n.t('remote.resetZoom'),
-              onPressed: onResetZoom,
-            ),
           IconButton(
-            icon: Icon(Icons.keyboard,
-                color: keyboardVisible ? Colors.lightBlueAccent : Colors.white),
+            icon: Icon(
+              Icons.keyboard,
+              color: keyboardVisible ? Colors.lightBlueAccent : Colors.white,
+            ),
             tooltip: L10n.t('remote.keyboard'),
             onPressed: onToggleKeyboard,
           ),
           IconButton(
-            icon: const Icon(Icons.content_paste_go, color: Colors.white),
-            tooltip: L10n.t('remote.sendClipboard'),
-            onPressed: () async {
-              await onSendClipboard();
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                      content: Text(L10n.t('remote.clipboardSent')),
-                      duration: const Duration(seconds: 1)),
-                );
+            icon: const Icon(Icons.zoom_out_map, color: Colors.white),
+            tooltip: L10n.t('remote.resetZoom'),
+            onPressed: onResetZoom,
+          ),
+          IconButton(
+            icon: const Icon(Icons.help_outline, color: Colors.white),
+            tooltip: L10n.t('remote.gestureHelp'),
+            onPressed: onHelp,
+          ),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert, color: Colors.white),
+            tooltip: L10n.t('remote.more'),
+            onSelected: (value) async {
+              if (value.startsWith('display:')) {
+                onSelectDisplay(int.parse(value.split(':').last));
+              } else if (value.startsWith('key:')) {
+                onControlKey(int.parse(value.split(':').last));
+              } else {
+                switch (value) {
+                  case 'rotate':
+                    onToggleOrientation();
+                  case 'clipboard':
+                    await onSendClipboard();
+                  case 'stats':
+                    onToggleStats();
+                  case 'upload':
+                    onUpload();
+                  case 'download':
+                    onDownload();
+                  case 'disconnect':
+                    onDisconnect();
+                }
               }
             },
-          ),
-          IconButton(
-            icon: Icon(Icons.insights,
-                color: statsVisible ? Colors.lightBlueAccent : Colors.white),
-            tooltip: L10n.t('remote.stats'),
-            onPressed: onToggleStats,
-          ),
-          if (supportsFileTransfer)
-            PopupMenuButton<String>(
-              icon: const Icon(Icons.folder_open, color: Colors.white),
-              tooltip: L10n.t('file.transfer'),
-              onSelected: (v) {
-                if (v == 'upload') onUpload();
-                if (v == 'download') onDownload();
-              },
-              itemBuilder: (context) => [
+            itemBuilder: (context) => [
+              for (final entry in const <int, String>{
+                0x29: 'Esc',
+                0x2b: 'Tab',
+                0x28: 'Enter',
+                0x2a: '⌫ Backspace',
+                0x50: '←',
+                0x52: '↑',
+                0x4f: '→',
+                0x51: '↓',
+              }.entries)
                 PopupMenuItem(
-                    value: 'upload', child: Text(L10n.t('file.upload'))),
+                  value: 'key:${entry.key}',
+                  child: Text(entry.value),
+                ),
+              const PopupMenuDivider(),
+              for (var i = 0; i < displays.length; i++)
+                CheckedPopupMenuItem(
+                  value: 'display:$i',
+                  checked: i == activeDisplayIndex,
+                  child: Text(L10n.t('remote.display', {'n': i + 1})),
+                ),
+              PopupMenuItem(
+                value: 'rotate',
+                child: Text(L10n.t('remote.rotate')),
+              ),
+              PopupMenuItem(
+                value: 'clipboard',
+                child: Text(L10n.t('remote.sendClipboard')),
+              ),
+              CheckedPopupMenuItem(
+                value: 'stats',
+                checked: statsVisible,
+                child: Text(L10n.t('remote.stats')),
+              ),
+              if (supportsFileTransfer) ...[
                 PopupMenuItem(
-                    value: 'download', child: Text(L10n.t('file.download'))),
+                  value: 'upload',
+                  child: Text(L10n.t('file.upload')),
+                ),
+                PopupMenuItem(
+                  value: 'download',
+                  child: Text(L10n.t('file.download')),
+                ),
               ],
-            ),
-          IconButton(
-            icon: const Icon(Icons.close, color: Colors.white),
-            tooltip: L10n.t('remote.disconnect'),
-            onPressed: onDisconnect,
+              const PopupMenuDivider(),
+              PopupMenuItem(
+                value: 'disconnect',
+                child: Text(L10n.t('remote.disconnect')),
+              ),
+            ],
           ),
         ],
       ),

@@ -4,10 +4,12 @@ on:
   push:
     paths:
       - 'quickdesk-android/**'
+      - 'test/fixtures/mobile-gestures.json'
       - '.github/workflows/quickdesk-android.yml'
   pull_request:
     paths:
       - 'quickdesk-android/**'
+      - 'test/fixtures/mobile-gestures.json'
       - '.github/workflows/quickdesk-android.yml'
   workflow_dispatch:
 

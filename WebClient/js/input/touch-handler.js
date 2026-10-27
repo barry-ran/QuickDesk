@@ -9,13 +9,13 @@
  *    双击      → 双击
  *    双击后拖动 → 按住左键拖拽
  *    长按(500ms) → 右键点击
- *    双指滑动  → 滚轮
+ *    双指滑动  → 滚轮（所有缩放级别）
  *    双指捏合  → 缩放画面
  *
  *  放大状态（scale > 1）：
  *    单指拖动  → 移动光标，画面自动跟随
  *    单击/双击/长按 → 同上（在当前光标位置操作）
- *    双指捏合  → 继续缩放
+ *    双指滑动 → 滚轮；双指捏合 → 继续缩放/平移
  */
 
 import { MouseButton } from '../protocol/protobuf-messages.js';
@@ -46,6 +46,8 @@ export class TouchHandler {
         this._lastTapPos = null;
         this._secondTap = false;
         this._dragging = false;
+        this._dragArmed = false;
+        this.onDragStateChanged = null;
         this._longPressTimer = null;
         this._moved = false;
         this._activeTouches = 0;
@@ -62,15 +64,20 @@ export class TouchHandler {
         this._pinchStartTranslate = null;
 
         this._cursorEl = null;
+        this._gestureBlocked = false;
+        this._twoFingerMode = null;
     }
 
     setRemoteResolution(w, h) {
+        this.cancelGesture();
         this.remoteWidth = w;
         this.remoteHeight = h;
         if (this._cursorX === 0 && this._cursorY === 0 && w > 0 && h > 0) {
             this._cursorX = Math.round(w / 2);
             this._cursorY = Math.round(h / 2);
         }
+        this._cursorX = Math.max(0, Math.min(w - 1, this._cursorX));
+        this._cursorY = Math.max(0, Math.min(h - 1, this._cursorY));
         this._updateCursorElement();
     }
 
@@ -95,6 +102,29 @@ export class TouchHandler {
         this.target.addEventListener('touchmove', h.touchmove, opts);
         this.target.addEventListener('touchend', h.touchend, opts);
         this.target.addEventListener('touchcancel', h.touchcancel, opts);
+        h.blur = () => this.cancelGesture();
+        h.visibility = () => { if (document.hidden) this.cancelGesture(); };
+        h.resize = () => {
+            this.cancelGesture();
+            this._applyTransform();
+            this._updateCursorElement();
+            if (this.isZoomed) this._autoPanToFollow();
+        };
+        if (typeof ResizeObserver !== 'undefined') {
+            let previous = this.video.parentElement.getBoundingClientRect();
+            this._resizeObserver = new ResizeObserver(() => {
+                const current = this.video.parentElement.getBoundingClientRect();
+                if (current.width === previous.width && current.height === previous.height) return;
+                previous = current;
+                h.resize();
+            });
+            this._resizeObserver.observe(this.video.parentElement);
+        }
+        window.addEventListener('blur', h.blur);
+        document.addEventListener('visibilitychange', h.visibility);
+        window.addEventListener('resize', h.resize);
+        window.visualViewport?.addEventListener('resize', h.resize);
+        this._updateCursorElement();
     }
 
     disable() {
@@ -105,6 +135,12 @@ export class TouchHandler {
         this.target.removeEventListener('touchmove', h.touchmove);
         this.target.removeEventListener('touchend', h.touchend);
         this.target.removeEventListener('touchcancel', h.touchcancel);
+        this._resizeObserver?.disconnect();
+        this._resizeObserver = null;
+        window.removeEventListener('blur', h.blur);
+        document.removeEventListener('visibilitychange', h.visibility);
+        window.removeEventListener('resize', h.resize);
+        window.visualViewport?.removeEventListener('resize', h.resize);
         this._cancelActiveGesture();
         this._removeCursorElement();
     }
@@ -118,7 +154,13 @@ export class TouchHandler {
         if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) {
             active.blur();
         }
+        if (this._activeTouches === 0) this._gestureBlocked = false;
         this._activeTouches = e.touches.length;
+        if (e.touches.length > 2) {
+            this.cancelGesture();
+            return;
+        }
+        if (this._gestureBlocked) return;
 
         if (e.touches.length === 1) {
             const t = e.touches[0];
@@ -126,7 +168,7 @@ export class TouchHandler {
             this._lastSinglePos = { x: t.clientX, y: t.clientY };
             this._moved = false;
             this._secondTap = this._isSecondTap(t);
-            if (!this._secondTap) {
+            if (!this._secondTap && !this._dragArmed) {
                 this._lastTapTime = 0;
                 this._lastTapPos = null;
                 this._startLongPress();
@@ -137,6 +179,8 @@ export class TouchHandler {
                 this._sendButton(MouseButton.BUTTON_LEFT, false);
                 this._dragging = false;
             }
+            this._dragArmed = false;
+            this.onDragStateChanged?.(false);
             this._secondTap = false;
             this._lastTapTime = 0;
             this._lastTapPos = null;
@@ -144,6 +188,7 @@ export class TouchHandler {
             const t0 = e.touches[0], t1 = e.touches[1];
             this._lastTwoFingerX = (t0.clientX + t1.clientX) / 2;
             this._lastTwoFingerY = (t0.clientY + t1.clientY) / 2;
+            this._twoFingerMode = null;
             this._pinchStartDist = this._touchDist(t0, t1);
             this._pinchStartScale = this._scale;
             this._pinchStartCenter = { x: this._lastTwoFingerX, y: this._lastTwoFingerY };
@@ -153,6 +198,7 @@ export class TouchHandler {
 
     _onTouchMove(e) {
         e.preventDefault();
+        if (this._gestureBlocked) return;
 
         if (e.touches.length === 1 && this._activeTouches === 1) {
             const t = e.touches[0];
@@ -172,11 +218,12 @@ export class TouchHandler {
                 // A second tap followed by movement is a left-button drag.
                 // The first tap already produced the first click, so this
                 // preserves the platform-standard double-click sequence.
-                if (this._secondTap && !this._dragging) {
+                if ((this._secondTap || this._dragArmed) && !this._dragging) {
                     this._sendButton(MouseButton.BUTTON_LEFT, true);
                     this._dragging = true;
+                    this.onDragStateChanged?.(true);
                 }
-                this._moveCursor(dx * CURSOR_SPEED, dy * CURSOR_SPEED);
+                this._moveCursor(dx * CURSOR_SPEED / this._scale, dy * CURSOR_SPEED / this._scale);
                 if (this.isZoomed) {
                     this._autoPanToFollow();
                 }
@@ -192,27 +239,28 @@ export class TouchHandler {
             this._lastTwoFingerY = cy;
 
             const dist = this._touchDist(t0, t1);
-            if (this._pinchStartDist > 0) {
-                const ratio = dist / this._pinchStartDist;
-                const newScale = Math.max(1, Math.min(5, this._pinchStartScale * ratio));
-
-                if (newScale > 1) {
-                    const dcx = cx - this._pinchStartCenter.x;
-                    const dcy = cy - this._pinchStartCenter.y;
-                    this._translateX = this._pinchStartTranslate.x + dcx;
-                    this._translateY = this._pinchStartTranslate.y + dcy;
+            if (!this._twoFingerMode) {
+                const distanceChange = Math.abs(dist - this._pinchStartDist);
+                const centerChange = Math.hypot(cx - this._pinchStartCenter.x, cy - this._pinchStartCenter.y);
+                // Lock intent until every finger lifts: never scroll while pinching.
+                if (distanceChange >= Math.max(8, this._pinchStartDist * 0.05)) {
+                    this._twoFingerMode = 'pinch';
+                } else if (centerChange >= MOVE_THRESHOLD) {
+                    this._twoFingerMode = 'scroll';
                 }
-
+            }
+            if (this._twoFingerMode === 'pinch' && this._pinchStartDist > 0) {
+                const newScale = Math.max(1, Math.min(5, this._pinchStartScale * dist / this._pinchStartDist));
+                const rect = this.video.parentElement.getBoundingClientRect();
+                const centerX = rect.left + rect.width / 2;
+                const centerY = rect.top + rect.height / 2;
+                const ratio = newScale / this._pinchStartScale;
+                this._translateX = cx - centerX - (this._pinchStartCenter.x - centerX - this._pinchStartTranslate.x) * ratio;
+                this._translateY = cy - centerY - (this._pinchStartCenter.y - centerY - this._pinchStartTranslate.y) * ratio;
                 this._scale = newScale;
-                if (this._scale <= 1) {
-                    this._translateX = 0;
-                    this._translateY = 0;
-                }
                 this._applyTransform();
                 this._updateCursorElement();
-            }
-
-            if (Math.abs(scrollDy) > 2 && !this.isZoomed) {
+            } else if (this._twoFingerMode === 'scroll' && (scrollDx || scrollDy)) {
                 this._sendScroll(scrollDx, scrollDy);
             }
         }
@@ -221,12 +269,22 @@ export class TouchHandler {
     _onTouchEnd(e) {
         e.preventDefault();
         this._cancelLongPress();
+        if (this._gestureBlocked) {
+            this._activeTouches = e.touches.length;
+            if (!e.touches.length) this._gestureBlocked = false;
+            return;
+        }
 
         if (this._activeTouches === 1 && e.touches.length === 0) {
             if (this._dragging) {
                 this._sendButton(MouseButton.BUTTON_LEFT, false);
                 this._dragging = false;
                 this._secondTap = false;
+                this._dragArmed = false;
+                this.onDragStateChanged?.(false);
+            } else if (this._dragArmed) {
+                this._dragArmed = false;
+                this.onDragStateChanged?.(false);
             } else if (!this._moved) {
                 // Send each click immediately. The host receives two normal
                 // left clicks for a double-click instead of a platform-
@@ -242,13 +300,8 @@ export class TouchHandler {
                 this._secondTap = false;
             }
         } else if (this._activeTouches > 1 && e.touches.length === 1) {
-            const t = e.touches[0];
-            this._touchStartPos = { x: t.clientX, y: t.clientY };
-            this._lastSinglePos = { x: t.clientX, y: t.clientY };
-            this._moved = false;
-            this._secondTap = false;
-            this._lastTapTime = 0;
-            this._lastTapPos = null;
+            // Do not turn the final finger of a pinch/scroll into a click or move.
+            this._gestureBlocked = true;
         }
 
         if (e.touches.length === 0) {
@@ -260,7 +313,8 @@ export class TouchHandler {
 
     _onTouchCancel(e) {
         e.preventDefault();
-        this._cancelActiveGesture();
+        this.cancelGesture();
+        this._activeTouches = e.touches.length;
     }
 
     _isSecondTap(touch) {
@@ -273,22 +327,48 @@ export class TouchHandler {
         return Math.hypot(dx, dy) <= DOUBLE_TAP_DISTANCE;
     }
 
+    get isDragging() { return this._dragging || this._dragArmed; }
+
+    click(button = MouseButton.BUTTON_LEFT) {
+        this.cancelGesture();
+        this._sendClick(button);
+    }
+
+    // Accessible alternative to double-tap-and-drag: arm, swipe, lift to release.
+    toggleDrag() {
+        const arm = !this.isDragging;
+        this.cancelGesture();
+        this._dragArmed = arm;
+        this.onDragStateChanged?.(arm);
+    }
+
+    cancelGesture() {
+        const activeTouches = this._activeTouches;
+        this._cancelActiveGesture();
+        this._activeTouches = activeTouches;
+        this._gestureBlocked = activeTouches > 0;
+    }
+
     _cancelActiveGesture() {
         this._cancelLongPress();
         if (this._dragging) {
             this._sendButton(MouseButton.BUTTON_LEFT, false);
         }
         this._dragging = false;
+        this._dragArmed = false;
+        this.onDragStateChanged?.(false);
         this._secondTap = false;
         this._lastTapTime = 0;
         this._lastTapPos = null;
         this._moved = false;
         this._activeTouches = 0;
+        this._twoFingerMode = null;
     }
 
     // ==================== Cursor & input ====================
 
     _moveCursor(dx, dy) {
+        if (this.remoteWidth <= 0 || this.remoteHeight <= 0) return;
         this._cursorX = Math.max(0, Math.min(this.remoteWidth - 1, this._cursorX + dx));
         this._cursorY = Math.max(0, Math.min(this.remoteHeight - 1, this._cursorY + dy));
 
@@ -300,6 +380,7 @@ export class TouchHandler {
     }
 
     _sendClick(button) {
+        if (this.remoteWidth <= 0 || this.remoteHeight <= 0) return;
         const x = Math.round(this._cursorX);
         const y = Math.round(this._cursorY);
         this.dcHandler.sendMouseEvent({ x, y, button, buttonDown: true });
@@ -354,7 +435,7 @@ export class TouchHandler {
         const cursorScreenX = parseFloat(this._cursorEl.style.left);
         const cursorScreenY = parseFloat(this._cursorEl.style.top);
 
-        const edgeMargin = 40;
+        const edgeMargin = Math.min(56, containerRect.width / 4, containerRect.height / 4);
         let panX = 0, panY = 0;
 
         if (cursorScreenX < edgeMargin) {
@@ -397,13 +478,17 @@ export class TouchHandler {
             return;
         }
         const rect = this.video.parentElement.getBoundingClientRect();
-        const maxX = (rect.width * (this._scale - 1)) / 2;
-        const maxY = (rect.height * (this._scale - 1)) / 2;
+        const fit = Math.min(rect.width / this.remoteWidth, rect.height / this.remoteHeight);
+        const renderWidth = this.remoteWidth > 0 ? this.remoteWidth * fit : rect.width;
+        const renderHeight = this.remoteHeight > 0 ? this.remoteHeight * fit : rect.height;
+        const maxX = Math.max(0, (renderWidth * this._scale - rect.width) / 2);
+        const maxY = Math.max(0, (renderHeight * this._scale - rect.height) / 2);
         this._translateX = Math.max(-maxX, Math.min(maxX, this._translateX));
         this._translateY = Math.max(-maxY, Math.min(maxY, this._translateY));
     }
 
     resetZoom() {
+        this.cancelGesture();
         this._scale = 1;
         this._translateX = 0;
         this._translateY = 0;

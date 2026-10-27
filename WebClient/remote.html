@@ -638,11 +638,11 @@
         }
         .mobile-toolbar-row {
             display: flex; justify-content: space-around; align-items: center;
-            padding: 0 8px;
+            padding: 0 8px; gap: 4px; overflow-x: auto;
         }
         .mobile-btn {
             display: flex; flex-direction: column; align-items: center;
-            gap: 2px; padding: 8px 12px;
+            gap: 2px; padding: 8px; min-width: 48px; min-height: 48px; flex-shrink: 0;
             border: none; background: none; color: var(--text-secondary);
             font-size: 10px; cursor: pointer;
             -webkit-tap-highlight-color: transparent;
@@ -651,6 +651,8 @@
             transition: background 0.15s, color 0.15s;
         }
         .mobile-btn:active, .mobile-btn.active { background: rgba(255,255,255,0.1); color: var(--text-primary); }
+        .mobile-btn:focus-visible { outline: 2px solid #7eb6ff; outline-offset: -2px; }
+        #mobileGestureHelp { padding: 8px 16px; font-size: 13px; line-height: 1.6; color: var(--text-primary); }
         .mobile-btn svg { width: 22px; height: 22px; fill: currentColor; }
 
         /* Mobile overrides */
@@ -738,28 +740,53 @@
             <button class="log-clear-btn" id="logClearBtn" data-i18n="remote.clear">Clear</button>
         </div>
 
-        <input id="mobileKeyInput" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
-            style="position:absolute;left:-9999px;top:0;width:1px;height:1px;opacity:0;pointer-events:none;">
+        <input id="mobileKeyInput" aria-label="Remote keyboard" data-i18n-aria-label="mobile.keyboard" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+            style="position:absolute;left:0;bottom:0;width:1px;height:1px;font-size:16px;opacity:0;pointer-events:none;">
     </div>
 
     <!-- Mobile toolbar -->
     <div id="mobileToolbar">
+        <div id="mobileGestureHelp" hidden data-i18n="mobile.gestures">Touchpad: slide one finger to move the cursor; tap to click; tap twice to double-click; tap then drag to hold the left button. Hold for right-click. Slide two fingers to scroll at any zoom. Pinch to zoom; the view follows the cursor. Fit resets the view.</div>
+        <div id="mobileKeyRow" hidden>
+            <div class="mobile-toolbar-row">
+                <button class="mobile-btn" data-remote-key="458793">Esc</button>
+                <button class="mobile-btn" data-remote-key="458795">Tab</button>
+                <button class="mobile-btn" data-remote-key="458792">Enter</button>
+                <button class="mobile-btn" data-remote-key="458794" aria-label="Backspace" data-i18n-aria-label="mobile.backspace">⌫</button>
+                <button class="mobile-btn" data-remote-key="458832" aria-label="Left arrow" data-i18n-aria-label="mobile.left">←</button>
+                <button class="mobile-btn" data-remote-key="458834" aria-label="Up arrow" data-i18n-aria-label="mobile.up">↑</button>
+                <button class="mobile-btn" data-remote-key="458833" aria-label="Down arrow" data-i18n-aria-label="mobile.down">↓</button>
+                <button class="mobile-btn" data-remote-key="458831" aria-label="Right arrow" data-i18n-aria-label="mobile.right">→</button>
+            </div>
+        </div>
         <div class="mobile-toolbar-row">
             <button class="mobile-btn" id="btnKeyboard" data-i18n-title="mobile.keyboard" title="Keyboard">
                 <svg viewBox="0 0 24 24"><path d="M20 5H4c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm-9 3h2v2h-2V8zm0 3h2v2h-2v-2zM8 8h2v2H8V8zm0 3h2v2H8v-2zm-1 2H5v-2h2v2zm0-3H5V8h2v2zm9 7H8v-2h8v2zm0-4h-2v-2h2v2zm0-3h-2V8h2v2zm3 3h-2v-2h2v2zm0-3h-2V8h2v2z"/></svg>
                 <span data-i18n="mobile.keyboard">Keyboard</span>
             </button>
+            <button class="mobile-btn" id="btnLeftClick">
+                <span aria-hidden="true" style="font-size:22px;line-height:22px">↖</span>
+                <span data-i18n="mobile.click">Click</span>
+            </button>
+            <button class="mobile-btn" id="btnDrag" aria-pressed="false">
+                <span aria-hidden="true" style="font-size:22px;line-height:22px">✥</span>
+                <span data-i18n="mobile.drag">Drag</span>
+            </button>
             <button class="mobile-btn" id="btnRightClick" data-i18n-title="mobile.rightClick" title="Right Click">
                 <svg viewBox="0 0 24 24"><path d="M13 1.07V9h7c0-4.08-3.05-7.44-7-7.93zM4 15c0 4.42 3.58 8 8 8s8-3.58 8-8v-4H4v4zm7-13.93C7.05 1.56 4 4.92 4 9h7V1.07z"/></svg>
                 <span data-i18n="mobile.rightClick">Right Click</span>
             </button>
+            <button class="mobile-btn" id="btnZoomReset" data-i18n-title="mobile.zoom" title="Fit to screen">
+                <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/><path d="M12 10h-2v2H9v-2H7V9h2V7h1v2h2v1z"/></svg>
+                <span data-i18n="mobile.zoom">Fit</span>
+            </button>
+            <button class="mobile-btn" id="btnGestureHelp" aria-expanded="false" aria-controls="mobileGestureHelp">
+                <span aria-hidden="true" style="font-size:22px;line-height:22px">?</span>
+                <span data-i18n="mobile.help">Help</span>
+            </button>
             <button class="mobile-btn" id="btnLogs" data-i18n-title="mobile.logs" title="Logs">
                 <svg viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H5.17L4 17.17V4h16v12zM7 9h2v2H7zm4 0h2v2h-2zm4 0h2v2h-2z"/></svg>
                 <span data-i18n="mobile.logs">Logs</span>
-            </button>
-            <button class="mobile-btn" id="btnZoomReset" data-i18n-title="mobile.zoom" title="Reset Zoom">
-                <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/><path d="M12 10h-2v2H9v-2H7V9h2V7h1v2h2v1z"/></svg>
-                <span data-i18n="mobile.zoom">Zoom</span>
             </button>
             <button class="mobile-btn" id="btnFullscreen" data-i18n-title="mobile.fullscreen" title="Fullscreen">
                 <svg viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
