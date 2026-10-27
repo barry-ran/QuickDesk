@@ -19,12 +19,16 @@ class FakeFileChannel implements FileTransferChannel {
   @override
   void Function()? onClosed;
   final sent = <Uint8List>[];
+  void Function(Uint8List)? onSend;
+  Future<void>? sendGate;
   bool closed = false;
 
   @override
   Future<void> send(Uint8List data) async {
     if (closed) throw StateError('closed');
     sent.add(data);
+    onSend?.call(data);
+    await sendGate;
   }
 
   @override
@@ -148,6 +152,45 @@ void main() {
     expect(queue.tasks.single.status, FileTransferStatus.cancelled);
   });
 
+  test('cancel releases a never-resolving factory without dispatching stale data', () async {
+    final late = Completer<FileTransferChannel>();
+    final channels = <FakeFileChannel>[];
+    var calls = 0;
+    final queue = FileTransferManager.withChannelFactory((_) {
+      if (calls++ == 0) return late.future;
+      final channel = FakeFileChannel();
+      channels.add(channel);
+      return Future.value(channel);
+    });
+    managers.add(queue);
+    final a = await local('create-a');
+    final b = await local('create-b');
+    final first = queue.enqueueUpload('create-a', a.path);
+    queue.enqueueUpload('create-b', b.path);
+    await waitUntil(() => calls == 1);
+    queue.cancel(first);
+    await waitUntil(() => calls == 2);
+    final stale = FakeFileChannel();
+    late.complete(stale);
+    await waitUntil(() => stale.closed);
+    expect(stale.sent, isEmpty);
+  });
+
+  test('cancel interrupts pending send without resurrecting idle timers', () async {
+    final gate = Completer<void>();
+    final channel = FakeFileChannel()..sendGate = gate.future;
+    final queue = FileTransferManager.withChannelFactory((_) async => channel,
+        idleTimeout: const Duration(milliseconds: 100));
+    managers.add(queue);
+    final id = queue.enqueueDownload(dir.path);
+    await waitUntil(() => channel.sent.isNotEmpty);
+    queue.cancel(id);
+    await waitUntil(() => channel.closed);
+    gate.complete();
+    await Future<void>.delayed(const Duration(milliseconds: 150));
+    expect(queue.tasks.single.status, FileTransferStatus.cancelled);
+  });
+
   test('active cancellation ignores stale success and frees dedicated channel', () async {
     final channels = <FakeFileChannel>[];
     final queue = manager(channels);
@@ -181,19 +224,59 @@ void main() {
     expect(channel.sent.any((message) => field(message) == 4), isTrue);
   });
 
-  test('truncated download fails without success or visible final file', () async {
+  test('peer close during download success acknowledgement preserves committed file', () async {
+    final channels = <FakeFileChannel>[];
+    final queue = manager(channels);
+    queue.enqueueDownload(dir.path);
+    await waitUntil(() => channels.isNotEmpty && channels.first.sent.isNotEmpty);
+    final channel = channels.first;
+    channel.onSend = (message) {
+      if (field(message) == 4) channel.onClosed?.call();
+    };
+    channel.reply(metadata('committed', 1));
+    channel.reply(payload([42]));
+    channel.reply(emptyField(3));
+    await waitUntil(() => channel.closed);
+    expect(queue.tasks.single.status, FileTransferStatus.completed);
+    expect(await File(queue.tasks.single.savedPath!).readAsBytes(), [42]);
+  });
+
+  test('channel close without End fails without success or visible final file', () async {
     final channels = <FakeFileChannel>[];
     final queue = manager(channels);
     queue.enqueueDownload(dir.path);
     await waitUntil(() => channels.isNotEmpty && channels.first.sent.isNotEmpty);
     channels.first.reply(metadata('../bad.txt', 5));
     channels.first.reply(payload([1]));
-    channels.first.reply(emptyField(3));
+    await waitUntil(() => queue.tasks.single.bytes == 1);
+    channels.first.onClosed?.call();
     await waitUntil(() => channels.first.closed);
     expect(queue.tasks.single.status, FileTransferStatus.failed);
     expect(queue.tasks.single.savedPath, isNull);
     expect(channels.first.sent.any((message) => field(message) == 4), isFalse);
     await waitUntil(() => dir.listSync().isEmpty);
+  });
+
+  test('advisory and omitted sizes both wait for End and accept actual bytes', () async {
+    final channels = <FakeFileChannel>[];
+    final queue = manager(channels);
+    queue.enqueueDownload(dir.path);
+    await waitUntil(() => channels.isNotEmpty && channels.first.sent.isNotEmpty);
+    channels.first.reply(metadata('advisory', 1));
+    channels.first.reply(payload([1, 2, 3]));
+    await waitUntil(() => queue.tasks.single.bytes == 3);
+    expect(queue.tasks.single.finished, isFalse);
+    channels.first.reply(emptyField(3));
+    await waitUntil(() => channels.first.closed);
+    expect(queue.tasks.single.status, FileTransferStatus.completed);
+    queue.enqueueDownload(dir.path);
+    await waitUntil(() => channels.length == 2 && channels.last.sent.isNotEmpty);
+    channels.last.reply(lengthDelimitedField(1, lengthDelimitedField(1, 'unknown-size')));
+    channels.last.reply(payload([4, 5]));
+    channels.last.reply(emptyField(3));
+    await waitUntil(() => channels.last.closed);
+    expect(queue.tasks.last.status, FileTransferStatus.completed);
+    expect(await File(queue.tasks.last.savedPath!).readAsBytes(), [4, 5]);
   });
 
   test('directory upload fails and does not open channel', () async {
