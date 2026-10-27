@@ -35,9 +35,9 @@ jobs:
     strategy:
       matrix:
         include:
-          - runner: macos-14
+          - runner: macos-15
             arch: arm64
-          - runner: macos-14
+          - runner: macos-15
             arch: x64
     runs-on: ${{ matrix.runner }}
     env:
