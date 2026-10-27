@@ -2,8 +2,8 @@
  * keyboard-handler.js - 键盘输入处理
  * 
  * 与 Qt native client (RemoteDesktopView.qml) 保持一致的策略：
- * 每个 keydown（含浏览器 auto-repeat）直接发 pressed:true，
- * keyup 发 pressed:false。不做任何客户端过滤或自驱动定时器。
+ * 普通按键保持直接转发；浏览器粘贴快捷键先等待原生 paste 事件，
+ * 文件粘贴只进入上传队列，文本粘贴再发送配对的远端 Ctrl+V。
  */
 
 export class KeyboardHandler {
@@ -17,6 +17,7 @@ export class KeyboardHandler {
         this._enabled = false;
         this._handlers = {};
         this._pressedKeys = new Set();
+        this._browserPaste = null;
     }
 
     enable() {
@@ -50,6 +51,14 @@ export class KeyboardHandler {
     /** @private */
     _onKeyDown(event) {
         const code = event.code;
+        // Let the browser produce a paste event before deciding whether this is
+        // a local file upload or an ordinary remote clipboard paste.
+        if (code === 'KeyV' && (event.ctrlKey || event.metaKey)) {
+            if (this._browserPaste || event.repeat) event.preventDefault();
+            else this._browserPaste = { handled: false, locks: this._getLockStates(event) };
+            event.stopPropagation();
+            return;
+        }
         const usbKeycode = this._mapKeyCode(code);
         if (usbKeycode === 0) return;
 
@@ -67,13 +76,20 @@ export class KeyboardHandler {
     /** @private */
     _onKeyUp(event) {
         const code = event.code;
+        if (code === 'KeyV' && this._browserPaste) {
+            if (!this._browserPaste.handled) this.forwardBrowserPaste();
+            this._browserPaste = null;
+            event.preventDefault();
+            event.stopPropagation();
+            return;
+        }
         const usbKeycode = this._mapKeyCode(code);
         if (usbKeycode === 0) return;
 
         event.preventDefault();
         event.stopPropagation();
 
-        this._pressedKeys.delete(code);
+        if (!this._pressedKeys.delete(code)) return;
 
         this.dcHandler.sendKeyEvent({
             pressed: false,
@@ -82,8 +98,32 @@ export class KeyboardHandler {
         });
     }
 
+    consumeBrowserPaste() {
+        if (this._browserPaste) this._browserPaste.handled = true;
+    }
+
+    forwardBrowserPaste() {
+        const locks = this._browserPaste?.locks || {};
+        this.consumeBrowserPaste();
+        // Control may have been released before paste/KeyV-up. Use an explicit
+        // pair when necessary rather than accidentally typing a plain 'v'.
+        const heldControl = this._pressedKeys.has('ControlLeft') || this._pressedKeys.has('ControlRight');
+        const heldMeta = ['MetaLeft', 'MetaRight'].filter(key => this._pressedKeys.has(key));
+        for (const key of heldMeta)
+            this.dcHandler.sendKeyEvent({ pressed: false, usbKeycode: this._mapKeyCode(key), ...locks });
+        if (!heldControl)
+            this.dcHandler.sendKeyEvent({ pressed: true, usbKeycode: this._mapKeyCode('ControlLeft'), ...locks });
+        this.dcHandler.sendKeyEvent({ pressed: true, usbKeycode: this._mapKeyCode('KeyV'), ...locks });
+        this.dcHandler.sendKeyEvent({ pressed: false, usbKeycode: this._mapKeyCode('KeyV'), ...locks });
+        if (!heldControl)
+            this.dcHandler.sendKeyEvent({ pressed: false, usbKeycode: this._mapKeyCode('ControlLeft'), ...locks });
+        for (const key of heldMeta)
+            this.dcHandler.sendKeyEvent({ pressed: true, usbKeycode: this._mapKeyCode(key), ...locks });
+    }
+
     /** @private */
     _releaseAllKeys() {
+        this._browserPaste = null;
         for (const code of this._pressedKeys) {
             const usbKeycode = this._mapKeyCode(code);
             if (usbKeycode !== 0) {

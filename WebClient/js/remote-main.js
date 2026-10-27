@@ -346,13 +346,23 @@ export class RemoteDesktopApp {
                 this._log(t('log.downloadStarted', { filename: e.detail.filename }));
             });
 
+            this.dcHandler.addEventListener('fileDownloadFinalizing', (e) => {
+                const item = this._transferItems?.get(e.detail.transferId);
+                if (item) {
+                    item.querySelector('.transfer-item-pct').textContent = t('files.transfer.finalizing');
+                    item.querySelector('.transfer-item-cancel').style.display = 'none';
+                }
+            });
+
             this.dcHandler.addEventListener('fileDownloadProgress', (e) => {
                 this._updateTransferProgress(e.detail.transferId, e.detail.bytesReceived, e.detail.totalBytes);
             });
 
             this.dcHandler.addEventListener('fileDownloadComplete', (e) => {
                 this._updateTransferStatus(e.detail.transferId, 'complete');
-                this._log(t('log.downloadComplete', { filename: e.detail.filename }));
+                this._log(t(e.detail.streaming ? 'log.downloadComplete' : 'files.downloadReceived',
+                    { filename: e.detail.filename }));
+                if (!e.detail.acknowledgementSent) this._log(t('files.downloadAckFailed'), 'warning');
                 if (e.detail.blob && !e.detail.streaming) {
                     this._triggerBrowserDownload(e.detail.blob, e.detail.filename);
                 }
@@ -633,6 +643,9 @@ export class RemoteDesktopApp {
     }
 
     _cleanupInputHandlers() {
+        this._fileInputAbort?.abort();
+        this._fileInputAbort = null;
+        this._hideDropOverlay();
         if (this.mouseHandler) { this.mouseHandler.destroy(); this.mouseHandler = null; }
         if (this.keyboardHandler) { this.keyboardHandler.destroy(); this.keyboardHandler = null; }
         if (this.touchHandler) { this.touchHandler.destroy(); this.touchHandler = null; }
@@ -873,6 +886,7 @@ export class RemoteDesktopApp {
 
     _setupDragDrop(target) {
         if (!target) return;
+        this._fileInputAbort ||= new AbortController();
         let dragCounter = 0;
 
         target.addEventListener('dragenter', (e) => {
@@ -880,12 +894,12 @@ export class RemoteDesktopApp {
             e.stopPropagation();
             dragCounter++;
             if (dragCounter === 1) this._showDropOverlay(target);
-        });
+        }, { signal: this._fileInputAbort.signal });
 
         target.addEventListener('dragover', (e) => {
             e.preventDefault();
             e.stopPropagation();
-        });
+        }, { signal: this._fileInputAbort.signal });
 
         target.addEventListener('dragleave', (e) => {
             e.preventDefault();
@@ -895,7 +909,7 @@ export class RemoteDesktopApp {
                 dragCounter = 0;
                 this._hideDropOverlay(target);
             }
-        });
+        }, { signal: this._fileInputAbort.signal });
 
         target.addEventListener('drop', (e) => {
             e.preventDefault();
@@ -905,7 +919,7 @@ export class RemoteDesktopApp {
             const selection = filesFromDataTransfer(e.dataTransfer);
             if (selection.directories) this._log(t('files.folderUnsupported'), 'warning');
             this._uploadFiles(selection.files);
-        });
+        }, { signal: this._fileInputAbort.signal });
     }
 
     _showDropOverlay(target) {
@@ -944,16 +958,26 @@ export class RemoteDesktopApp {
 
     _setupPasteUpload(target) {
         if (!target) return;
+        this._fileInputAbort ||= new AbortController();
         target.addEventListener('paste', (e) => {
             if (e.target.closest?.('input, textarea, [contenteditable="true"]')) return;
             const selection = filesFromDataTransfer(e.clipboardData);
             if (selection.files.length || selection.directories) {
                 e.preventDefault();
                 e.stopPropagation();
+                this.keyboardHandler?.consumeBrowserPaste();
                 if (selection.directories) this._log(t('files.folderUnsupported'), 'warning');
                 this._uploadFiles(selection.files);
+            } else if (this.keyboardHandler) {
+                // Use event-provided text (no new permission request) before the
+                // existing remote Ctrl+V action. Input widgets were excluded above.
+                if (Array.from(e.clipboardData?.types || []).includes('text/plain'))
+                    this.clipboardHandler?.syncText(e.clipboardData.getData('text/plain'));
+                this.keyboardHandler.forwardBrowserPaste();
+                e.preventDefault();
+                e.stopPropagation();
             }
-        });
+        }, { signal: this._fileInputAbort.signal });
     }
 
     async _onDownloadFromHost() {
