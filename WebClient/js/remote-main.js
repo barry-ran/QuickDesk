@@ -1,3 +1,4 @@
+import { filesFromDataTransfer } from './files/browser-files.js';
 /**
  * remote-main.js - 远程桌面页面入口
  *
@@ -23,7 +24,7 @@ import { SkillBridgeClient } from './protocol/skill-bridge-client.js';
 import { RemoteFileManager } from './files/remote-file-manager.js';
 import { FileManagerPanel } from './files/file-manager-panel.js';
 
-class RemoteDesktopApp {
+export class RemoteDesktopApp {
     constructor() {
         this.session = null;
         this.dcHandler = null;
@@ -256,6 +257,7 @@ class RemoteDesktopApp {
                 preferredVideoCodec,
             });
 
+            this.dcHandler?.destroy();
             this.dcHandler = new DataChannelHandler();
             this._setupSkillBridge();
 
@@ -318,6 +320,11 @@ class RemoteDesktopApp {
 
             this.dcHandler.addEventListener('fileTransferStarted', (e) => {
                 this._addTransferItem(e.detail.transferId, e.detail.filename, e.detail.totalBytes);
+                this._setTransferQueued(e.detail.transferId, e.detail.queued);
+            });
+
+            this.dcHandler.addEventListener('fileTransferState', (e) => {
+                this._setTransferQueued(e.detail.transferId, e.detail.queued);
             });
 
             this.dcHandler.addEventListener('fileTransferProgress', (e) => {
@@ -895,9 +902,9 @@ class RemoteDesktopApp {
             e.stopPropagation();
             dragCounter = 0;
             this._hideDropOverlay(target);
-            if (e.dataTransfer?.files?.length > 0) {
-                this._uploadFiles(e.dataTransfer.files);
-            }
+            const selection = filesFromDataTransfer(e.dataTransfer);
+            if (selection.directories) this._log(t('files.folderUnsupported'), 'warning');
+            this._uploadFiles(selection.files);
         });
     }
 
@@ -924,8 +931,13 @@ class RemoteDesktopApp {
     _uploadFiles(fileList) {
         if (!this.dcHandler || !fileList || fileList.length === 0) return;
         for (const file of fileList) {
-            this._log(t('log.uploadingFile', { name: file.name, size: file.size }));
-            this.dcHandler.startFileUpload(file);
+            if (file.webkitRelativePath) {
+                this._log(t('files.folderUnsupported'), 'warning');
+                continue;
+            }
+            const id = this.dcHandler.startFileUpload(file);
+            if (id) this._log(t('log.uploadingFile', { name: file.name, size: file.size }));
+            else this._log(t('files.transferUnavailable'), 'warning');
         }
         this._showTransferPanel();
     }
@@ -933,16 +945,20 @@ class RemoteDesktopApp {
     _setupPasteUpload(target) {
         if (!target) return;
         target.addEventListener('paste', (e) => {
-            const files = e.clipboardData?.files;
-            if (files && files.length > 0) {
+            if (e.target.closest?.('input, textarea, [contenteditable="true"]')) return;
+            const selection = filesFromDataTransfer(e.clipboardData);
+            if (selection.files.length || selection.directories) {
                 e.preventDefault();
-                this._uploadFiles(files);
+                e.stopPropagation();
+                if (selection.directories) this._log(t('files.folderUnsupported'), 'warning');
+                this._uploadFiles(selection.files);
             }
         });
     }
 
     async _onDownloadFromHost() {
         if (!this.dcHandler) return;
+        const handler = this.dcHandler;
 
         let fileHandle = null;
         if (window.showSaveFilePicker) {
@@ -959,7 +975,10 @@ class RemoteDesktopApp {
             }
         }
 
-        this.dcHandler.startFileDownload(fileHandle);
+        if (handler !== this.dcHandler || !handler.startFileDownload(fileHandle)) {
+            this._log(t('files.transferUnavailable'), 'warning');
+            return;
+        }
         this._log(fileHandle
             ? t('log.downloadStreaming')
             : t('log.downloadBuffered'));
@@ -970,7 +989,10 @@ class RemoteDesktopApp {
         input.type = 'file';
         input.multiple = true;
         input.style.display = 'none';
+        const handler = this.dcHandler;
+        input.addEventListener('cancel', () => input.remove());
         input.addEventListener('change', () => {
+            if (handler !== this.dcHandler) { input.remove(); return; }
             this._uploadFiles(input.files);
             input.remove();
         });
@@ -1032,6 +1054,13 @@ class RemoteDesktopApp {
 
     _addTransferItem(transferId, filename, totalBytes, direction = 'upload') {
         this._ensureTransferPanel();
+        const existing = this._transferItems.get(transferId);
+        if (existing) {
+            const name = existing.querySelector('.transfer-item-name');
+            name.textContent = filename;
+            name.title = filename;
+            return;
+        }
         const list = this._transferPanel.querySelector('.transfer-panel-list');
         const item = document.createElement('div');
         item.className = 'transfer-item';
@@ -1041,18 +1070,22 @@ class RemoteDesktopApp {
         item.innerHTML = `
             <div class="transfer-item-row">
                 <span class="transfer-item-icon">${dirIcon}</span>
-                <span class="transfer-item-name" title="${filename}">${filename}</span>
+                <span class="transfer-item-name"></span>
                 <span class="transfer-item-pct">0%</span>
                 <span class="transfer-item-cancel" title="Cancel">&times;</span>
             </div>
             <div class="transfer-item-bar"><div class="transfer-item-fill"></div></div>
         `;
+        const nameElement = item.querySelector('.transfer-item-name');
+        nameElement.textContent = filename;
+        nameElement.title = filename;
+        const handler = this.dcHandler;
         item.querySelector('.transfer-item-cancel').addEventListener('click', () => {
-            if (this.dcHandler) {
+            if (handler) {
                 if (direction === 'download') {
-                    this.dcHandler.cancelFileDownload(transferId);
+                    handler.cancelFileDownload(transferId);
                 } else {
-                    this.dcHandler.cancelFileUpload(transferId);
+                    handler.cancelFileUpload(transferId);
                 }
             }
         });
@@ -1062,10 +1095,16 @@ class RemoteDesktopApp {
         this._showTransferPanel();
     }
 
+    _setTransferQueued(transferId, queued) {
+        const item = this._transferItems?.get(transferId);
+        if (item) item.querySelector('.transfer-item-pct').textContent =
+            queued ? t('files.transfer.queued') : '0%';
+    }
+
     _updateTransferProgress(transferId, bytesSent, totalBytes) {
         const item = this._transferItems?.get(transferId);
-        if (!item) return;
-        const pct = totalBytes > 0 ? Math.round(bytesSent / totalBytes * 100) : 0;
+        if (!item || item.dataset.terminal === 'true') return;
+        const pct = totalBytes > 0 ? Math.min(100, Math.round(bytesSent / totalBytes * 100)) : 0;
         const pctEl = item.querySelector('.transfer-item-pct');
         if (pctEl) pctEl.textContent = `${pct}%`;
         const fill = item.querySelector('.transfer-item-fill');
@@ -1074,7 +1113,8 @@ class RemoteDesktopApp {
 
     _updateTransferStatus(transferId, status, errorMessage) {
         const item = this._transferItems?.get(transferId);
-        if (!item) return;
+        if (!item || item.dataset.terminal === 'true') return;
+        item.dataset.terminal = 'true';
 
         const pctEl = item.querySelector('.transfer-item-pct');
         const cancelEl = item.querySelector('.transfer-item-cancel');
@@ -1235,6 +1275,7 @@ class RemoteDesktopApp {
     }
 
     _setConnectionState(state, text) {
+        if (state === 'failed') this.dcHandler?.closeFileTransfers();
         const dot = document.getElementById('connDot');
         const statusEl = document.getElementById('connStatus');
         if (dot) {
@@ -1718,7 +1759,10 @@ class RemoteDesktopApp {
             const time = new Date().toLocaleTimeString();
             const entry = document.createElement('div');
             entry.className = `log-entry log-${level}`;
-            entry.innerHTML = `<span class="log-time">[${time}]</span> ${message}`;
+            const timeElement = document.createElement('span');
+            timeElement.className = 'log-time';
+            timeElement.textContent = '[' + time + ']';
+            entry.append(timeElement, document.createTextNode(' ' + message));
             container.appendChild(entry);
             container.scrollTop = container.scrollHeight;
             while (container.children.length > 500) {
