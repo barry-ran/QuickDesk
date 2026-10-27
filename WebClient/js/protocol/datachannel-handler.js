@@ -15,7 +15,7 @@ import {
 let nextFileTransferId = 1; // Unique across handler/session generations in this page.
 
 export class DataChannelHandler extends EventTarget {
-    constructor() {
+    constructor({ uploadIdleMs = 30000 } = {}) {
         super();
         
         this.controlChannel = null;
@@ -33,6 +33,7 @@ export class DataChannelHandler extends EventTarget {
         this.supportsVirtualDisplay = false;
 
         this._fileTransfersClosed = false;
+        this._uploadIdleMs = Math.max(1, Number(uploadIdleMs) || 30000);
         this._activeUploads = new Map();
         this._activeDownloads = new Map();
     }
@@ -335,14 +336,15 @@ export class DataChannelHandler extends EventTarget {
             this._pc.connectionState === 'failed') return null;
         if (!file || !file.name || file.webkitRelativePath || typeof file.slice !== 'function' ||
             !Number.isSafeInteger(file.size) || file.size < 0) return null;
-        const key = [file.name, file.size, file.lastModified || 0].join('\0');
+        // Browsers hide source paths: equal metadata does not prove two files
+        // are the same. Deduplicate only the identical File object while pending.
         for (const task of this._activeUploads.values())
-            if (task.key === key) return task.transferId;
+            if (task.file === file) return task.transferId;
         if (this._activeUploads.size >= 256) return null;
         const transferId = String(nextFileTransferId++);
         const state = {
             transferId, filename: file.name, totalBytes: file.size, bytesSent: 0,
-            key, file, channel: null, status: 'queued', cancelled: false,
+            file, channel: null, status: 'queued', cancelled: false,
         };
         this._activeUploads.set(transferId, state);
         this.dispatchEvent(new CustomEvent('fileTransferStarted', {
@@ -397,6 +399,7 @@ export class DataChannelHandler extends EventTarget {
         const file = state.file;
         channel.send(this._encodeFileTransfer({ metadata: { filename: file.name, size: file.size } }));
         const chunkSize = 8192;
+        this._armUploadIdle(state);
         let offset = 0;
         while (offset < file.size) {
             while (this._uploadActive(state) && channel.bufferedAmount > chunkSize * 8)
@@ -410,17 +413,25 @@ export class DataChannelHandler extends EventTarget {
             channel.send(this._encodeFileTransfer({ data: { data: new Uint8Array(buffer) } }));
             offset = end;
             state.bytesSent = offset;
+            this._armUploadIdle(state);
             this.dispatchEvent(new CustomEvent('fileTransferProgress', {
                 detail: { transferId: state.transferId, filename: file.name,
                     bytesSent: offset, totalBytes: file.size },
             }));
         }
         if (!this._uploadActive(state)) return;
+        clearTimeout(state.idleTimer);
         state.sentEnd = true;
         // Do not report success merely because all bytes were queued locally.
         state.finishTimer = setTimeout(() =>
             this._finishUpload(state, 'Upload acknowledgement timed out; remote result is unconfirmed'), 30000);
         channel.send(this._encodeFileTransfer({ end: {} }));
+    }
+
+    _armUploadIdle(state) {
+        clearTimeout(state.idleTimer);
+        state.idleTimer = setTimeout(() => this._finishUpload(state,
+            'Upload made no progress; remote partial data may remain'), this._uploadIdleMs);
     }
 
     _finishUpload(state, errorMessage = '') {
@@ -430,6 +441,7 @@ export class DataChannelHandler extends EventTarget {
         state.file = null;
         clearTimeout(state.openTimer);
         clearTimeout(state.finishTimer);
+        clearTimeout(state.idleTimer);
         try { state.channel?.close(); } catch { /* already closed */ }
         this.dispatchEvent(new CustomEvent(errorMessage ? 'fileTransferError' : 'fileTransferComplete', {
             detail: { transferId: state.transferId, filename: state.filename, errorMessage },
@@ -544,23 +556,36 @@ export class DataChannelHandler extends EventTarget {
         try {
             await state.writeQueue;
             if (!this._downloadActive(state)) return;
+            // Once close starts, local commit wins a cancellation/disconnect race.
+            // Abort before this point, never claim rollback after committing data.
+            state.committing = !!state.writable;
+            if (state.committing) this.dispatchEvent(new CustomEvent('fileDownloadFinalizing', {
+                detail: { transferId: state.transferId },
+            }));
             if (state.writable) await state.writable.close();
-            if (!this._downloadActive(state)) return;
+            state.committed = true;
             const blob = state.streaming ? null : new Blob(state.chunks);
-            state.channel.send(this._encodeFileTransfer({ success: {} }));
+            let acknowledgementSent = false;
+            try {
+                state.channel.send(this._encodeFileTransfer({ success: {} }));
+                acknowledgementSent = true;
+            } catch { /* locally received/saved data must not be relabelled failed */ }
             this._activeDownloads.delete(state.transferId);
             state.chunks = null;
             state.writable = null;
             try { state.channel.close(); } catch {}
             this.dispatchEvent(new CustomEvent('fileDownloadComplete', {
                 detail: { transferId: state.transferId, filename: state.filename,
-                    blob, streaming: state.streaming },
+                    blob, streaming: state.streaming, acknowledgementSent },
             }));
-        } catch (error) { this._failDownload(state, error.message || 'Download could not be saved'); }
+        } catch (error) {
+            state.committing = false;
+            this._failDownload(state, error.message || 'Download could not be saved');
+        }
     }
 
     async _failDownload(state, errorMessage) {
-        if (!this._downloadActive(state)) return;
+        if (!this._downloadActive(state) || state.committing || state.committed) return;
         state.cancelled = true;
         this._activeDownloads.delete(state.transferId);
         clearTimeout(state.openTimer);
@@ -578,11 +603,11 @@ export class DataChannelHandler extends EventTarget {
 
     cancelFileDownload(transferId) {
         const state = this._activeDownloads.get(transferId);
-        if (!state) return;
+        if (!state || state.committing || state.committed) return;
         if (state.channel.readyState === 'open') {
             try { state.channel.send(this._encodeFileTransfer({ error: { type: 1 } })); } catch {}
         }
-        this._failDownload(state, 'Stopped locally; no completed download was saved');
+        this._failDownload(state, 'Stopped locally; check the destination for partial or completed data');
     }
 
     /**
@@ -637,117 +662,81 @@ export class DataChannelHandler extends EventTarget {
      * Parses Metadata (1), Data (2), End (3), Success (4), Error (6).
      * @private
      */
-    _decodeFileTransfer(data) {
-        const result = {};
+    _readProtoFields(data) {
+        const fields = [];
         let pos = 0;
+        const readVarint = () => {
+            let value = 0, factor = 1;
+            for (let count = 0; count < 10; count++) {
+                if (pos >= data.length) throw new Error('Truncated file-transfer varint');
+                const byte = data[pos++];
+                value += (byte & 0x7f) * factor;
+                if (!Number.isSafeInteger(value)) throw new Error('File-transfer integer exceeds safe range');
+                if (!(byte & 0x80)) return value;
+                factor *= 128;
+            }
+            throw new Error('File-transfer varint is too long');
+        };
         while (pos < data.length) {
-            const tag = data[pos++];
-            const fieldNumber = tag >> 3;
-            const wireType = tag & 0x07;
+            const tag = readVarint();
+            if (!tag || tag > 0xffffffff) throw new Error('Invalid file-transfer field tag');
+            const number = Math.floor(tag / 8), wire = tag % 8;
+            if (!number) throw new Error('Invalid file-transfer field number');
+            if (wire === 0) {
+                fields.push({ number, wire, value: readVarint() });
+                continue;
+            }
+            const length = wire === 2 ? readVarint() : wire === 1 ? 8 : wire === 5 ? 4 : -1;
+            if (length < 0 || length > data.length - pos)
+                throw new Error('Invalid or truncated file-transfer field length');
+            fields.push({ number, wire, value: data.subarray(pos, pos + length) });
+            pos += length;
+        }
+        return fields;
+    }
 
-            if (wireType === 2) {
-                let len = 0;
-                let shift = 0;
-                while (pos < data.length) {
-                    const b = data[pos++];
-                    len |= (b & 0x7F) << shift;
-                    if (!(b & 0x80)) break;
-                    shift += 7;
-                }
-                const subdata = data.subarray(pos, pos + len);
-                pos += len;
-
-                if (fieldNumber === 1) {
-                    // Metadata: filename (field 1 string), size (field 2 varint)
-                    result.metadata = this._decodeMetadata(subdata);
-                } else if (fieldNumber === 2) {
-                    // Data: data bytes (field 1 bytes)
-                    result.data = this._decodeDataField(subdata);
-                } else if (fieldNumber === 3) {
-                    result.end = true;
-                } else if (fieldNumber === 4) {
-                    result.success = true;
-                } else if (fieldNumber === 6) {
-                    let errType = 0;
-                    if (subdata.length > 1 && subdata[0] === 0x08) {
-                        errType = subdata[1];
-                    }
-                    result.error = { type: errType };
-                }
-            } else if (wireType === 0) {
-                while (pos < data.length && data[pos] & 0x80) pos++;
-                pos++;
+    _decodeFileTransfer(data) {
+        let result = {};
+        for (const field of this._readProtoFields(data)) {
+            if (![1, 2, 3, 4, 6].includes(field.number)) continue;
+            if (field.wire !== 2) throw new Error('Invalid file-transfer message wire type');
+            const subdata = field.value;
+            // FileTransfer is a protobuf oneof: the last recognized field wins.
+            if (field.number === 1) result = { metadata: this._decodeMetadata(subdata) };
+            else if (field.number === 2) result = { data: this._decodeDataField(subdata) };
+            else if (field.number === 3) result = { end: true };
+            else if (field.number === 4) result = { success: true };
+            else {
+                const type = this._readProtoFields(subdata).find(item => item.number === 1);
+                if (type && type.wire !== 0) throw new Error('Invalid file-transfer error type');
+                result = { error: { type: type?.value || 0 } };
             }
         }
         return result;
     }
 
-    /** @private */
     _decodeMetadata(data) {
-        const meta = { filename: '', size: 0 };
-        let pos = 0;
-        while (pos < data.length) {
-            const tag = data[pos++];
-            const fn = tag >> 3;
-            const wt = tag & 0x07;
-            if (wt === 2) {
-                let len = 0, shift = 0;
-                while (pos < data.length) {
-                    const b = data[pos++];
-                    len |= (b & 0x7F) << shift;
-                    if (!(b & 0x80)) break;
-                    shift += 7;
-                }
-                if (fn === 1) {
-                    meta.filename = new TextDecoder().decode(data.subarray(pos, pos + len));
-                }
-                pos += len;
-            } else if (wt === 0) {
-                let val = 0, shift = 0;
-                while (pos < data.length) {
-                    const b = data[pos++];
-                    val += (b & 0x7F) * 2 ** shift;
-                    if (!Number.isSafeInteger(val) || shift > 49) throw new Error('Invalid file size varint');
-                    if (!(b & 0x80)) break;
-                    shift += 7;
-                }
-                if (fn === 2) meta.size = val;
+        const metadata = { filename: '', size: 0 };
+        for (const field of this._readProtoFields(data)) {
+            if (field.number === 1) {
+                if (field.wire !== 2) throw new Error('Invalid filename wire type');
+                metadata.filename = new TextDecoder().decode(field.value);
+            } else if (field.number === 2) {
+                if (field.wire !== 0) throw new Error('Invalid file size wire type');
+                metadata.size = field.value;
             }
         }
-        return meta;
+        return metadata;
     }
 
-    /** @private */
     _decodeDataField(data) {
-        let pos = 0;
-        while (pos < data.length) {
-            const tag = data[pos++];
-            const fn = tag >> 3;
-            const wt = tag & 0x07;
-            if (wt === 2 && fn === 1) {
-                let len = 0, shift = 0;
-                while (pos < data.length) {
-                    const b = data[pos++];
-                    len |= (b & 0x7F) << shift;
-                    if (!(b & 0x80)) break;
-                    shift += 7;
-                }
-                return data.slice(pos, pos + len).buffer;
-            } else if (wt === 0) {
-                while (pos < data.length && data[pos] & 0x80) pos++;
-                pos++;
-            } else if (wt === 2) {
-                let len = 0, shift = 0;
-                while (pos < data.length) {
-                    const b = data[pos++];
-                    len |= (b & 0x7F) << shift;
-                    if (!(b & 0x80)) break;
-                    shift += 7;
-                }
-                pos += len;
-            }
+        let bytes = new Uint8Array();
+        for (const field of this._readProtoFields(data)) {
+            if (field.number !== 1) continue;
+            if (field.wire !== 2) throw new Error('Invalid file data wire type');
+            bytes = field.value;
         }
-        return new ArrayBuffer(0);
+        return bytes.slice().buffer;
     }
 
     /**
