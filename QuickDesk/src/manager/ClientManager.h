@@ -154,6 +154,7 @@ public:
 
     QVariantList fileTransferTasks() const { return m_fileTransfers.tasks(); }
     Q_INVOKABLE void cancelFileTask(const QString& taskId);
+    Q_INVOKABLE void clearCompletedFileTasks();
     Q_INVOKABLE bool copyDownloadedFile(const QString& taskId);
 
     // Clipboard file paste
