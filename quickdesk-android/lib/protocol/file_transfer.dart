@@ -131,7 +131,7 @@ Uint8List _decodeDataField(Uint8List data) {
 /// Injectable so lifecycle and filesystem behavior are tested without WebRTC.
 abstract class FileTransferChannel {
   bool get isOpen;
-  int get bufferedAmount;
+  Future<int> bufferedBytes();
   set onOpen(void Function()? callback);
   set onData(void Function(Uint8List)? callback);
   set onClosed(void Function()? callback);
@@ -158,7 +158,15 @@ class _RtcFileTransferChannel implements FileTransferChannel {
   @override
   bool get isOpen => channel.state == RTCDataChannelState.RTCDataChannelOpen;
   @override
-  int get bufferedAmount => channel.bufferedAmount ?? 0;
+  Future<int> bufferedBytes() async {
+    try {
+      return await channel.getBufferedAmount();
+    } on UnimplementedError {
+      final amount = channel.bufferedAmount;
+      if (amount == null) throw StateError('Buffered amount is unavailable');
+      return amount;
+    }
+  }
   @override
   set onOpen(void Function()? callback) => _open = callback;
   @override
@@ -282,6 +290,7 @@ class FileTransferManager extends ChangeNotifier {
     Directory? staging;
     final finished = Completer<void>();
     var inbound = Future<void>.value();
+    var pendingInboundBytes = 0;
     Timer? timer;
     String? failure;
     bool ended = false;
@@ -340,7 +349,8 @@ class FileTransferManager extends ChangeNotifier {
           }
           await transport.send(_encMetadata(task.filename, task.totalBytes));
           while (task.bytes < task.totalBytes && !getStopped()) {
-            while (transport.bufferedAmount > _bufferHighWater && !getStopped()) {
+            while (!getStopped() &&
+                await transport.bufferedBytes() > _bufferHighWater) {
               await Future<void>.delayed(const Duration(milliseconds: 20));
             }
             if (getStopped()) return;
@@ -423,9 +433,19 @@ class FileTransferManager extends ChangeNotifier {
       transport.onOpen = () => unawaited(onOpen());
       transport.onClosed = () => stop('File channel closed before completion');
       transport.onData = (data) {
+        if (getStopped()) return;
+        // Bound queued disk writes as well as outbound network buffers. The
+        // protocol has no receive-window API; fail safely if disk cannot keep up.
+        if (pendingInboundBytes + data.length > 8 * 1024 * 1024) {
+          stop('Download receive buffer limit exceeded');
+          return;
+        }
+        pendingInboundBytes += data.length;
         // A single ordered chain prevents end/flush racing preceding writes.
         inbound = inbound.then((_) => onData(data)).catchError((Object error) {
           stop(error);
+        }).whenComplete(() {
+          pendingInboundBytes -= data.length;
         });
       };
       if (transport.isOpen) unawaited(onOpen());
