@@ -2,6 +2,7 @@
 // Client Manager Implementation
 
 #include "ClientManager.h"
+#include "ClipboardFiles.h"
 #include "NativeMessaging.h"
 #include "core/localconfigcenter.h"
 #include "infra/log/log.h"
@@ -25,10 +26,32 @@ ClientManager::ClientManager(QObject* parent)
     : QObject(parent)
     , m_sharedMemoryManager(std::make_unique<SharedMemoryManager>(this))
 {
+    connect(&m_fileTransfers, &FileTransferQueue::changed,
+            this, &ClientManager::fileTransferTasksChanged);
+    connect(&m_fileTransfers, &FileTransferQueue::notice,
+            this, &ClientManager::fileTransferNotice);
+    connect(&m_fileTransfers, &FileTransferQueue::commandRequested, this,
+            [this](const QJsonObject& command) {
+        const QString connectionId = command.value("connectionId").toString();
+        const QString deviceId = findDeviceId(connectionId);
+        if (deviceId.isEmpty() || !m_messaging || !m_messaging->isReady() ||
+            getConnectionRtcState(deviceId) != RtcStatus::Connected) {
+            m_fileTransfers.endSession(connectionId);
+            return;
+        }
+        m_messaging->sendMessage(command);
+    });
+    connect(this, &ClientManager::connectionStateChanged, this,
+            [this](const QString& deviceId, const QString& state, const QJsonObject&) {
+        const QString id = connectionIdFor(deviceId);
+        if (state == "connected") m_fileTransfers.beginSession(id, deviceId);
+        else if (state == "disconnected" || state == "failed") m_fileTransfers.endSession(id);
+    });
 }
 
 void ClientManager::setMessaging(NativeMessaging* messaging)
 {
+    if (m_messaging != messaging) m_fileTransfers.endAllSessions();
     if (m_messaging) {
         QObject::disconnect(m_messaging, nullptr, this, nullptr);
     }
@@ -554,24 +577,37 @@ bool ClientManager::supportsVirtualDisplay(const QString& deviceId) const
     return it.value().supportsVirtualDisplay;
 }
 
+bool ClientManager::fileTransferReady(const QString& deviceId) const
+{
+    return m_messaging && m_messaging->isReady() &&
+           getConnectionRtcState(deviceId) == RtcStatus::Connected &&
+           supportsFileTransfer(deviceId);
+}
+
 void ClientManager::startFileUpload(const QString& deviceId, const QUrl& fileUrl)
 {
-    if (!m_messaging || !m_messaging->isReady()) {
-        LOG_WARN("Cannot start file upload: messaging not ready");
+    if (!fileTransferReady(deviceId)) {
+        emit fileTransferNotice(deviceId, tr("File transfer is not available for this connection."));
         return;
     }
-    QString connId = connectionIdFor(deviceId);
-    if (connId.isEmpty()) return;
+    const QString connectionId = connectionIdFor(deviceId);
+    m_fileTransfers.beginSession(connectionId, deviceId);
+    m_fileTransfers.enqueueUpload(connectionId, fileUrl);
+}
 
-    QString filePath = fileUrl.toLocalFile();
-    LOG_INFO("Starting file upload for {}: {}", deviceId.toStdString(),
-             filePath.toStdString());
+void ClientManager::cancelFileTask(const QString& taskId)
+{
+    m_fileTransfers.cancel(taskId);
+}
 
-    QJsonObject message;
-    message["type"] = "startFileUpload";
-    message["connectionId"] = connId;
-    message["filePath"] = filePath;
-    m_messaging->sendMessage(message);
+bool ClientManager::copyDownloadedFile(const QString& taskId)
+{
+    const QString path = m_fileTransfers.completedDownloadPath(taskId);
+    if (!copyLocalFileToClipboard(path)) {
+        emit fileTransferNotice(QString(), tr("The downloaded file is no longer available."));
+        return false;
+    }
+    return true;
 }
 
 void ClientManager::cancelFileUpload(const QString& deviceId,
@@ -596,6 +632,10 @@ void ClientManager::cancelFileUpload(const QString& deviceId,
 
 void ClientManager::startFileDownload(const QString& deviceId)
 {
+    if (!fileTransferReady(deviceId)) {
+        emit fileTransferNotice(deviceId, tr("File transfer is not available for this connection."));
+        return;
+    }
     if (!m_messaging || !m_messaging->isReady()) {
         LOG_WARN("Cannot start file download: messaging not ready");
         return;
@@ -608,6 +648,8 @@ void ClientManager::startFileDownload(const QString& deviceId)
              deviceId.toStdString(), saveDir.toStdString());
 
     QJsonObject message;
+    m_fileTransfers.beginSession(connId, deviceId);
+    m_fileTransfers.registerDownload(connId, saveDir);
     message["type"] = "startFileDownload";
     message["connectionId"] = connId;
     message["saveDir"] = saveDir;
@@ -652,23 +694,20 @@ bool ClientManager::deleteDownloadedFile(const QString& filePath)
 
 bool ClientManager::pasteFilesFromClipboard(const QString& deviceId)
 {
-    const QMimeData* mimeData = QGuiApplication::clipboard()->mimeData();
-    if (!mimeData || !mimeData->hasUrls()) {
-        return false;
+    const auto* clipboard = QGuiApplication::clipboard();
+    const QMimeData* mimeData = clipboard ? clipboard->mimeData() : nullptr;
+    if (!mimeData || !mimeData->hasUrls()) return false;
+    // Snapshot the URLs: publishing notices may re-enter the UI/clipboard owner.
+    const QList<QUrl> urls = mimeData->urls();
+    bool handled = false;
+    for (const auto& url : urls) {
+        if (!url.isLocalFile()) continue;
+        handled = true;
+        startFileUpload(deviceId, url);
     }
-
-    QList<QUrl> urls = mimeData->urls();
-    bool anyStarted = false;
-    for (const QUrl& url : urls) {
-        if (url.isLocalFile()) {
-            QFileInfo fi(url.toLocalFile());
-            if (fi.exists() && fi.isFile()) {
-                startFileUpload(deviceId, url);
-                anyStarted = true;
-            }
-        }
-    }
-    return anyStarted;
+    // A local-file paste rejected by validation is still handled: forwarding V
+    // would paste stale remote clipboard contents instead.
+    return handled;
 }
 
 bool ClientManager::supportsFileTransfer(const QString& deviceId) const
@@ -756,6 +795,7 @@ QString ClientManager::getSignalingError(const QString& deviceId) const
 
 void ClientManager::onMessageReceived(const QJsonObject& message)
 {
+    m_fileTransfers.handleMessage(message);
     QString type = message["type"].toString();
 
     if (type != "videoFrameReady" && type != "performanceStatsUpdate" && type != "displayListChanged" && type != "routeChanged") {
@@ -831,6 +871,7 @@ void ClientManager::onMessageReceived(const QJsonObject& message)
 
 void ClientManager::onMessagingError(const QString& error)
 {
+    m_fileTransfers.endAllSessions();
     emit errorOccurred("", "MESSAGING_ERROR", error);
 }
 
@@ -851,11 +892,13 @@ QString ClientManager::findDeviceId(const QString& connectionId) const
 
 QString ClientManager::generateConnectionId()
 {
-    return QString("conn_%1").arg(++m_connectionCounter);
+    return QString("conn_%1_%2").arg(++m_connectionCounter)
+        .arg(QUuid::createUuid().toString(QUuid::WithoutBraces));
 }
 
 void ClientManager::removeConnection(const QString& deviceId)
 {
+    m_fileTransfers.endSession(connectionIdFor(deviceId));
     auto it = m_connections.find(deviceId);
     if (it != m_connections.end()) {
         m_connIdToDeviceId.remove(it->connectionId);
@@ -952,6 +995,7 @@ void ClientManager::handleConnectionStateChanged(const QJsonObject& message)
 
 void ClientManager::handleConnectionListChanged(const QJsonObject& message)
 {
+    const auto oldConnections = m_connections;
     m_connections.clear();
     m_connIdToDeviceId.clear();
     
@@ -961,6 +1005,14 @@ void ClientManager::handleConnectionListChanged(const QJsonObject& message)
         ConnectionInfo conn;
         conn.connectionId = obj["connectionId"].toString();
         conn.deviceId = obj["deviceId"].toString();
+        const auto previous = oldConnections.constFind(conn.deviceId);
+        if (previous != oldConnections.cend() && previous->connectionId == conn.connectionId) {
+            conn.supportsFileTransfer = previous->supportsFileTransfer;
+            conn.supportsSendAttentionSequence = previous->supportsSendAttentionSequence;
+            conn.supportsLockWorkstation = previous->supportsLockWorkstation;
+            conn.supportsPrivacyScreen = previous->supportsPrivacyScreen;
+            conn.supportsVirtualDisplay = previous->supportsVirtualDisplay;
+        }
         conn.deviceName = obj["deviceName"].toString();
         conn.connectedAt = obj["connectedAt"].toString();
         
@@ -980,6 +1032,16 @@ void ClientManager::handleConnectionListChanged(const QJsonObject& message)
         m_connections[conn.deviceId] = conn;
         m_connIdToDeviceId[conn.connectionId] = conn.deviceId;
     }
+
+    for (const auto& old : oldConnections) {
+        if (!m_connections.contains(old.deviceId) ||
+            m_connections.value(old.deviceId).connectionId != old.connectionId ||
+            m_connections.value(old.deviceId).rtcState != RtcStatus::Connected)
+            m_fileTransfers.endSession(old.connectionId);
+    }
+    for (const auto& current : m_connections)
+        if (current.rtcState == RtcStatus::Connected)
+            m_fileTransfers.beginSession(current.connectionId, current.deviceId);
 
     emit connectionCountChanged();
     emit connectionListChanged();

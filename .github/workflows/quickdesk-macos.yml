@@ -9,6 +9,7 @@ on:
       - 'scripts/**'
       - 'WebClient/**'
       - 'CMakeLists.txt'
+      - 'test/file-transfer/**'
       - '.github/workflows/quickdesk-macos.yml'
   pull_request:
     paths:
@@ -18,6 +19,7 @@ on:
       - 'scripts/**'
       - 'WebClient/**'
       - 'CMakeLists.txt'
+      - 'test/file-transfer/**'
       - '.github/workflows/quickdesk-macos.yml'
   workflow_dispatch:
 
@@ -68,6 +70,13 @@ jobs:
             quickdesk-skill-host/target
           key: ${{ runner.os }}-${{ matrix.arch }}-cargo-${{ hashFiles('quickdesk-mcp/Cargo.lock', 'quickdesk-skill-host/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-${{ matrix.arch }}-cargo-
+
+      - name: Test file transfer state machine and QML contracts
+        run: |
+          cmake -S test/file-transfer -B build/file-transfer -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR"
+          cmake --build build/file-transfer --config Release
+          ctest --test-dir build/file-transfer -C Release --output-on-failure
+          node --test test/file-transfer/qml_contract_test.mjs
 
       - name: Build
         env:
