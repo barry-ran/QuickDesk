@@ -229,6 +229,39 @@ void main() {
   final contract = jsonDecode(
     File('../test/fixtures/mobile-gestures.json').readAsStringSync(),
   ) as Map<String, dynamic>;
+  for (final scenario in contract['dragCases'] as List) {
+    test('shared explicit drag: ${scenario['name']}', () {
+      var displayedActive = false;
+      controller.onCursorMoved = () {
+        displayedActive = controller.dragArmed || controller.leftButtonHeld;
+      };
+      for (final step in scenario['steps']) {
+        switch (step['action']) {
+          case 'toggle':
+            controller.toggleDrag();
+          case 'tap':
+            _tap(controller, const Offset(100, 100));
+          case 'swipe':
+            final startX = controller.cursorX;
+            controller.onPointerDown(_down(const Offset(100, 100)), 1);
+            controller.onPointerMove(_move(const Offset(120, 100)), 1);
+            expect(controller.cursorX, greaterThan(startX));
+            controller.onPointerUp(_up(const Offset(120, 100)), 0);
+          default:
+            fail('Unknown drag action: ${step['action']}');
+        }
+        expect(controller.dragArmed || controller.leftButtonHeld, step['active']);
+        expect(displayedActive, step['active']);
+        expect(
+          channel.mouseEvents
+              .where((event) => event.buttonDown != null)
+              .map((event) => event.buttonDown)
+              .toList(),
+          step['buttons'],
+        );
+      }
+    });
+  }
   for (final scenario in contract['cases'] as List) {
     test('shared gesture: ${scenario['name']}', () {
       Offset point(dynamic p) =>
