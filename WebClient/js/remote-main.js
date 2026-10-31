@@ -78,8 +78,13 @@ export class RemoteDesktopApp {
                 return true;
             }
         }
-        // Small screen with touch capability is likely a phone
-        if (navigator.maxTouchPoints > 0 && window.innerWidth <= 768) {
+        // Keep the touch fallback stable in landscape and desktop-site mode.
+        // A phone may expose a desktop UA and a fine pointer (paired mouse),
+        // so neither UA nor pointer queries alone identify it. Use the screen
+        // short edge, not viewport height (a short desktop window is not a phone).
+        const screenShortEdge = Math.min(window.screen?.width || Infinity,
+            window.screen?.height || Infinity);
+        if (navigator.maxTouchPoints > 0 && (window.innerWidth <= 768 || screenShortEdge <= 768)) {
             return true;
         }
         return false;
@@ -587,10 +592,10 @@ export class RemoteDesktopApp {
         }
 
         if (this.mouseHandler) {
-            this.mouseHandler.setRemoteResolution(selectedTrack.width, selectedTrack.height);
+            this.mouseHandler.setRemoteDisplay(selectedTrack.width, selectedTrack.height, selectedTrack.positionX ?? 0, selectedTrack.positionY ?? 0);
         }
         if (this.touchHandler) {
-            this.touchHandler.setRemoteResolution(selectedTrack.width, selectedTrack.height);
+            this.touchHandler.setRemoteDisplay(selectedTrack.width, selectedTrack.height, selectedTrack.positionX ?? 0, selectedTrack.positionY ?? 0);
         }
 
         if (this.floatingToolbar) {
@@ -607,10 +612,11 @@ export class RemoteDesktopApp {
 
         const w = this._remoteWidth || video.videoWidth || 1920;
         const h = this._remoteHeight || video.videoHeight || 1080;
+        const display = this._currentDisplayList?.find(track => track.mediaStreamId === this._selectedStreamId);
 
         if (this._isMobile) {
             this.touchHandler = new TouchHandler(videoContainer || video, video, this.dcHandler);
-            this.touchHandler.setRemoteResolution(w, h);
+            this.touchHandler.setRemoteDisplay(w, h, display?.positionX ?? 0, display?.positionY ?? 0);
             this.touchHandler.enable();
             const dragButton = document.getElementById('btnDrag');
             this.touchHandler.onDragStateChanged = () => {
@@ -620,7 +626,7 @@ export class RemoteDesktopApp {
             };
         } else {
             this.mouseHandler = new MouseHandler(video, this.dcHandler, videoContainer || video);
-            this.mouseHandler.setRemoteResolution(w, h);
+            this.mouseHandler.setRemoteDisplay(w, h, display?.positionX ?? 0, display?.positionY ?? 0);
             this.mouseHandler.enable();
 
             this.keyboardHandler = new KeyboardHandler(videoContainer || video, this.dcHandler);
@@ -770,8 +776,8 @@ export class RemoteDesktopApp {
             }
         }
 
-        if (this.mouseHandler) this.mouseHandler.setRemoteResolution(track.width, track.height);
-        if (this.touchHandler) this.touchHandler.setRemoteResolution(track.width, track.height);
+        if (this.mouseHandler) this.mouseHandler.setRemoteDisplay(track.width, track.height, track.positionX ?? 0, track.positionY ?? 0);
+        if (this.touchHandler) this.touchHandler.setRemoteDisplay(track.width, track.height, track.positionX ?? 0, track.positionY ?? 0);
 
         const resEl = document.getElementById('connResolution');
         if (resEl) resEl.textContent = `${track.width}x${track.height}`;
