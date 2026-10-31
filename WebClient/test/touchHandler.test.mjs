@@ -271,3 +271,46 @@ test('container-only resize remaps cursor, cancels drag, and disconnects observe
         assert.equal(disconnected, true);
     } finally { delete globalThis.ResizeObserver; }
 });
+
+for (const [originX, originY] of [[0, 0], [1920, 120], [-1600, -900]]) {
+    test(`display origin ${originX},${originY} applies to all mouse events but not local cursor`, () => {
+        const { send, messages } = fixture();
+        handler.setRemoteDisplay(1600, 900, originX, originY);
+        tap(send);
+        handler.click(MouseButton.BUTTON_RIGHT);
+        send('touchstart', [[100, 200], [200, 200]]);
+        send('touchmove', [[110, 215], [210, 215]]);
+        send('touchend');
+        for (const event of messages) {
+            assert.equal(event.x, originX + 800);
+            assert.equal(event.y, originY + 450);
+        }
+        assert.equal(messages.at(-1).wheelDeltaY, 45);
+        messages.length = 0;
+        handler.toggleDrag();
+        send('touchstart', [[100, 100]]);
+        send('touchmove', [[10000, -10000]]);
+        send('touchend');
+        assert.deepEqual(messages.map(e => [e.x, e.y]), [
+            [originX + 800, originY + 450], [originX + 1599, originY], [originX + 1599, originY],
+        ]);
+        assert.equal(handler._cursorX, 1599);
+        assert.equal(handler._cursorY, 0);
+    });
+}
+test('display switch releases drag using old origin and frame resize retains new origin', () => {
+    const { send, messages } = fixture();
+    handler.setRemoteDisplay(1600, 900, -1600, 100);
+    beginDrag(send);
+    handler.setRemoteDisplay(800, 600, 1920, -600);
+    assert.deepEqual(messages.at(-1), { x: -750, y: 550, button: 1, buttonDown: false });
+    send('touchend');
+    handler.setRemoteResolution(800, 600);
+    handler.click();
+    assert.equal(messages.at(-1).x, 1920 + 799);
+    assert.equal(messages.at(-1).y, -150);
+    handler.setRemoteDisplay(800, 600);
+    handler.click();
+    assert.equal(messages.at(-1).x, 799);
+    assert.equal(messages.at(-1).y, 450);
+});

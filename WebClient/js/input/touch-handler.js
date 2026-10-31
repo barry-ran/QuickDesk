@@ -36,6 +36,8 @@ export class TouchHandler {
 
         this.remoteWidth = 0;
         this.remoteHeight = 0;
+        this.remoteOriginX = 0;
+        this.remoteOriginY = 0;
 
         this._cursorX = 0;
         this._cursorY = 0;
@@ -66,6 +68,15 @@ export class TouchHandler {
         this._cursorEl = null;
         this._gestureBlocked = false;
         this._twoFingerMode = null;
+    }
+
+    // Cursor/zoom stay display-local; only wire coordinates use desktop origin.
+    setRemoteDisplay(w, h, originX = 0, originY = 0) {
+        // Release a held button on the OLD display before changing the mapping.
+        this.cancelGesture();
+        this.remoteOriginX = originX;
+        this.remoteOriginY = originY;
+        this.setRemoteResolution(w, h);
     }
 
     setRemoteResolution(w, h) {
@@ -373,24 +384,24 @@ export class TouchHandler {
         this._cursorY = Math.max(0, Math.min(this.remoteHeight - 1, this._cursorY + dy));
 
         this.dcHandler.sendMouseEvent({
-            x: Math.round(this._cursorX),
-            y: Math.round(this._cursorY),
+            x: Math.round(this._cursorX) + this.remoteOriginX,
+            y: Math.round(this._cursorY) + this.remoteOriginY,
         });
         this._updateCursorElement();
     }
 
     _sendClick(button) {
         if (this.remoteWidth <= 0 || this.remoteHeight <= 0) return;
-        const x = Math.round(this._cursorX);
-        const y = Math.round(this._cursorY);
+        const x = Math.round(this._cursorX) + this.remoteOriginX;
+        const y = Math.round(this._cursorY) + this.remoteOriginY;
         this.dcHandler.sendMouseEvent({ x, y, button, buttonDown: true });
         this.dcHandler.sendMouseEvent({ x, y, button, buttonDown: false });
     }
 
     _sendButton(button, buttonDown) {
         this.dcHandler.sendMouseEvent({
-            x: Math.round(this._cursorX),
-            y: Math.round(this._cursorY),
+            x: Math.round(this._cursorX) + this.remoteOriginX,
+            y: Math.round(this._cursorY) + this.remoteOriginY,
             button,
             buttonDown,
         });
@@ -398,8 +409,8 @@ export class TouchHandler {
 
     _sendScroll(dx, dy) {
         this.dcHandler.sendMouseEvent({
-            x: Math.round(this._cursorX),
-            y: Math.round(this._cursorY),
+            x: Math.round(this._cursorX) + this.remoteOriginX,
+            y: Math.round(this._cursorY) + this.remoteOriginY,
             wheelDeltaX: dx * 3,
             wheelDeltaY: dy * 3,
             wheelTicksX: dx / 40,
