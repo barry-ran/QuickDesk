@@ -48,6 +48,71 @@ void main() {
     await channel.dispose();
   });
 
+  for (final origin in [
+    Offset.zero,
+    const Offset(1920, 100),
+    const Offset(-1000, -800),
+  ]) {
+    test('display origin $origin maps clicks, drag and scroll, not local cursor', () {
+      controller.setRemoteDisplay(
+        1000,
+        800,
+        originX: origin.dx.toInt(),
+        originY: origin.dy.toInt(),
+      );
+      _tap(controller, const Offset(100, 100));
+      controller.click(right: true);
+      controller.onPointerDown(_down(const Offset(100, 200)), 1);
+      controller.onPointerDown(_down(const Offset(200, 200), pointer: 2), 2);
+      controller.onTwoFingerStart(const Offset(150, 200), 100);
+      controller.onPointerMove(_move(const Offset(110, 215)), 2,
+          twoFingerCenter: const Offset(160, 215), twoFingerDistance: 100);
+      controller.onPointerUp(_up(const Offset(110, 215)), 0);
+      for (final event in channel.mouseEvents) {
+        expect(event.x, origin.dx.toInt() + 500);
+        expect(event.y, origin.dy.toInt() + 400);
+      }
+      expect(channel.mouseEvents.last.wheelDeltaY, 45);
+      final wireEvent = decodeEventMessage(encodeEventMessage(
+        mouseEvent: channel.mouseEvents.last,
+      )).mouseEvent!;
+      expect(wireEvent.x, origin.dx.toInt() + 500);
+      expect(wireEvent.y, origin.dy.toInt() + 400);
+      channel.mouseEvents.clear();
+      controller.toggleDrag();
+      controller.onPointerDown(_down(const Offset(100, 100)), 1);
+      controller.onPointerMove(_move(const Offset(10000, -10000)), 1);
+      controller.onPointerUp(_up(const Offset(10000, -10000)), 0);
+      expect(channel.mouseEvents.map((e) => [e.x, e.y]).toList(), [
+        [origin.dx.toInt() + 500, origin.dy.toInt() + 400],
+        [origin.dx.toInt() + 999, origin.dy.toInt()],
+        [origin.dx.toInt() + 999, origin.dy.toInt()],
+      ]);
+      expect(controller.cursorX, 999);
+      expect(controller.cursorY, 0);
+    });
+  }
+
+  test('switch releases drag at old origin and frame resize preserves mapping', () {
+    controller.setRemoteDisplay(1000, 800, originX: -1000, originY: 100);
+    controller.toggleDrag();
+    controller.onPointerDown(_down(const Offset(100, 100)), 1);
+    controller.onPointerMove(_move(const Offset(120, 100)), 1);
+    controller.setRemoteDisplay(400, 600, originX: 1920, originY: -600);
+    expect(channel.mouseEvents.last.buttonDown, isFalse);
+    expect(channel.mouseEvents.last.x, -450);
+    expect(channel.mouseEvents.last.y, 500);
+    controller.onPointerUp(_up(const Offset(120, 100)), 0);
+    controller.setRemoteResolution(400, 600);
+    controller.click();
+    expect(channel.mouseEvents.last.x, 2319);
+    expect(channel.mouseEvents.last.y, -200);
+    controller.setRemoteDisplay(400, 600);
+    controller.click();
+    expect(channel.mouseEvents.last.x, 399);
+    expect(channel.mouseEvents.last.y, 400);
+  });
+
   test('single tap emits an immediate left click', () {
     _tap(controller, const Offset(100, 100));
 

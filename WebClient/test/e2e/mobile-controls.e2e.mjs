@@ -124,8 +124,9 @@ test('orientation change keeps the letterboxed cursor visible and centered', asy
 });
 
 
-test('real remote page: 320px toolbar, help, keyboard and accessible drag bindings', async () => {
-    const context = await browser.newContext({ viewport: { width: 320, height: 740 }, isMobile: true, hasTouch: true });
+for (const viewport of [{ width: 320, height: 740 }, { width: 844, height: 390 }]) {
+test(`real remote page: ${viewport.width}px toolbar, help, keyboard and accessible drag bindings`, async () => {
+    const context = await browser.newContext({ viewport, isMobile: true, hasTouch: true });
     await context.addInitScript(() => localStorage.setItem('quickdesk_lang', 'en-US'));
     const page = await context.newPage();
     const errors = [];
@@ -148,13 +149,13 @@ test('real remote page: 320px toolbar, help, keyboard and accessible drag bindin
             app._setupInputHandlers();
         });
         const row = page.locator('#mobileToolbar > .mobile-toolbar-row');
-        assert.equal(await row.evaluate(el => el.scrollWidth > el.clientWidth), true);
+        if (viewport.width === 320) assert.equal(await row.evaluate(el => el.scrollWidth > el.clientWidth), true);
         for (const id of ['btnKeyboard', 'btnLeftClick', 'btnDrag', 'btnRightClick', 'btnZoomReset', 'btnGestureHelp', 'btnLogs', 'btnFullscreen', 'btnDisconnect']) {
             const button = page.locator(`#${id}`);
             await button.scrollIntoViewIfNeeded();
             const bounds = await button.boundingBox();
             assert.ok(bounds.width >= 48 && bounds.height >= 48, `${id} minimum target`);
-            assert.ok(bounds.x >= -1 && bounds.x + bounds.width <= 321, `${id} reachable by horizontal scroll`);
+            assert.ok(bounds.x >= -1 && bounds.x + bounds.width <= viewport.width + 1, `${id} reachable by horizontal scroll`);
         }
         const help = page.locator('#btnGestureHelp');
         await help.tap();
@@ -195,7 +196,17 @@ test('real remote page: 320px toolbar, help, keyboard and accessible drag bindin
         await keyboard.tap();
         assert.equal(await keyboard.getAttribute('aria-pressed'), 'false');
         assert.equal(await page.locator('#mobileKeyRow').isVisible(), false);
+        // Rotating and visual viewport resize must not blur the IME bridge.
+        await keyboard.tap();
+        await page.setViewportSize({ width: viewport.height, height: viewport.width });
+        assert.equal(await page.locator('#mobileKeyInput').evaluate(el => document.activeElement === el), true);
+        await page.evaluate(() => window.visualViewport?.dispatchEvent(new Event('resize')));
+        assert.equal(await keyboard.getAttribute('aria-pressed'), 'true');
+        await keyboard.tap();
+        assert.equal(await keyboard.getAttribute('aria-pressed'), 'false');
         await page.evaluate(() => remoteDesktopApp._cleanupInputHandlers());
         assert.deepEqual(errors, []);
     } finally { await context.close(); }
 });
+
+}

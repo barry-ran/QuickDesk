@@ -2,7 +2,7 @@
   <div class="app-layout">
     <!-- Sidebar -->
     <nav class="nav-sidebar">
-      <div class="nav-header" @click="onUserAreaClick" style="cursor:pointer;">
+      <button type="button" class="nav-header" @click="onUserAreaClick" :aria-expanded="authState.isLoggedIn ? showUserMenu : showLogin">
         <template v-if="authState.isLoggedIn">
           <div class="user-avatar">{{ userInitial }}</div>
           <div class="user-info">
@@ -17,7 +17,7 @@
             <div class="user-sub">{{ $t('user.clickToLogin') }}</div>
           </div>
         </template>
-      </div>
+      </button>
 
       <div class="nav-items">
         <router-link v-for="item in navItems" :key="item.path" :to="item.path" class="nav-item" active-class="active">
@@ -101,7 +101,7 @@ const userInitial = computed(() => {
 function onUserAreaClick(e) {
   if (authState.isLoggedIn) {
     const rect = e.currentTarget.getBoundingClientRect()
-    userMenuStyle.value = { left: rect.right + 4 + 'px', top: rect.top + 'px' }
+    userMenuStyle.value = { '--user-menu-left': rect.right + 4 + 'px', '--user-menu-top': rect.top + 'px' }
     showUserMenu.value = true
   } else {
     showLogin.value = true
@@ -242,6 +242,8 @@ a { text-decoration: none; color: inherit; }
 }
 
 .nav-header {
+  width: 100%; background: transparent; color: inherit; font: inherit;
+  text-align: start; border: 0; cursor: pointer;
   padding: 20px 16px;
   border-bottom: 1px solid var(--border);
   display: flex;
@@ -265,6 +267,8 @@ a { text-decoration: none; color: inherit; }
   display: flex; align-items: center; justify-content: center;
   font-size: 18px; flex-shrink: 0;
 }
+
+.nav-header:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 
 .user-info { flex: 1; min-width: 0; }
 .user-name { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -301,6 +305,7 @@ a { text-decoration: none; color: inherit; }
 .user-menu-overlay { position: fixed; inset: 0; z-index: 200; }
 .user-menu {
   position: fixed; z-index: 201;
+  left: var(--user-menu-left); top: var(--user-menu-top);
   background: var(--bg-card); border: 1px solid var(--border);
   border-radius: 8px; padding: 4px; min-width: 160px;
   box-shadow: 0 4px 12px rgba(0,0,0,0.3);
@@ -379,7 +384,14 @@ a { text-decoration: none; color: inherit; }
 .hint.success { color: var(--success); }
 
 @media (max-width: 600px) {
-  .nav-sidebar { display: none; }
-  .content-area { padding: 16px; }
+  .app-layout { flex-direction: column; }
+  .nav-sidebar { width: 100%; border-right: 0; border-bottom: 1px solid var(--border); }
+  .nav-header { padding: 8px 16px; }
+  .nav-items { display: flex; overflow-x: auto; padding: 0; flex: none; }
+  .nav-item { flex-shrink: 0; padding: 10px 12px; gap: 6px; border-left: 0; border-bottom: 3px solid transparent; }
+  .nav-item.active { border-bottom-color: var(--accent); }
+  .nav-footer { display: none; }
+  .user-menu { left: 8px; top: 60px; max-width: calc(100vw - 16px); }
+  .content-area { min-height: 0; padding: 16px; }
 }
 </style>

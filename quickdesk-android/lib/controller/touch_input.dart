@@ -32,6 +32,8 @@ class TouchInputController {
 
   int remoteWidth = 0;
   int remoteHeight = 0;
+  int remoteOriginX = 0;
+  int remoteOriginY = 0;
 
   double cursorX = 0;
   double cursorY = 0;
@@ -74,6 +76,15 @@ class TouchInputController {
   bool get isZoomed => scale > 1.05;
 
   Offset get _center => Offset(viewportWidth / 2, viewportHeight / 2);
+
+  /// Keep cursor/geometry display-local; add the desktop origin only on send.
+  void setRemoteDisplay(int w, int h, {int originX = 0, int originY = 0}) {
+    // Release on the old display before changing the coordinate mapping.
+    cancelGesture();
+    remoteOriginX = originX;
+    remoteOriginY = originY;
+    setRemoteResolution(w, h);
+  }
 
   void setRemoteResolution(int w, int h) {
     if (w <= 0 || h <= 0) return;
@@ -346,7 +357,10 @@ class TouchInputController {
     cursorY = (cursorY + dy).clamp(0, remoteHeight - 1.0);
 
     dcHandler.sendMouseEvent(
-      MouseEventMsg(x: cursorX.round(), y: cursorY.round()),
+      MouseEventMsg(
+        x: cursorX.round() + remoteOriginX,
+        y: cursorY.round() + remoteOriginY,
+      ),
     );
     onCursorMoved?.call();
   }
@@ -355,8 +369,8 @@ class TouchInputController {
     leftButtonHeld = true;
     dcHandler.sendMouseEvent(
       MouseEventMsg(
-        x: cursorX.round(),
-        y: cursorY.round(),
+        x: cursorX.round() + remoteOriginX,
+        y: cursorY.round() + remoteOriginY,
         button: MouseButton.left.value,
         buttonDown: true,
       ),
@@ -369,8 +383,8 @@ class TouchInputController {
     leftButtonHeld = false;
     dcHandler.sendMouseEvent(
       MouseEventMsg(
-        x: cursorX.round(),
-        y: cursorY.round(),
+        x: cursorX.round() + remoteOriginX,
+        y: cursorY.round() + remoteOriginY,
         button: MouseButton.left.value,
         buttonDown: false,
       ),
@@ -380,8 +394,8 @@ class TouchInputController {
 
   void _sendClick(MouseButton button) {
     if (remoteWidth <= 0 || remoteHeight <= 0) return;
-    final x = cursorX.round();
-    final y = cursorY.round();
+    final x = cursorX.round() + remoteOriginX;
+    final y = cursorY.round() + remoteOriginY;
     dcHandler.sendMouseEvent(
       MouseEventMsg(x: x, y: y, button: button.value, buttonDown: true),
     );
@@ -393,8 +407,8 @@ class TouchInputController {
   void _sendScroll(double dx, double dy) {
     dcHandler.sendMouseEvent(
       MouseEventMsg(
-        x: cursorX.round(),
-        y: cursorY.round(),
+        x: cursorX.round() + remoteOriginX,
+        y: cursorY.round() + remoteOriginY,
         wheelDeltaX: dx * 3,
         wheelDeltaY: dy * 3,
         wheelTicksX: dx / 40,

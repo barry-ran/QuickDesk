@@ -19,6 +19,8 @@ export class MouseHandler {
         this.focusElement = focusElement;
         this.remoteWidth = 0;
         this.remoteHeight = 0;
+        this.remoteOriginX = 0;
+        this.remoteOriginY = 0;
         this._enabled = false;
         this._handlers = {};
     }
@@ -28,6 +30,12 @@ export class MouseHandler {
      * @param {number} width 
      * @param {number} height 
      */
+    setRemoteDisplay(width, height, originX = 0, originY = 0) {
+        this.remoteOriginX = originX;
+        this.remoteOriginY = originY;
+        this.setRemoteResolution(width, height);
+    }
+
     setRemoteResolution(width, height) {
         this.remoteWidth = width;
         this.remoteHeight = height;
@@ -124,8 +132,8 @@ export class MouseHandler {
         const remoteY = Math.round((contentY / renderHeight) * this.remoteHeight);
 
         return {
-            x: Math.max(0, Math.min(remoteX, this.remoteWidth - 1)),
-            y: Math.max(0, Math.min(remoteY, this.remoteHeight - 1)),
+            x: Math.max(0, Math.min(remoteX, this.remoteWidth - 1)) + this.remoteOriginX,
+            y: Math.max(0, Math.min(remoteY, this.remoteHeight - 1)) + this.remoteOriginY,
         };
     }
 
