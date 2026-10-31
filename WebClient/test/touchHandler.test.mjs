@@ -205,6 +205,32 @@ test('zoom bounds use actual letterboxed content, not empty video-element bars',
     assert.equal(handler.video.style.transform, '');
 });
 
+for (const scenario of JSON.parse(readFileSync(new URL('../../test/fixtures/mobile-gestures.json', import.meta.url))).dragCases) {
+    test(`shared explicit drag: ${scenario.name}`, () => {
+        const { send, messages } = fixture();
+        let displayedActive = false;
+        handler.onDragStateChanged = active => { displayedActive = active; };
+        for (const step of scenario.steps) {
+            if (step.action === 'toggle') {
+                handler.toggleDrag();
+            } else if (step.action === 'tap') {
+                tap(send);
+            } else if (step.action === 'swipe') {
+                const startX = handler._cursorX;
+                send('touchstart', [[100, 100]]);
+                send('touchmove', [[120, 100]]);
+                assert.ok(handler._cursorX > startX);
+                send('touchend');
+            } else {
+                assert.fail(`Unknown drag action: ${step.action}`);
+            }
+            assert.equal(handler.isDragging, step.active);
+            assert.equal(displayedActive, step.active);
+            assert.deepEqual(buttons(messages).map(event => event.buttonDown), step.buttons);
+        }
+    });
+}
+
 test('accessible drag action arms without sending input and releases on lift', () => {
     const { send, messages } = fixture();
     const states = [];
