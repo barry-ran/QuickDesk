@@ -1,5 +1,5 @@
 {
-  "description": "Cross-client two-finger intent cases. Coordinates are logical viewport pixels. Both fingers start together; each move supplies the full pair. Lift both without a click.",
+  "description": "Cross-client two-finger intent and explicit-drag cases. Coordinates are logical viewport pixels. Both fingers start together; each move supplies the full pair. Lift both without a click.",
   "viewport": [400, 800],
   "remote": [1920, 1080],
   "cases": [
@@ -9,5 +9,27 @@
     {"name": "scroll intent stays locked", "initialScale": 1, "start": [[150,400],[250,400]], "moves": [[[150,412],[250,412]], [[100,424],[300,424]]], "mode": "scroll", "scale": 1, "wheel": [0,72]},
     {"name": "pinch intent stays locked", "initialScale": 1, "start": [[150,400],[250,400]], "moves": [[[100,400],[300,400]], [[100,420],[300,420]]], "mode": "pinch", "scale": 2, "wheel": null},
     {"name": "jitter is not input", "initialScale": 1, "start": [[150,400],[250,400]], "moves": [[[151,402],[249,402]]], "mode": null, "scale": 1, "wheel": null}
+  ],
+  "dragCases": [
+    {"name": "armed tap cancels and next swipe only moves", "steps": [
+      {"action": "toggle", "active": true, "buttons": []},
+      {"action": "tap", "active": false, "buttons": []},
+      {"action": "swipe", "active": false, "buttons": []}
+    ]},
+    {"name": "second button press cancels and next swipe only moves", "steps": [
+      {"action": "toggle", "active": true, "buttons": []},
+      {"action": "toggle", "active": false, "buttons": []},
+      {"action": "swipe", "active": false, "buttons": []}
+    ]},
+    {"name": "armed swipe drags and releases on lift", "steps": [
+      {"action": "toggle", "active": true, "buttons": []},
+      {"action": "swipe", "active": false, "buttons": [true, false]}
+    ]},
+    {"name": "tap cancellation can be explicitly rearmed", "steps": [
+      {"action": "toggle", "active": true, "buttons": []},
+      {"action": "tap", "active": false, "buttons": []},
+      {"action": "toggle", "active": true, "buttons": []},
+      {"action": "swipe", "active": false, "buttons": [true, false]}
+    ]}
   ]
 }
