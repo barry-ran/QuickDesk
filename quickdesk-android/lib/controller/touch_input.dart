@@ -277,7 +277,12 @@ class TouchInputController {
         _releaseLeftButton();
         _dragging = false;
         _secondTap = false;
-      } else if (!_moved && !dragArmed) {
+      } else if (dragArmed) {
+        // A touch without a drag cancels the pending action, not a remote click.
+        // Match Web: the next swipe must not unexpectedly hold the left button.
+        dragArmed = false;
+        onCursorMoved?.call();
+      } else if (!_moved) {
         // Emit every tap immediately so both clients produce the same
         // standard two-click sequence for a double-click.
         _sendClick(MouseButton.left);
