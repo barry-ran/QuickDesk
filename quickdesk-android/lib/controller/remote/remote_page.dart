@@ -430,7 +430,12 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     _activeDisplayIndex = index;
     _selectedStreamId = selected.mediaStreamId;
     if ((selected.width ?? 0) > 0 && (selected.height ?? 0) > 0) {
-      _touch.setRemoteResolution(selected.width!, selected.height!);
+      _touch.setRemoteDisplay(
+        selected.width!,
+        selected.height!,
+        originX: selected.positionX ?? 0,
+        originY: selected.positionY ?? 0,
+      );
     }
     if (mounted) setState(() {});
     _applyStream();
@@ -444,7 +449,12 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     _selectedStreamId = track.mediaStreamId;
     _activeDisplayIndex = index;
     if ((track.width ?? 0) > 0 && (track.height ?? 0) > 0) {
-      _touch.setRemoteResolution(track.width!, track.height!);
+      _touch.setRemoteDisplay(
+        track.width!,
+        track.height!,
+        originX: track.positionX ?? 0,
+        originY: track.positionY ?? 0,
+      );
     }
     _applyStream();
     if (mounted) setState(() {});
