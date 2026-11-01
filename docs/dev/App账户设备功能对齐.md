@@ -1,17 +1,17 @@
 # App 账户与设备功能对齐
 
-基线：账户列表 PR #36 已合并后的 `dev` / `419d70342112413de34659d4ccbd6a55af436990`。本次仅扩展产品层，不修改服务端账户、归属、权限或 Remoting 协议。
+账户与设备管理复用服务端现有接口，仅扩展 Android 产品层，不修改服务端账户、归属、权限或 Remoting 协议。
 
 ## 源码依据与范围
 
 - Qt：`QuickDesk/src/manager/AuthManager.cpp`、`CloudDeviceManager.cpp`、`QuickDesk/qml/quickdeskcomponent/LoginDialog.qml`、`QuickDesk/qml/pages/DeviceListPage.qml`。
 - 服务端：`SignalingServer/docs/user-api-docs.md` 以及对应 handler；接口文档不是新增语义授权。
-- 原 App：`quickdesk-android/lib/controller/home_page.dart` 只有主控/被控；`api/signaling_api.dart` 只提供访问码校验和 ICE；账户层缺失。
+- App：`quickdesk-android/lib/account/` 提供账户与设备服务；`controller/home_page.dart` 提供页面入口，`api/signaling_api.dart` 保留远控连接接口。
 - Web：`WebClient/src/views/DevicesPage.vue`、`RecordingsPage.vue`、`ResetPasswordPage.vue`。
 
 ## 对齐矩阵
 
-| 能力 | Qt / 后端现状 | 原 App | 本次目标 / 边界 |
+| 能力 | Qt / 后端接口 | 迁移前 App | 当前实现 / 边界 |
 |---|---|---|---|
 | 用户名/手机/邮箱 + 密码登录 | 统一 identifier 接口 | 无 | 新增账户入口、失败重试、输入校验 |
 | 注册并自动登录 | register 返回用户及令牌 | 无 | 按服务端 feature 显示注册/SMS，不改变注册政策 |
@@ -49,11 +49,11 @@
 
 - 测试只用 mock/fixture；不创建真实账户、不发真实验证码、不建立真实设备归属或信任授权。
 - 令牌不写日志、不写 SharedPreferences、不跨服务器重用；不放宽 TLS 校验。对沿用的明文服务器配置显示风险提示。
-- 本地 Flutter bootstrap 和浏览器运行受环境限制，不能把代码审阅/格式化宣称为真机验证。最终 lint/test/APK 构建以 PR 指定 SHA 的 CI 为准。
+- 代码审阅、格式化和 CI 不替代真机验证；lint/test/APK 构建结果须对应被验证的提交 SHA。
 - Android 真机需另验安全存储、输入法/大字/横屏、网络切换、后台恢复、扫码/Host 互通。CI 通过不替代这些检查。
 
 
-## 绑定、历史与重置的安全闭环（本次）
+## 绑定、历史与重置的安全闭环
 
 - `HostCredentialStore` v2 以规范化 HTTP/WS 服务器地址与 API key 的摘要分区 UUID、设备 ID、访问码与安全存储 secret。旧全局凭据没有可信来源，**不迁移、不发送到任何服务器**；升级后首次开启被控会生成新本机 ID，旧设备记录需用户自行核实后解绑。
 - Host 启动后可在账户页点「绑定本机到当前账户」。确认框标明本机 ID、账户、服务器与归属转移；确认后复核账户 epoch、服务器页面代次和设备身份。重复点击、取消及迟到结果均不能静默转移归属。

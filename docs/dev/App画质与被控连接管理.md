@@ -1,6 +1,6 @@
 # App 画质与被控连接管理
 
-本批位于账户绑定/云连接记录之后，PR 按前者、后者顺序审核合入。仅产品层，不修改 Chromium Remoting 内核。
+画质控制与被控连接管理位于 Android 产品层，不修改 Chromium Remoting 内核。
 
 ## 主控画质与音频
 
@@ -37,6 +37,6 @@ Qt 语义参照 `ClientManager::setTargetFramerate/setBitrate/setResolution` 和
 
 ## 验证
 
-`quality_controls_test.dart` 覆盖固定 wire bytes、发送通道就绪/关闭与范围边界、codec 回退顺序/存储校验、未知能力禁用、无匹配客户端时幂等断开、只读快照和禁用远端请求的 widget。`host_clients_test.dart` 通过生产使用的生命周期接口验证只关闭匹配 peer、异步关闭不误删替代会话、过期确认无效和重复断开幂等；不把 fake peer 测试声称为真实 WebRTC 多端集成测试。完整 `flutter analyze` / `flutter test` / APK 由 CI 执行；本地 SDK bootstrap 已被执行环境拒绝，不重试或绕过。
+`quality_controls_test.dart` 覆盖固定 wire bytes、发送通道就绪/关闭与范围边界、codec 回退顺序/存储校验、未知能力禁用、无匹配客户端时幂等断开、只读快照和禁用远端请求的 widget。`host_clients_test.dart` 通过生产使用的生命周期接口验证只关闭匹配 peer、异步关闭不误删替代会话、过期确认无效和重复断开幂等；不把 fake peer 测试声称为真实 WebRTC 多端集成测试。完整 `flutter analyze` / `flutter test` / APK 构建由 Android CI 执行。
 
 仍需真机互通：Qt Host 实际接受分辨率/码率请求的效果、Android 厂商 codec 支持、多个真实客户端分别断开、访问码停止后刷新与重连。未使用真实账户、短信或设备授权做测试。
