@@ -28,7 +28,7 @@ void LanguageManage::init()
 QStringList LanguageManage::getSupportLanguages()
 {
     QStringList languages;
-    languages << "Auto" << "zh_CN" << "en_US";
+    languages << "Auto" << "zh_CN" << "en_US" << "it_IT";
     return languages;
 }
 
@@ -50,6 +50,8 @@ QString LanguageManage::getCurrentRealLanguage()
         QLocale::Language systemLanguage = getSystemLanguage();
         if (systemLanguage == QLocale::Chinese) {
             language = "zh_CN";
+        } else if (systemLanguage == QLocale::Italian) {
+            language = "it_IT";
         } else if (systemLanguage == QLocale::English) {
             language = "en_US";
         }
@@ -65,6 +67,9 @@ QString LanguageManage::getLanguageName(const QString& language)
     if (language == "en_US") {
         return "English";
     }
+    if (language == "it_IT") {
+        return "Italiano";
+    }
     return tr("Auto");
 }
 
@@ -77,6 +82,9 @@ void LanguageManage::installLanguage()
     }
     if (configLanguage == "en_US") {
         language = QLocale::English;
+    }
+    if (configLanguage == "it_IT") {
+        language = QLocale::Italian;
     }
 
     installTranslator(language);
@@ -101,12 +109,19 @@ void LanguageManage::installTranslator(const QLocale::Language& language)
 {
     static QTranslator zhCnTranslator;
     static QTranslator enUsTranslator;
+    static QTranslator itItTranslator;
+    static QTranslator* currentTranslator = nullptr;
     QTranslator* translator = nullptr;
     if (language == QLocale::Chinese) {
         if (zhCnTranslator.isEmpty()) {
             (void)zhCnTranslator.load(kLanguagePath + "zh_CN.qm");
         }
         translator = &zhCnTranslator;
+    } else if (language == QLocale::Italian) {
+        if (itItTranslator.isEmpty()) {
+            (void)itItTranslator.load(kLanguagePath + "it_IT.qm");
+        }
+        translator = &itItTranslator;
     } else {
         if (enUsTranslator.isEmpty()) {
             (void)enUsTranslator.load(kLanguagePath + "en_US.qm");
@@ -114,5 +129,9 @@ void LanguageManage::installTranslator(const QLocale::Language& language)
         translator = &enUsTranslator;
     }
 
+    if (currentTranslator && currentTranslator != translator) {
+        qApp->removeTranslator(currentTranslator);
+    }
     qApp->installTranslator(translator);
+    currentTranslator = translator;
 }

@@ -1257,6 +1257,16 @@
         <source>Refresh failed: </source>
         <translation>刷新失败：</translation>
     </message>
+    <message>
+        <location filename="../../qml/pages/RemoteControlPage.qml" line="0"/>
+        <source>Permanent Password</source>
+        <translation>固定密码</translation>
+    </message>
+    <message>
+        <location filename="../../qml/pages/RemoteControlPage.qml" line="0"/>
+        <source>The permanent password is not in use yet. Restart QuickDesk to apply it.</source>
+        <translation>固定密码尚未生效，请重启 QuickDesk。</translation>
+    </message>
 </context>
 <context>
     <name>RemoteDesktopView</name>
@@ -1801,6 +1811,86 @@ Frame rate: %3 fps</source>
         <location filename="../../qml/pages/SettingsPage.qml" line="972"/>
         <source>Skills directory added. Skill host will reload.</source>
         <translation>Skills目录已添加。Skill Host将重新加载。</translation>
+    </message>
+    <message>
+        <location filename="../../qml/pages/SettingsPage.qml" line="0"/>
+        <source>The two passwords do not match</source>
+        <translation>两次输入的密码不一致</translation>
+    </message>
+    <message>
+        <location filename="../../qml/pages/SettingsPage.qml" line="0"/>
+        <source>The password must be at least 8 characters long</source>
+        <translation>密码长度至少为 8 个字符</translation>
+    </message>
+    <message>
+        <location filename="../../qml/pages/SettingsPage.qml" line="0"/>
+        <source>The password can be at most 32 characters long</source>
+        <translation>密码长度最多为 32 个字符</translation>
+    </message>
+    <message>
+        <location filename="../../qml/pages/SettingsPage.qml" line="0"/>
+        <source>Use only letters and digits</source>
+        <translation>只能使用字母和数字</translation>
+    </message>
+    <message>
+        <location filename="../../qml/pages/SettingsPage.qml" line="0"/>
+        <source>Unknown error</source>
+        <translation>未知错误</translation>
+    </message>
+    <message>
+        <location filename="../../qml/pages/SettingsPage.qml" line="0"/>
+        <source>Permanent Password</source>
+        <translation>固定密码</translation>
+    </message>
+    <message>
+        <location filename="../../qml/pages/SettingsPage.qml" line="0"/>
+        <source>Use a fixed password instead of a temporary access code. Type it twice to confirm. 8-32 letters and digits.</source>
+        <translation>使用固定密码代替临时访问码。需输入两次以确认，8-32 位字母和数字。</translation>
+    </message>
+    <message>
+        <location filename="../../qml/pages/SettingsPage.qml" line="0"/>
+        <source>A permanent password is active.</source>
+        <translation>固定密码已生效。</translation>
+    </message>
+    <message>
+        <location filename="../../qml/pages/SettingsPage.qml" line="0"/>
+        <source>A permanent password is set. Restart QuickDesk to apply it.</source>
+        <translation>已设置固定密码，重启 QuickDesk 后生效。</translation>
+    </message>
+    <message>
+        <location filename="../../qml/pages/SettingsPage.qml" line="0"/>
+        <source>New password</source>
+        <translation>新密码</translation>
+    </message>
+    <message>
+        <location filename="../../qml/pages/SettingsPage.qml" line="0"/>
+        <source>Confirm password</source>
+        <translation>确认密码</translation>
+    </message>
+    <message>
+        <location filename="../../qml/pages/SettingsPage.qml" line="0"/>
+        <source>Change Password</source>
+        <translation>修改密码</translation>
+    </message>
+    <message>
+        <location filename="../../qml/pages/SettingsPage.qml" line="0"/>
+        <source>Set Password</source>
+        <translation>设置密码</translation>
+    </message>
+    <message>
+        <location filename="../../qml/pages/SettingsPage.qml" line="0"/>
+        <source>Permanent password saved. Restart QuickDesk to apply it.</source>
+        <translation>固定密码已保存，重启 QuickDesk 后生效。</translation>
+    </message>
+    <message>
+        <location filename="../../qml/pages/SettingsPage.qml" line="0"/>
+        <source>Remove Password</source>
+        <translation>移除密码</translation>
+    </message>
+    <message>
+        <location filename="../../qml/pages/SettingsPage.qml" line="0"/>
+        <source>Permanent password removed. A temporary access code will be used.</source>
+        <translation>固定密码已移除，将使用临时访问码。</translation>
     </message>
 </context>
 <context>

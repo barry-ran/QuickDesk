@@ -5,9 +5,10 @@
 #include "../core/localconfigcenter.h"
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QMetaObject>
 #include <QMutexLocker>
+#include <QThread>
 
-#include "../controller/MainController.h"
 #include "infra/log/log.h"
 
 namespace quickdesk {
@@ -32,7 +33,19 @@ QJsonObject TrustHandler::handleRequestConfirmation(const QJsonObject& params)
         return {{"error", "requestConfirmation: tool_name is required"}};
     }
 
-    if (core::LocalConfigCenter::instance().trustConfirmMode() == "auto_approve") {
+    auto& config = core::LocalConfigCenter::instance();
+    bool autoApprove = false;
+    const auto readConfirmMode = [&config, &autoApprove]() {
+        autoApprove = config.trustConfirmMode() == "auto_approve";
+    };
+    if (QThread::currentThread() == config.thread()) {
+        readConfirmMode();
+    } else if (!QMetaObject::invokeMethod(&config, readConfirmMode,
+                                        Qt::BlockingQueuedConnection)) {
+        LOG_WARN("TrustHandler: failed to read confirmation policy; requiring manual confirmation");
+    }
+
+    if (autoApprove) {
         return {{"approved", true}, {"reason", "auto_approved_by_policy"}};
     }
 

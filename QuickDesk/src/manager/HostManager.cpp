@@ -93,7 +93,7 @@ void HostManager::connectToServer(const QString& serverUrl, const QString& saved
     // If savedAccessCode is provided (never refresh mode), include it
     if (!savedAccessCode.isEmpty()) {
         message["accessCode"] = savedAccessCode;
-        LOG_INFO("Sending connect message with saved access code: {}", savedAccessCode.toStdString());
+        LOG_INFO("Sending connect message with saved access code");
     } else {
         LOG_INFO("Sending connect message to host, serverUrl: {}", serverUrl.toStdString());
     }
@@ -401,8 +401,8 @@ void HostManager::handleHostReady(const QJsonObject& message)
         emit deviceSecretReady(m_deviceSecret);
     }
 
-    qInfo() << "Host ready - Device ID:" << m_deviceId 
-            << "Access Code:" << m_accessCode;
+    // Access code is not logged: it may be a permanent password.
+    qInfo() << "Host ready - Device ID:" << m_deviceId;
 
     emit deviceIdChanged();
     emit accessCodeChanged();
@@ -418,7 +418,7 @@ void HostManager::handleAccessCodeChanged(const QJsonObject& message)
     if (!newAccessCode.isEmpty()) {
         m_accessCode = newAccessCode;
         
-        LOG_INFO("Access code changed to: {}", m_accessCode.toStdString());
+        LOG_INFO("Access code changed");
         
         emit accessCodeChanged();
     }
