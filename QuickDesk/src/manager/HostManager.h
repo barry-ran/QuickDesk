@@ -158,7 +158,7 @@ private:
     int m_signalingNextRetryIn = 0;
     QString m_signalingError;
     bool m_supportsAutoLockOnSessionEnd = false;
-    bool m_autoLockOnSessionEnd = false;
+    bool m_autoLockOnSessionEnd = true;
     
     // ICE server configuration (full config object with iceServers + lifetimeDuration)
     QJsonObject m_iceConfig;

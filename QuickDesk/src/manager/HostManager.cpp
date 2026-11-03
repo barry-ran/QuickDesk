@@ -50,7 +50,7 @@ void HostManager::setMessaging(NativeMessaging* messaging)
         m_signalingNextRetryIn = 0;
         m_signalingError.clear();
         m_supportsAutoLockOnSessionEnd = false;
-        m_autoLockOnSessionEnd = false;
+        m_autoLockOnSessionEnd = true;
         
         emit deviceIdChanged();
         emit accessCodeChanged();
@@ -357,7 +357,7 @@ void HostManager::handleHelloResponse(const QJsonObject& message)
     const bool supportsAutoLock =
         message.value("supportsAutoLockOnSessionEnd").toBool(false);
     const bool autoLock = supportsAutoLock &&
-        message.value("autoLockOnSessionEnd").toBool(false);
+        message.value("autoLockOnSessionEnd").toBool(true);
     if (supportsAutoLock != m_supportsAutoLockOnSessionEnd ||
         autoLock != m_autoLockOnSessionEnd) {
         m_supportsAutoLockOnSessionEnd = supportsAutoLock;
