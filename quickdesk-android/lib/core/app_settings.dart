@@ -7,8 +7,11 @@ import 'package:flutter/foundation.dart';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
-const kDefaultSignalingUrl = 'ws://qdsignaling.quickcoder.cc:8060';
-const _kLegacyDefaultSignalingUrl = 'wss://qd.quickcoder.cn';
+const kDefaultSignalingUrl = 'wss://qdsignaling.quickcoder.cc';
+const _kLegacyDefaultSignalingUrls = {
+  'ws://qdsignaling.quickcoder.cc:8060',
+  'wss://qd.quickcoder.cn',
+};
 const kBuildTimeApiKey = String.fromEnvironment('QUICKDESK_API_KEY');
 
 class AppSettings {
@@ -33,7 +36,7 @@ class AppSettings {
   static Future<AppSettings> load() async {
     final prefs = await SharedPreferences.getInstance();
     var signalingUrl = prefs.getString(_kSignalingUrl) ?? kDefaultSignalingUrl;
-    if (signalingUrl == _kLegacyDefaultSignalingUrl) {
+    if (_kLegacyDefaultSignalingUrls.contains(signalingUrl)) {
       signalingUrl = kDefaultSignalingUrl;
       await prefs.setString(_kSignalingUrl, signalingUrl);
     }
@@ -56,5 +59,10 @@ class AppSettings {
     if (lastDeviceId != null) {
       await prefs.setString(_kLastDeviceId, lastDeviceId.trim());
     }
+  }
+
+  static bool isSecureSignalingUrl(String value) {
+    final uri = Uri.tryParse(value.trim());
+    return uri != null && uri.scheme == 'wss' && uri.host.isNotEmpty;
   }
 }
