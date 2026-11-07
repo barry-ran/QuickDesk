@@ -55,7 +55,7 @@
 import { ref, inject, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ConnectionHistory } from '../../js/storage/connection-history.js'
-import { userApi, DEFAULT_SERVER } from '../api/userApi'
+import { userApi } from '../api/userApi'
 import { userSync } from '../api/userSync'
 import { openRemoteSession } from '../utils/remoteLauncher'
 
@@ -63,7 +63,7 @@ const { t } = useI18n()
 const showToast = inject('showToast')
 const authState = inject('authState')
 
-const serverUrl = ref(localStorage.getItem('quickdesk_signaling_url') || DEFAULT_SERVER)
+const serverUrl = ref(userApi.getServerUrl())
 const deviceId = ref('')
 const accessCode = ref('')
 const accessCodeInput = ref(null)
@@ -73,8 +73,14 @@ const connecting = ref(false)
 const errorMsg = ref('')
 
 function saveServerUrl() {
-  localStorage.setItem('quickdesk_signaling_url', serverUrl.value)
-  userApi.setBaseUrl(serverUrl.value)
+  const url = serverUrl.value.trim()
+  if (!userApi.isSecureServerUrl(url)) {
+    errorMsg.value = t('settings.signalingServerMustUseWss')
+    return false
+  }
+  localStorage.setItem('quickdesk_signaling_url', url)
+  userApi.setBaseUrl(url)
+  return true
 }
 
 // §2.18 / §2.6: verify first, then open remote.html with the one-shot
@@ -86,7 +92,9 @@ async function connect() {
     showToast(t('connect.inputRequired'), 'error')
     return
   }
-  saveServerUrl()
+  if (!saveServerUrl()) {
+    return
+  }
   connecting.value = true
   try {
     const v = await userApi.verifyAccessCode(deviceId.value, accessCode.value)

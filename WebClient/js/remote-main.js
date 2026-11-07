@@ -95,7 +95,7 @@ export class RemoteDesktopApp {
         applyI18n();
 
         const params = new URLSearchParams(window.location.search);
-        const serverUrl = params.get('server') || 'ws://localhost:8000';
+        const serverUrl = params.get('server') || 'wss://qdsignaling.quickcoder.cc';
         const deviceId = params.get('device');
         userApi.setBaseUrl(serverUrl);
         userApi.scheduleProactiveRefresh();
