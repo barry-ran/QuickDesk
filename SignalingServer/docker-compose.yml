@@ -4,7 +4,7 @@ services:
     container_name: ${CONTAINER_NAME:-quickdesk-signaling}
     restart: always
     ports:
-      - "${SERVER_PORT:-8000}:8000"
+      - "127.0.0.1:${SERVER_PORT:-8000}:8000"
     volumes:
       - ${DATA_DIR:-/data/quickdesk}:/data
     env_file:

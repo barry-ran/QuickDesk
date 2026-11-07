@@ -1,22 +1,61 @@
 #!/bin/bash
 # QuickDesk Signaling Server — Nginx reverse proxy setup
-# Usage: ./setup-nginx.sh <DOMAIN> <PORT>
+# Usage: ./setup-nginx.sh <DOMAIN> <BACKEND_PORT> [--cert-file FILE --key-file FILE]
 #
-# This script is called by deploy scripts when --domain is specified.
-# It can also be run standalone to configure/reconfigure Nginx.
+# The public endpoint uses HTTPS/WSS on port 443.
 
 set -e
 
 DOMAIN="$1"
 PORT="$2"
+shift 2
+
+CERT_FILE=""
+KEY_FILE=""
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --cert-file) CERT_FILE="$2"; shift 2;;
+        --key-file) KEY_FILE="$2"; shift 2;;
+        -h|--help)
+            echo "Usage: $0 <DOMAIN> <BACKEND_PORT> [--cert-file FILE --key-file FILE]"
+            exit 0;;
+        *) echo "Unknown option: $1"; exit 1;;
+    esac
+done
 
 if [ -z "$DOMAIN" ] || [ -z "$PORT" ]; then
-    echo "Usage: $0 <DOMAIN> <PORT>"
+    echo "Usage: $0 <DOMAIN> <BACKEND_PORT> [--cert-file FILE --key-file FILE]"
     echo "  e.g. $0 example.com 8000"
     exit 1
 fi
 
-echo "Configuring Nginx reverse proxy for $DOMAIN → 127.0.0.1:$PORT ..."
+if ! [[ "$DOMAIN" =~ ^[A-Za-z0-9.-]+$ ]] || ! [[ "$PORT" =~ ^[0-9]+$ ]]; then
+    echo "ERROR: Domain and ports contain unsupported characters."
+    exit 1
+fi
+
+if [ -n "$CERT_FILE" ] || [ -n "$KEY_FILE" ]; then
+    if [ -z "$CERT_FILE" ] || [ -z "$KEY_FILE" ]; then
+        echo "ERROR: --cert-file and --key-file must be provided together."
+        exit 1
+    fi
+else
+    CERT_DIR="/etc/letsencrypt/live/$DOMAIN"
+    CERT_FILE="$CERT_DIR/fullchain.pem"
+    KEY_FILE="$CERT_DIR/privkey.pem"
+fi
+
+if [ ! -r "$CERT_FILE" ] || [ ! -r "$KEY_FILE" ]; then
+    echo "ERROR: Certificate or private key cannot be read."
+    echo "Certificate: $CERT_FILE"
+    echo "Private key:  $KEY_FILE"
+    echo "To use Let's Encrypt defaults, obtain a certificate first, for example:"
+    echo "  sudo certbot certonly --standalone -d $DOMAIN"
+    exit 1
+fi
+
+echo "Configuring HTTPS/WSS proxy for $DOMAIN → 127.0.0.1:$PORT ..."
 
 # ---- Install Nginx if missing ----
 if ! command -v nginx &>/dev/null; then
@@ -114,10 +153,27 @@ server {
     listen 80;
     server_name $DOMAIN;
 
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        return 301 https://\$host\$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl;
+    server_name $DOMAIN;
+
+    ssl_certificate $CERT_FILE;
+    ssl_certificate_key $KEY_FILE;
+    ssl_protocols TLSv1.2 TLSv1.3;
+
     client_max_body_size 100M;
 
     # WebSocket (long-lived connections, server pings every 60s)
-    location /signal/ {
+    location /v1/realtime/ {
         proxy_pass http://quickdesk_signaling;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
@@ -143,6 +199,7 @@ server {
         proxy_read_timeout 30s;
     }
 }
+
 NGINX_EOF
 
 # ---- Ensure nginx.conf includes the vhost directory ----
@@ -175,15 +232,4 @@ else
     sudo nginx
     sudo systemctl enable nginx 2>/dev/null || true
 fi
-echo "Nginx configured for $DOMAIN → 127.0.0.1:$PORT"
-
-# ---- Optional HTTPS with certbot ----
-if command -v certbot &>/dev/null; then
-    echo ""
-    read -p "Setup HTTPS with Let's Encrypt? (y/N) " -r
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        sudo certbot --nginx -d "$DOMAIN"
-    fi
-else
-    echo "TIP: Install certbot for HTTPS: sudo yum install -y certbot python3-certbot-nginx"
-fi
+echo "Nginx configured for https://$DOMAIN → 127.0.0.1:$PORT"
