@@ -71,6 +71,10 @@ class _ConnectPageState extends State<ConnectPage> {
       setState(() => _error = L10n.t('connect.needIdAndCode'));
       return;
     }
+    if (!AppSettings.isSecureSignalingUrl(serverUrl)) {
+      setState(() => _error = L10n.t('connect.secureServerRequired'));
+      return;
+    }
 
     setState(() {
       _connecting = true;
@@ -241,6 +245,21 @@ class _ConnectPageState extends State<ConnectPage> {
                   onPressed: _connecting
                       ? null
                       : () async {
+                          if (!AppSettings.isSecureSignalingUrl(
+                            _serverCtrl.text,
+                          )) {
+                            if (!context.mounted) {
+                              return;
+                            }
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  L10n.t('connect.secureServerRequired'),
+                                ),
+                              ),
+                            );
+                            return;
+                          }
                           await _savePrefs();
                           if (!context.mounted) {
                             return;
