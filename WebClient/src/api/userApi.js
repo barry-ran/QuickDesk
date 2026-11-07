@@ -15,7 +15,8 @@ const ACCESS_EXPIRES_KEY  = 'quickdesk_user_access_expires_at'
 const REFRESH_EXPIRES_KEY = 'quickdesk_user_refresh_expires_at'
 const USER_INFO_KEY     = 'quickdesk_user_info'
 const SERVER_URL_KEY    = 'quickdesk_signaling_url'
-export const DEFAULT_SERVER = 'ws://qdsignaling.quickcoder.cc:8060'
+const LEGACY_OFFICIAL_SERVER = 'ws://qdsignaling.quickcoder.cc:8060'
+export const DEFAULT_SERVER = 'wss://qdsignaling.quickcoder.cc'
 
 // Legacy key cleaned up on load so old sessions are not retained.
 const LEGACY_TOKEN_KEY = 'quickdesk_user_token'
@@ -44,13 +45,25 @@ class UserApi {
 
   ensureBaseUrl() {
     if (!this._baseUrl) {
-      const url = localStorage.getItem(SERVER_URL_KEY) || DEFAULT_SERVER
-      this.setBaseUrl(url)
+      this.setBaseUrl(this.getServerUrl())
     }
   }
 
   getServerUrl() {
-    return localStorage.getItem(SERVER_URL_KEY) || DEFAULT_SERVER
+    const url = localStorage.getItem(SERVER_URL_KEY)
+    if (url === LEGACY_OFFICIAL_SERVER) {
+      localStorage.setItem(SERVER_URL_KEY, DEFAULT_SERVER)
+      return DEFAULT_SERVER
+    }
+    return url || DEFAULT_SERVER
+  }
+
+  isSecureServerUrl(url) {
+    try {
+      return new URL(url).protocol === 'wss:'
+    } catch {
+      return false
+    }
   }
 
   // ----- session helpers --------------------------------------------------

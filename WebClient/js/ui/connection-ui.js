@@ -45,7 +45,7 @@ export class ConnectionUI extends EventTarget {
 
     /** @private */
     _onConnect() {
-        const serverUrl = this._elements.serverUrl?.value?.trim() || 'ws://localhost:8000';
+        const serverUrl = this._elements.serverUrl?.value?.trim() || 'wss://qdsignaling.quickcoder.cc';
         const deviceId = this._elements.deviceId?.value?.trim();
         const accessCode = this._elements.accessCode?.value?.trim();
 

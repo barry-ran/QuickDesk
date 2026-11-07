@@ -24,7 +24,7 @@ export class WebSocketTransport {
      * @param {Function} options.onError     - (error)
      */
     constructor(options) {
-        this.signalingUrl = options.signalingUrl || 'ws://localhost:8000';
+        this.signalingUrl = options.signalingUrl || 'wss://qdsignaling.quickcoder.cc';
         this.onMessage = options.onMessage || (() => {});
         this.onOpen    = options.onOpen    || (() => {});
         this.onAuthOk  = options.onAuthOk  || (() => {});

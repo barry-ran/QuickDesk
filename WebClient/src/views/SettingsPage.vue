@@ -30,21 +30,23 @@
 <script setup>
 import { ref, inject } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { userApi, DEFAULT_SERVER } from '../api/userApi'
+import { userApi } from '../api/userApi'
 
 const { t } = useI18n()
 const showToast = inject('showToast')
 
-const serverUrl = ref(localStorage.getItem('quickdesk_signaling_url') || DEFAULT_SERVER)
+const serverUrl = ref(userApi.getServerUrl())
 const videoCodec = ref(localStorage.getItem('quickdesk_video_codec') || 'AV1')
 
 function saveServerUrl() {
   const url = serverUrl.value.trim()
-  if (url) {
-    localStorage.setItem('quickdesk_signaling_url', url)
-    userApi.setBaseUrl(url)
-    showToast(t('settings.signalingServerSaved'), 'info')
+  if (!userApi.isSecureServerUrl(url)) {
+    showToast(t('settings.signalingServerMustUseWss'), 'error')
+    return
   }
+  localStorage.setItem('quickdesk_signaling_url', url)
+  userApi.setBaseUrl(url)
+  showToast(t('settings.signalingServerSaved'), 'info')
 }
 
 function saveCodec() {
