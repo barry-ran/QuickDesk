@@ -66,7 +66,7 @@ flutter build apk --release --dart-define=QUICKDESK_API_KEY=your-secret-key
 
 - **主控**：填对端「设备 ID + 访问码」连接；服务器地址在「服务器设置」里配置。
   若服务器开启了 API-Key/Origin 保护，需在「API Key」填入服务器的 `QUICKDESK_API_KEY`
-  （否则 REST 校验返回 FORBIDDEN）。明文 `ws://` 服务器已支持。
+  （否则 REST 校验返回 FORBIDDEN）。服务器地址必须使用可信证书的 `wss://`。
 - **被控**：点「开启被控」，依次引导开启无障碍服务、授权屏幕采集，随后展示本机
   设备 ID + 访问码供其他端连入。输入默认走无障碍档；装并授权 Shizuku 后自动切增强档。
 
@@ -83,7 +83,7 @@ flutter build apk --release --dart-define=QUICKDESK_API_KEY=your-secret-key
 我的设备、云端收藏及云端历史查询。修改服务器配置后需点「保存」；账户令牌
 使用安全存储并按服务器配置隔离，不会转移到另一台服务器。
 
-请优先配置 `wss://` / `https://`；明文服务器会显示安全提示。账户登录不等于
+请配置 `wss://` / `https://`；Release 构建不允许明文服务器。账户登录不等于
 绑定本机：需开启被控完成注册后，在账户页明确确认本机 ID、账户、服务器及归属转移。
 Host 凭据按服务器/API key 隔离；旧无来源凭据不迁移，升级后首次开启被控会生成新 ID。
 退出时本地账户缓存立即清空；网络不可达时会提示服务端撤销未确认。

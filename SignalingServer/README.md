@@ -60,7 +60,9 @@ cp .env.example .env
 go run cmd/signaling/main.go
 ```
 
-服务器将在 `http://localhost:8000` 启动。
+服务器将在 `http://localhost:8000` 启动，仅用于本机开发或反向代理内部通信。
+生产环境必须通过 Nginx 在公网提供 `https://` / `wss://`，不要直接暴露 8000。
+完整部署和证书配置见 [`../docs/信令服务器TLS升级指南.md`](../docs/信令服务器TLS升级指南.md)。
 
 ## API 端点
 
