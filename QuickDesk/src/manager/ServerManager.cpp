@@ -7,6 +7,13 @@
 
 namespace quickdesk {
 
+namespace {
+
+constexpr char kLegacyOfficialServerUrl[] = "ws://qdsignaling.quickcoder.cc:8060";
+constexpr char kOfficialServerUrl[] = "wss://qdsignaling.quickcoder.cc";
+
+} // namespace
+
 ServerManager::ServerManager(QObject* parent)
     : QObject(parent)
 {
@@ -36,6 +43,11 @@ QString ServerManager::status() const
 void ServerManager::loadSettings()
 {
     m_serverUrl = core::LocalConfigCenter::instance().signalingServerUrl();
+    if (m_serverUrl == QLatin1String(kLegacyOfficialServerUrl)) {
+        m_serverUrl = QLatin1String(kOfficialServerUrl);
+        saveSettings();
+        LOG_INFO("Migrated signaling server URL to: {}", m_serverUrl.toStdString());
+    }
     LOG_INFO("Loaded signaling server URL: {}", m_serverUrl.toStdString());
 }
 

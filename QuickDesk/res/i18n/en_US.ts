@@ -1535,8 +1535,8 @@ Frame rate: %3 fps</source>
     </message>
     <message>
         <location filename="../../qml/pages/SettingsPage.qml" line="313"/>
-        <source>ws://your-server.com:8000</source>
-        <translation>ws://your-server.com:8000</translation>
+        <source>wss://your-server.com</source>
+        <translation>wss://your-server.com</translation>
     </message>
     <message>
         <location filename="../../qml/pages/SettingsPage.qml" line="318"/>
@@ -1546,8 +1546,8 @@ Frame rate: %3 fps</source>
     </message>
     <message>
         <location filename="../../qml/pages/SettingsPage.qml" line="331"/>
-        <source>Server URL must start with ws:// or wss://</source>
-        <translation>Server URL must start with ws:// or wss://</translation>
+        <source>Server URL must start with wss://</source>
+        <translation>Server URL must start with wss://</translation>
     </message>
     <message>
         <location filename="../../qml/pages/SettingsPage.qml" line="336"/>

@@ -351,7 +351,7 @@ Item {
                                 QDTextField {
                                     id: signalingServerUrlField
                                     width: parent.width - updateServerBtn.width - parent.spacing
-                                    placeholderText: qsTr("ws://your-server.com:8000")
+                                    placeholderText: qsTr("wss://your-server.com")
                                 }
                                 
                                 QDButton {
@@ -368,8 +368,8 @@ Item {
                                         let url = signalingServerUrlField.text.trim()
                                         
                                         // Basic validation
-                                        if (!url.startsWith("ws://") && !url.startsWith("wss://")) {
-                                            root.showToast(qsTr("Server URL must start with ws:// or wss://"), QDToast.Type.Error)
+                                        if (!url.startsWith("wss://")) {
+                                            root.showToast(qsTr("Server URL must start with wss://"), QDToast.Type.Error)
                                             return
                                         }
                                         

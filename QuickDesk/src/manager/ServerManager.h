@@ -23,7 +23,7 @@ public:
     explicit ServerManager(QObject* parent = nullptr);
     ~ServerManager() override = default;
 
-    // Server URL (e.g., ws://your-server.com:8000)
+    // Server URL (e.g., wss://your-server.com)
     QString serverUrl() const;
     void setServerUrl(const QString& url);
 
@@ -39,7 +39,7 @@ signals:
     void statusChanged();
 
 private:
-    QString m_serverUrl = "ws://localhost:8000";  // Default for development
+    QString m_serverUrl = "wss://qdsignaling.quickcoder.cc";
     QString m_status = "已配置";
 
     void updateStatus(const QString& status);

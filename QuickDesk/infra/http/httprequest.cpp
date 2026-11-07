@@ -134,11 +134,6 @@ void HttpRequest::slotHttpFinished(QNetworkReply* reply)
 
 void HttpRequest::configRequest(QNetworkRequest &request)
 {
-    // default ssl config
-    QSslConfiguration sslConfig;
-    sslConfig.setPeerVerifyMode(QSslSocket::VerifyNone);
-    request.setSslConfiguration(sslConfig);
-
     // 这里不要设置，qt会自动设置"gzip, deflate"并后面自动解压，如果这里手动设置了"gzip, deflate"后面反而需要自己手动解压
     //https://stackoverflow.com/questions/2340548/does-qnetworkmanager-get-accept-compressed-replies-by-default
     //request.setRawHeader(QByteArray("Accept-Encoding"), QByteArray("gzip, deflate"));
