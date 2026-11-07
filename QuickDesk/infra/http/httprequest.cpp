@@ -27,8 +27,6 @@ void HttpRequest::sendGetRequest(const QUrl& url, const QList<QPair<QString, QSt
         request.setRawHeader(it->first.toUtf8(), it->second.toUtf8());
     }
 
-    configRequest(request);
-
     QNetworkReply* reply = m_networkAccessManager->get(request);
     auto taskKey = reinterpret_cast<quintptr>(reply);
     LOG_DEBUG("[http] start get:{}", taskKey);
@@ -43,8 +41,6 @@ void HttpRequest::sendPostRequest(const QUrl& url, const QList<QPair<QString, QS
     for (auto it = headers.constBegin(); it != headers.constEnd(); ++it) {
         request.setRawHeader(it->first.toUtf8(), it->second.toUtf8());
     }
-
-    configRequest(request);
 
     QByteArray byte = data.toUtf8();
     request.setHeader(QNetworkRequest::ContentLengthHeader, byte.size());
@@ -63,8 +59,6 @@ void HttpRequest::sendPutRequest(const QUrl& url, const QList<QPair<QString, QSt
         request.setRawHeader(it->first.toUtf8(), it->second.toUtf8());
     }
 
-    configRequest(request);
-
     QByteArray byte = data.toUtf8();
     request.setHeader(QNetworkRequest::ContentLengthHeader, byte.size());
     QNetworkReply* reply = m_networkAccessManager->put(request, byte);
@@ -82,8 +76,6 @@ void HttpRequest::sendPatchRequest(const QUrl& url, const QList<QPair<QString, Q
         request.setRawHeader(it->first.toUtf8(), it->second.toUtf8());
     }
 
-    configRequest(request);
-
     QByteArray byte = data.toUtf8();
     request.setHeader(QNetworkRequest::ContentLengthHeader, byte.size());
     QNetworkReply* reply = m_networkAccessManager->sendCustomRequest(request, "PATCH", byte);
@@ -100,8 +92,6 @@ void HttpRequest::sendDeleteRequest(const QUrl& url, const QList<QPair<QString, 
     for (auto it = headers.constBegin(); it != headers.constEnd(); ++it) {
         request.setRawHeader(it->first.toUtf8(), it->second.toUtf8());
     }
-
-    configRequest(request);
 
     QNetworkReply* reply = m_networkAccessManager->deleteResource(request);
     auto taskKey = reinterpret_cast<quintptr>(reply);
@@ -130,13 +120,6 @@ void HttpRequest::slotHttpFinished(QNetworkReply* reply)
     QByteArray data = reply->readAll();
     std::string msg = QNetworkReply::NoError == reply->error() ? "" : reply->errorString().toUtf8().toStdString();
     callback(code.toInt(), msg, data.toStdString());
-}
-
-void HttpRequest::configRequest(QNetworkRequest &request)
-{
-    // 这里不要设置，qt会自动设置"gzip, deflate"并后面自动解压，如果这里手动设置了"gzip, deflate"后面反而需要自己手动解压
-    //https://stackoverflow.com/questions/2340548/does-qnetworkmanager-get-accept-compressed-replies-by-default
-    //request.setRawHeader(QByteArray("Accept-Encoding"), QByteArray("gzip, deflate"));
 }
 
 }
