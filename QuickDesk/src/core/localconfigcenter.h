@@ -37,7 +37,7 @@ public:
     LCC_FUNCTION_DEC_STRING(savedAccessCode, SavedAccessCode, "")  // Saved access code for "never refresh" mode
     LCC_FUNCTION_DEC_STRING(preferredVideoCodec, PreferredVideoCodec, "AV1")  // Video codec: "H264", "VP8", "VP9", "AV1"
     LCC_FUNCTION_DEC_STRING(accessCodeNextRefreshTime, AccessCodeNextRefreshTime, "")  // ISO datetime of next scheduled refresh
-    LCC_FUNCTION_DEC_STRING(signalingServerUrl, SignalingServerUrl, "ws://qdsignaling.quickcoder.cc:8060") // Signaling server URL
+    LCC_FUNCTION_DEC_STRING(signalingServerUrl, SignalingServerUrl, "wss://qdsignaling.quickcoder.cc") // Signaling server URL
     LCC_FUNCTION_DEC_STRING(turnServersJson, TurnServersJson, "") // TURN/STUN servers configuration in JSON format
     LCC_FUNCTION_DEC_STRING(apiKey, ApiKey, "") // API Key for signaling server authentication (runtime override, takes precedence over compile-time key)
 
