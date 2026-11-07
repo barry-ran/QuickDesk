@@ -1,5 +1,10 @@
 # QuickDesk Signaling Server Deployment Guide
 
+> Production deployments require HTTPS/WSS. The Docker backend is loopback-only;
+> expose only Nginx on ports 80 and 443. See the Chinese [TLS upgrade guide](信令服务器TLS升级指南.md)
+> for certificate parameters, validation, and a time-limited legacy-client
+> compatibility procedure.
+
 ## Quick Deploy (Recommended)
 
 All-in-one Docker image including PostgreSQL + Redis + signaling server. Three deployment methods are available:
@@ -418,8 +423,7 @@ sudo systemctl restart quickdesk-signaling
 ## 7. Configure Firewall
 
 ```bash
-# Open ports
-sudo firewall-cmd --permanent --add-port=8000/tcp
+# Open public ports. Keep the Docker backend port 8000 private.
 sudo firewall-cmd --permanent --add-port=80/tcp
 sudo firewall-cmd --permanent --add-port=443/tcp
 sudo firewall-cmd --reload
@@ -500,7 +504,7 @@ sudo nginx -t
 sudo systemctl restart nginx
 ```
 
-## 9. HTTPS Configuration (Optional)
+## 9. HTTPS Configuration (Required for Production)
 
 ```bash
 # Install Certbot
@@ -572,9 +576,8 @@ sudo netstat -tlnp | grep -E '8000|80|443'
 # Test API (local)
 curl http://localhost:8000/health
 
-# Test API (domain)
-curl http://your-domain.com/health
-curl https://your-domain.com/health  # HTTPS
+# Test API through the public TLS endpoint
+curl https://your-domain.com/health
 ```
 
 ### Health endpoint reference
@@ -777,7 +780,6 @@ vim .env
 
 After deployment, the following URLs are available:
 
-- **HTTP**: `http://your-domain.com`
 - **HTTPS**: `https://your-domain.com`
 - **Health probe**: `https://your-domain.com/health`
 - **WebSocket (realtime events)**: `wss://your-domain.com/v1/realtime/events` (first-frame auth — see user-api-docs §7.1)
