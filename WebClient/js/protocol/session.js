@@ -35,7 +35,7 @@ export class Session extends EventTarget {
     constructor(options = {}) {
         super();
         
-        this.signalingUrl = options.signalingUrl || 'ws://localhost:8000';
+        this.signalingUrl = options.signalingUrl || 'wss://qdsignaling.quickcoder.cc';
         this.iceServers = options.iceServers || [];
         this.preferredVideoCodec = options.preferredVideoCodec || '';
 
