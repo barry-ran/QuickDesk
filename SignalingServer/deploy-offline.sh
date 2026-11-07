@@ -1,6 +1,6 @@
 #!/bin/bash
 # QuickDesk Signaling Server — deploy from offline Docker image
-# Usage: ./deploy-offline.sh <image.tar.gz> [--port PORT] [--name NAME] [--domain DOMAIN]
+# Usage: ./deploy-offline.sh <image.tar.gz> [--port PORT] [--name NAME] [--domain DOMAIN] [--cert-file FILE --key-file FILE]
 #
 # Download the image tar from GitHub Actions artifacts or Releases,
 # then use this script to load and deploy without network access.
@@ -19,6 +19,8 @@ cd "$SCRIPT_DIR"
 IMAGE_TAR=""
 PORT=""
 DOMAIN=""
+CERT_FILE=""
+KEY_FILE=""
 INSTANCE_NAME=""
 DATA_DIR="${DATA_DIR:-}"
 
@@ -35,13 +37,17 @@ while [[ $# -gt 0 ]]; do
         --port)   PORT="$2"; shift 2;;
         --name)   INSTANCE_NAME="$2"; shift 2;;
         --domain) DOMAIN="$2"; shift 2;;
+        --cert-file) CERT_FILE="$2"; shift 2;;
+        --key-file) KEY_FILE="$2"; shift 2;;
         -h|--help)
-            echo "Usage: $0 <image.tar.gz> [--port PORT] [--name NAME] [--domain DOMAIN]"
+            echo "Usage: $0 <image.tar.gz> [--port PORT] [--name NAME] [--domain DOMAIN] [--cert-file FILE --key-file FILE]"
             echo ""
             echo "  image.tar.gz  Path to the Docker image archive"
             echo "  --port        Host port (default: SERVER_PORT from .env, or 8000)"
             echo "  --name        Instance name (default: port-PORT; data: ~/.quickdesk/signaling/NAME)"
-            echo "  --domain      Configure Nginx reverse proxy + optional SSL"
+            echo "  --domain      Configure HTTPS/WSS Nginx reverse proxy"
+            echo "  --cert-file   TLS certificate chain file (requires --key-file)"
+            echo "  --key-file    TLS private key file (requires --cert-file)"
             exit 0;;
         -*)
             echo "Unknown option: $1"; exit 1;;
@@ -90,6 +96,13 @@ fi
 
 if [ -z "$INSTANCE_NAME" ]; then
     INSTANCE_NAME="port-$PORT"
+fi
+
+if [ -n "$CERT_FILE" ] || [ -n "$KEY_FILE" ]; then
+    if [ -z "$DOMAIN" ] || [ -z "$CERT_FILE" ] || [ -z "$KEY_FILE" ]; then
+        echo "ERROR: --cert-file and --key-file require --domain and must be provided together."
+        exit 1
+    fi
 fi
 INSTANCE_NAME=$(sanitize_name "$INSTANCE_NAME")
 if [ -z "$INSTANCE_NAME" ]; then
@@ -177,7 +190,11 @@ fi
 # ---- Nginx (optional) ----
 if [ -n "$DOMAIN" ]; then
     echo ""
-    bash "$SCRIPT_DIR/setup-nginx.sh" "$DOMAIN" "$PORT"
+    nginx_args=("$DOMAIN" "$PORT")
+    if [ -n "$CERT_FILE" ]; then
+        nginx_args+=(--cert-file "$CERT_FILE" --key-file "$KEY_FILE")
+    fi
+    bash "$SCRIPT_DIR/setup-nginx.sh" "${nginx_args[@]}"
 fi
 
 echo ""
@@ -191,7 +208,7 @@ echo "  Logs:    COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT_NAME docker compose logs 
 echo "  Data:    $DATA_DIR"
 echo "  App log: $DATA_DIR/logs/signaling.log"
 if [ -n "$DOMAIN" ]; then
-    echo "  URL:     http://$DOMAIN"
+    echo "  URL:     https://$DOMAIN"
 fi
 echo ""
 echo "  To stop: COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT_NAME docker compose down"

@@ -1,6 +1,6 @@
 #!/bin/bash
 # QuickDesk Signaling Server — build image locally and deploy
-# Usage: ./deploy.sh [--port PORT] [--name NAME] [--domain DOMAIN]
+# Usage: ./deploy.sh [--port PORT] [--name NAME] [--domain DOMAIN] [--cert-file FILE --key-file FILE]
 #
 # This script builds the Docker image directly (docker build), then runs
 # the container. For docker-compose based deployment, use deploy-build.sh.
@@ -17,6 +17,8 @@ cd "$SCRIPT_DIR"
 
 PORT=""
 DOMAIN=""
+CERT_FILE=""
+KEY_FILE=""
 INSTANCE_NAME=""
 CONTAINER_NAME="${CONTAINER_NAME:-}"
 IMAGE_NAME="quickdesk-signaling"
@@ -35,12 +37,16 @@ while [[ $# -gt 0 ]]; do
         --port)   PORT="$2"; shift 2;;
         --name)   INSTANCE_NAME="$2"; shift 2;;
         --domain) DOMAIN="$2"; shift 2;;
+        --cert-file) CERT_FILE="$2"; shift 2;;
+        --key-file) KEY_FILE="$2"; shift 2;;
         -h|--help)
-            echo "Usage: $0 [--port PORT] [--name NAME] [--domain DOMAIN]"
+            echo "Usage: $0 [--port PORT] [--name NAME] [--domain DOMAIN] [--cert-file FILE --key-file FILE]"
             echo ""
             echo "  --port    Host port (default: SERVER_PORT from .env, or 8000)"
             echo "  --name    Instance name (default: port-PORT; data: ~/.quickdesk/signaling/NAME)"
-            echo "  --domain  Configure Nginx reverse proxy + optional SSL"
+            echo "  --domain  Configure HTTPS/WSS Nginx reverse proxy"
+            echo "  --cert-file  TLS certificate chain file (requires --key-file)"
+            echo "  --key-file   TLS private key file (requires --cert-file)"
             exit 0;;
         *) echo "Unknown option: $1"; exit 1;;
     esac
@@ -70,6 +76,13 @@ fi
 
 if [ -z "$INSTANCE_NAME" ]; then
     INSTANCE_NAME="port-$PORT"
+fi
+
+if [ -n "$CERT_FILE" ] || [ -n "$KEY_FILE" ]; then
+    if [ -z "$DOMAIN" ] || [ -z "$CERT_FILE" ] || [ -z "$KEY_FILE" ]; then
+        echo "ERROR: --cert-file and --key-file require --domain and must be provided together."
+        exit 1
+    fi
 fi
 INSTANCE_NAME=$(sanitize_name "$INSTANCE_NAME")
 if [ -z "$INSTANCE_NAME" ]; then
@@ -110,7 +123,7 @@ mkdir -p "$DATA_DIR"
 docker run -d \
     --name "$CONTAINER_NAME" \
     --restart=always \
-    -p "$PORT:8000" \
+    -p "127.0.0.1:$PORT:8000" \
     -v "$DATA_DIR:/data" \
     --env-file "$SCRIPT_DIR/.env" \
     "$IMAGE_NAME"
@@ -155,7 +168,11 @@ fi
 # ---- 4. Nginx (optional) ----
 if [ -n "$DOMAIN" ]; then
     echo "[4/4] Configuring Nginx..."
-    bash "$SCRIPT_DIR/setup-nginx.sh" "$DOMAIN" "$PORT"
+    nginx_args=("$DOMAIN" "$PORT")
+    if [ -n "$CERT_FILE" ]; then
+        nginx_args+=(--cert-file "$CERT_FILE" --key-file "$KEY_FILE")
+    fi
+    bash "$SCRIPT_DIR/setup-nginx.sh" "${nginx_args[@]}"
 else
     echo "[4/4] Skipping Nginx (no --domain specified)."
 fi
@@ -170,7 +187,7 @@ echo "  Admin:   http://localhost:$PORT/admin/"
 echo "  Logs:    docker logs -f $CONTAINER_NAME"
 echo "  Data:    $DATA_DIR"
 if [ -n "$DOMAIN" ]; then
-    echo "  URL:     http://$DOMAIN"
+    echo "  URL:     https://$DOMAIN"
 fi
 echo ""
 echo "  Other deployment methods:"
