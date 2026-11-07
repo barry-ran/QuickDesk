@@ -27,9 +27,6 @@ private slots:
     void slotHttpFinished(QNetworkReply* reply);
 
 private:
-    void configRequest(QNetworkRequest& request);
-
-private:
     QNetworkAccessManager* m_networkAccessManager = nullptr;
     QMap<quintptr, HttpRequestCallback> m_tasks;
 };
