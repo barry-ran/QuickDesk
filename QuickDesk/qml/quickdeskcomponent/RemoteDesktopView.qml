@@ -30,6 +30,42 @@ Rectangle {
     property bool inputEnabled: true  // Enable/disable input capture
     property bool filePasteKeyHeld: false
     property var forwardedKeys: ({})
+    property bool captureSuspended: false
+    property bool localControlActive: false
+    readonly property bool captureEligible: Qt.platform.os === "windows"
+        && inputEnabled && active && visible && hasVideo && activeFocus && !localControlActive
+        && root.Window.window && root.Window.window.active
+        && root.Window.window.visibility === Window.FullScreen
+        && clientManager && clientManager.keyboardCaptureSupported
+    readonly property bool captureWanted: captureEligible && !captureSuspended
+    onCaptureEligibleChanged: {
+        if (!captureEligible) captureSuspended = false
+    }
+    onCaptureWantedChanged: {
+        // Ownership changes at a clean physical boundary. The backend releases
+        // its sent-key ledger; stale Qt pairs must not survive the handoff.
+        forwardedKeys = ({})
+        filePasteKeyHeld = false
+        if (clientManager) clientManager.setKeyboardCapture(deviceId, root.Window.window, captureWanted)
+    }
+    Timer {
+        interval: 400
+        repeat: true
+        running: root.captureWanted
+        onTriggered: root.clientManager.setKeyboardCapture(root.deviceId, root.Window.window, true)
+    }
+    Component.onDestruction: {
+        if (clientManager) clientManager.setKeyboardCapture(deviceId, null, false)
+    }
+    Connections {
+        target: root.clientManager
+        function onKeyboardCaptureStopped(deviceId, reason) {
+            if (deviceId === root.deviceId &&
+                    ["hook-failed", "wrong-session", "capture-busy", "unsupported",
+                     "frontend-stalled", "lease-expired", "ipc-error"].indexOf(reason) >= 0)
+                root.captureSuspended = true
+        }
+    }
     // Set by an overlapping local control surface (for example, the tab bar).
     // While active, show the native cursor instead of the remote cursor.
     property bool suppressRemoteCursor: false
@@ -65,6 +101,7 @@ Rectangle {
     // System shortcuts and focus changes can prevent QML from delivering the
     // matching key-up event. Tell the host to clear its authoritative state.
     function releaseRemoteInput() {
+        if (clientManager) clientManager.setKeyboardCapture(deviceId, null, false)
         filePasteKeyHeld = false
         forwardedKeys = ({})
         if (clientManager && deviceId.length > 0) {
@@ -432,6 +469,10 @@ Rectangle {
     // KeycodeConverter::NativeKeycodeToUsbKeycode().
     Keys.onPressed: function(event) {
         if (!root.inputEnabled || !root.clientManager) return;
+        if (root.clientManager.keyboardCaptureDevice === root.deviceId) {
+            event.accepted = true
+            return
+        }
 
         // File paste is local queue submission, not a remote V key. Consume its
         // repeats and matching release even if the clipboard changes mid-press.
@@ -460,6 +501,10 @@ Rectangle {
     }
 
     Keys.onReleased: function(event) {
+        if (root.clientManager && root.clientManager.keyboardCaptureDevice === root.deviceId) {
+            event.accepted = true
+            return
+        }
         if (event.key === Qt.Key_V && root.filePasteKeyHeld) {
             if (!event.isAutoRepeat) root.filePasteKeyHeld = false
             event.accepted = true

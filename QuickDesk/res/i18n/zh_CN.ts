@@ -556,6 +556,14 @@
         <source>Removing all virtual displays</source>
         <translation>移除所有虚拟显示器</translation>
     </message>
+    <message>
+        <source>Enter Fullscreen</source>
+        <translation>进入全屏</translation>
+    </message>
+    <message>
+        <source>Exit Fullscreen</source>
+        <translation>退出全屏</translation>
+    </message>
 </context>
 <context>
     <name>LanguageManage</name>
@@ -1429,6 +1437,10 @@ Frame rate: %3 fps</source>
         <location filename="../../qml/views/RemoteWindow.qml" line="1295"/>
         <source>Emergency stop activated: </source>
         <translation>紧急停止已激活：</translation>
+    </message>
+    <message>
+        <source>Fullscreen keyboard control is unavailable. Returned to windowed mode.</source>
+        <translation>全屏键盘控制暂不可用，已返回窗口模式。</translation>
     </message>
 </context>
 <context>

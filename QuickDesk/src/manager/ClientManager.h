@@ -63,6 +63,9 @@ struct ConnectionInfo {
  */
 class ClientManager : public QObject {
     Q_OBJECT
+    Q_PROPERTY(bool keyboardCaptureSupported READ keyboardCaptureSupported NOTIFY keyboardCaptureChanged)
+    Q_PROPERTY(QString keyboardCaptureDevice READ keyboardCaptureDevice NOTIFY keyboardCaptureChanged)
+    Q_PROPERTY(bool keyboardCaptureActive READ keyboardCaptureActive NOTIFY keyboardCaptureChanged)
     Q_PROPERTY(QVariantList fileTransferTasks READ fileTransferTasks NOTIFY fileTransferTasksChanged)
     Q_PROPERTY(int connectionCount READ connectionCount NOTIFY connectionCountChanged)
     Q_PROPERTY(QString activeDeviceId READ activeDeviceId
@@ -75,6 +78,10 @@ public:
     ~ClientManager() override = default;
 
     void setMessaging(NativeMessaging* messaging);
+    bool keyboardCaptureSupported() const { return m_keyboardCaptureSupported; }
+    QString keyboardCaptureDevice() const { return m_captureDevice; }
+    bool keyboardCaptureActive() const { return m_captureActive; }
+    Q_INVOKABLE void setKeyboardCapture(const QString& deviceId, QObject* window, bool enabled);
     
     void setIceConfig(const QJsonObject& iceConfig);
     QJsonObject getIceConfig() const;
@@ -181,6 +188,8 @@ public:
                                      const QString& filePath);
 
 signals:
+    void keyboardCaptureChanged();
+    void keyboardCaptureStopped(const QString& deviceId, const QString& reason);
     void fileTransferTasksChanged();
     void fileTransferNotice(const QString& deviceId, const QString& message);
     void connectionCountChanged();
@@ -270,6 +279,13 @@ private slots:
     void onMessagingError(const QString& error);
 
 private:
+    bool m_keyboardCaptureSupported = false;
+    bool m_captureActive = false;
+    bool m_capturePasteHeld = false;
+    QString m_captureDevice;
+    int m_captureGeneration = 0;
+    void handleCapturedKeyboardEvent(const QJsonObject& message);
+    void handleKeyboardCaptureState(const QJsonObject& message);
     FileTransferQueue m_fileTransfers;
     bool fileTransferReady(const QString& deviceId) const;
     QPointer<NativeMessaging> m_messaging;

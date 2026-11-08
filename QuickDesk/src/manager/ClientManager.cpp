@@ -7,6 +7,8 @@
 #include "core/localconfigcenter.h"
 #include "infra/log/log.h"
 #include <QUuid>
+#include <QWindow>
+#include <QCoreApplication>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QDir>
@@ -51,7 +53,12 @@ ClientManager::ClientManager(QObject* parent)
 
 void ClientManager::setMessaging(NativeMessaging* messaging)
 {
-    if (m_messaging != messaging) m_fileTransfers.endAllSessions();
+    if (m_messaging != messaging) {
+        if (!m_captureDevice.isEmpty()) setKeyboardCapture(m_captureDevice, nullptr, false);
+        m_keyboardCaptureSupported = false;
+        emit keyboardCaptureChanged();
+        m_fileTransfers.endAllSessions();
+    }
     if (m_messaging) {
         QObject::disconnect(m_messaging, nullptr, this, nullptr);
     }
@@ -817,7 +824,11 @@ void ClientManager::onMessageReceived(const QJsonObject& message)
         LOG_DEBUG("Client received message: {}", type.toStdString());
     }
 
-    if (type == "helloResponse") {
+    if (type == "capturedKeyboardEvent") {
+        handleCapturedKeyboardEvent(message);
+    } else if (type == "keyboardCaptureState") {
+        handleKeyboardCaptureState(message);
+    } else if (type == "helloResponse") {
         handleHelloResponse(message);
     } else if (type == "signalingStateChanged") {
         handleSignalingStateChanged(message);
@@ -886,6 +897,11 @@ void ClientManager::onMessageReceived(const QJsonObject& message)
 
 void ClientManager::onMessagingError(const QString& error)
 {
+    const QString capturedDevice = m_captureDevice;
+    m_captureDevice.clear();
+    m_captureActive = m_capturePasteHeld = m_keyboardCaptureSupported = false;
+    emit keyboardCaptureChanged();
+    if (!capturedDevice.isEmpty()) emit keyboardCaptureStopped(capturedDevice, "ipc-error");
     m_fileTransfers.endAllSessions();
     emit errorOccurred("", "MESSAGING_ERROR", error);
 }
@@ -912,6 +928,7 @@ QString ClientManager::generateConnectionId()
 
 void ClientManager::removeConnection(const QString& deviceId)
 {
+    if (deviceId == m_captureDevice) setKeyboardCapture(deviceId, nullptr, false);
     m_fileTransfers.endSession(connectionIdFor(deviceId));
     auto it = m_connections.find(deviceId);
     if (it != m_connections.end()) {
@@ -924,6 +941,8 @@ void ClientManager::removeConnection(const QString& deviceId)
 
 void ClientManager::handleHelloResponse(const QJsonObject& message)
 {
+    m_keyboardCaptureSupported = message.value("keyboardCapture").toBool();
+    emit keyboardCaptureChanged();
     QString version = message["version"].toString();
     LOG_INFO("Client hello response, version: {}", version.toStdString());
     emit helloResponseReceived(version);
@@ -1383,6 +1402,9 @@ void ClientManager::sendMouseEvent(const QString& deviceId, const QString& event
 void ClientManager::sendKeyboardEvent(const QString& deviceId, const QString& eventType,
                                       int nativeScanCode, int lockStates)
 {
+    // Pending and active capture both own the physical keyboard. Captured
+    // events use the sequence/ack path below, never the QML event path.
+    if (deviceId == m_captureDevice) return;
     if (!m_messaging || !m_messaging->isReady()) {
         return;
     }
@@ -1611,6 +1633,80 @@ void ClientManager::handleVirtualDisplayState(const QJsonObject& message)
              data.toStdString());
 
     emit virtualDisplayStateChanged(deviceId, state);
+}
+
+void ClientManager::setKeyboardCapture(const QString& deviceId, QObject* object, bool enabled)
+{
+    if (!enabled && deviceId != m_captureDevice) return;
+    auto* window = qobject_cast<QWindow*>(object);
+    if (enabled && (!m_keyboardCaptureSupported || !window ||
+                    !window->isActive() || window->visibility() != QWindow::FullScreen ||
+                    getConnectionRtcState(deviceId) != RtcStatus::Connected)) return;
+    if (enabled && m_captureDevice != deviceId) {
+        if (!m_captureDevice.isEmpty()) setKeyboardCapture(m_captureDevice, nullptr, false);
+        m_captureDevice = deviceId;
+        // Stay within the JSON integer domain used by Chromium base::Value.
+        m_captureGeneration = m_captureGeneration == 2147483647 ? 1 : m_captureGeneration + 1;
+        m_captureActive = false;
+        m_capturePasteHeld = false;
+        emit keyboardCaptureChanged();
+    }
+    QJsonObject message{{"type", "keyboardCapture"},
+                        {"connectionId", connectionIdFor(deviceId)},
+                        {"generation", m_captureGeneration}, {"enabled", enabled}};
+    if (enabled) {
+        message["windowHandle"] = QString::number(static_cast<qulonglong>(window->winId()));
+        message["processId"] = static_cast<int>(QCoreApplication::applicationPid());
+    }
+    if (m_messaging && m_messaging->isReady()) m_messaging->sendMessage(message);
+    if (!enabled) {
+        m_captureDevice.clear();
+        m_captureActive = m_capturePasteHeld = false;
+        emit keyboardCaptureChanged();
+    }
+}
+
+void ClientManager::handleKeyboardCaptureState(const QJsonObject& message)
+{
+    if (message.value("generation").toInt() != m_captureGeneration ||
+        findDeviceId(message.value("connectionId").toString()) != m_captureDevice ||
+        m_captureDevice.isEmpty()) return;
+    m_captureActive = message.value("active").toBool();
+    const QString reason = message.value("reason").toString();
+    emit keyboardCaptureChanged();
+    // ARMING is retried by the view's lease timer after existing keys lift.
+    if (!m_captureActive && reason != "keys-held") {
+        const QString device = m_captureDevice;
+        setKeyboardCapture(device, nullptr, false);
+        emit keyboardCaptureStopped(device, reason);
+    }
+}
+
+void ClientManager::handleCapturedKeyboardEvent(const QJsonObject& message)
+{
+    if (!m_messaging || message.value("generation").toInt() != m_captureGeneration ||
+        findDeviceId(message.value("connectionId").toString()) != m_captureDevice ||
+        m_captureDevice.isEmpty()) return;
+    const int scan = message.value("nativeScanCode").toInt();
+    const bool down = message.value("eventType").toString() == "press";
+    bool consume = false;
+    // Same file-paste policy as RemoteDesktopView, using physical Ctrl state
+    // from the capture owner instead of Qt's unrelated thread modifier state.
+    if (scan == 0x2f) {
+        if (m_capturePasteHeld) {
+            consume = true;
+            if (!down) m_capturePasteHeld = false;
+        } else if (down && message.value("control").toBool() &&
+                   pasteFilesFromClipboard(m_captureDevice)) {
+            consume = m_capturePasteHeld = true;
+        }
+    }
+    QJsonObject ack{{"type", "keyboardEvent"},
+                    {"connectionId", message.value("connectionId")},
+                    {"captureGeneration", m_captureGeneration},
+                    {"captureSequence", message.value("sequence")},
+                    {"consume", consume}};
+    m_messaging->sendMessage(ack);
 }
 
 } // namespace quickdesk

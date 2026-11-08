@@ -556,6 +556,14 @@
         <source>Removing all virtual displays</source>
         <translation>Removing all virtual displays</translation>
     </message>
+    <message>
+        <source>Enter Fullscreen</source>
+        <translation>Enter Fullscreen</translation>
+    </message>
+    <message>
+        <source>Exit Fullscreen</source>
+        <translation>Exit Fullscreen</translation>
+    </message>
 </context>
 <context>
     <name>LanguageManage</name>
@@ -1429,6 +1437,10 @@ Frame rate: %3 fps</source>
         <location filename="../../qml/views/RemoteWindow.qml" line="1295"/>
         <source>Emergency stop activated: </source>
         <translation>Emergency stop activated: </translation>
+    </message>
+    <message>
+        <source>Fullscreen keyboard control is unavailable. Returned to windowed mode.</source>
+        <translation>Fullscreen keyboard control is unavailable. Returned to windowed mode.</translation>
     </message>
 </context>
 <context>
