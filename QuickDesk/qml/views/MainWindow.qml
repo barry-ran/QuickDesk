@@ -128,7 +128,7 @@ ApplicationWindow {
             }
             
             // Clean up pending credentials on failure
-            if (state === "failed" && root.pendingDeviceCredentials[deviceId]) {
+            if ((state === "failed" || state === "disconnected") && root.pendingDeviceCredentials[deviceId]) {
                 delete root.pendingDeviceCredentials[deviceId]
                 remoteControlPage.resetConnectingState()
             }
@@ -569,6 +569,10 @@ ApplicationWindow {
                         
                         // Check if already connected to this device
                         if (root.showOrSwitchToDevice(deviceId)) {
+                            if (root.mainController.clientManager.getConnectionRtcState(deviceId) === RtcStatus.Connected) {
+                                var savedPassword = root.mainController.remoteDeviceManager.getDevicePassword(deviceId)
+                                root.mainController.remoteDeviceManager.saveDevice(deviceId, savedPassword || password)
+                            }
                             // Already connected, reset connecting state and show toast
                             remoteControlPage.resetConnectingState()
                             toast.show(qsTr("Already connected, switched to existing window"), QDToast.Type.Info)
@@ -577,6 +581,11 @@ ApplicationWindow {
                         
                         // Not connected yet, create new connection
                         toast.show(qsTr("Connecting..."), QDToast.Type.Info)
+                        // Register before starting: verification/connection callbacks may
+                        // arrive before the remote window has finished opening.
+                        root.pendingDeviceCredentials[deviceId] = {
+                            deviceId: deviceId, password: password
+                        }
                         var connectedDeviceId = root.mainController.connectToRemoteHost(deviceId, password)
                         if (connectedDeviceId) {
                             if (!root.showRemoteWindow(connectedDeviceId, true)) {
@@ -584,15 +593,15 @@ ApplicationWindow {
                                 var newAborted = Object.assign({}, root.abortedConnections)
                                 newAborted[connectedDeviceId] = true
                                 root.abortedConnections = newAborted
+                                delete root.pendingDeviceCredentials[deviceId]
                                 root.mainController.disconnectFromRemoteHost(connectedDeviceId)
                                 remoteControlPage.resetConnectingState()
                                 return
                             }
 
-                            root.pendingDeviceCredentials[connectedDeviceId] = {
-                                deviceId: deviceId,
-                                password: password
-                            }
+                        } else {
+                            delete root.pendingDeviceCredentials[deviceId]
+                            remoteControlPage.resetConnectingState()
                         }
                     }
                     onViewConnectionRequested: function(deviceId) {
@@ -614,27 +623,8 @@ ApplicationWindow {
                     mainController: root.mainController
 
                     onConnectToDevice: function(deviceId, accessCode) {
-                        // Switch to Remote Control tab
                         navigationView.currentIndex = 0
-                        // Initiate connection and show the remote window immediately.
-                        toast.show(qsTr("Connecting..."), QDToast.Type.Info)
-                        var connectedDeviceId = root.mainController.connectToRemoteHost(deviceId, accessCode)
-                        if (connectedDeviceId) {
-                            if (!root.showRemoteWindow(connectedDeviceId, true)) {
-                                console.error("Remote window creation failed, aborting:", connectedDeviceId)
-                                var newAborted = Object.assign({}, root.abortedConnections)
-                                newAborted[connectedDeviceId] = true
-                                root.abortedConnections = newAborted
-                                root.mainController.disconnectFromRemoteHost(connectedDeviceId)
-                                remoteControlPage.resetConnectingState()
-                                return
-                            }
-
-                            root.pendingDeviceCredentials[connectedDeviceId] = {
-                                deviceId: deviceId,
-                                password: accessCode
-                            }
-                        }
+                        remoteControlPage.connectWithCredentials(deviceId, accessCode)
                     }
 
                     onShowToast: function(message, toastType) {
