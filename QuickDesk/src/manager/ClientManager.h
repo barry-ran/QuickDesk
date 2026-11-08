@@ -86,7 +86,8 @@ public:
     Q_INVOKABLE QString connectToHost(const QString& deviceId,
                                       const QString& accessCode,
                                       const QString& signalToken,
-                                      const QString& serverUrl);
+                                      const QString& serverUrl,
+                                      const QString& remoteOs = QString());
     Q_INVOKABLE void disconnectFromHost(const QString& deviceId);
     Q_INVOKABLE void disconnectAll();
     Q_INVOKABLE void sendHello(const QString& deviceId = QString(),

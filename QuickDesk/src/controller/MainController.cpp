@@ -425,7 +425,8 @@ void MainController::verifyAndConnectToRemoteHost(const QString& deviceId,
             LOG_INFO("verifyAccessCode OK for device={} — spawning client",
                      deviceId.toStdString());
             QString result = m_clientManager->connectToHost(
-                deviceId, accessCode, signalToken, serverUrl);
+                deviceId, accessCode, signalToken, serverUrl,
+                m_cloudDeviceManager->getDeviceOs(deviceId));
             if (result.isEmpty()) {
                 m_connectionTracks.remove(deviceId);
             }

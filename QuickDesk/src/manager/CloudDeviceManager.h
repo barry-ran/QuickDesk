@@ -81,6 +81,7 @@ public:
 
     Q_INVOKABLE QString getDeviceAccessCode(const QString& deviceId) const;
     Q_INVOKABLE QString getDeviceDisplayName(const QString& deviceId) const;
+    QString getDeviceOs(const QString& deviceId) const;
 
     void refreshDeviceAccessCodeNow(
         const QString& deviceId,

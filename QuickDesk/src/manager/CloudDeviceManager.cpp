@@ -514,6 +514,17 @@ QString CloudDeviceManager::getDeviceDisplayName(const QString& deviceId) const
     return deviceId;
 }
 
+QString CloudDeviceManager::getDeviceOs(const QString& deviceId) const
+{
+    for (const auto& v : m_myDevices) {
+        QVariantMap d = v.toMap();
+        if (d["device_id"].toString() == deviceId)
+            return d["os"].toString();
+    }
+
+    return QString();
+}
+
 // ========================================================================
 // Connection record
 // ========================================================================

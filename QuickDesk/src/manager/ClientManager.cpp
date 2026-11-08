@@ -85,7 +85,8 @@ void ClientManager::setMessaging(NativeMessaging* messaging)
 QString ClientManager::connectToHost(const QString& deviceId,
                                      const QString& accessCode,
                                      const QString& signalToken,
-                                     const QString& serverUrl)
+                                     const QString& serverUrl,
+                                     const QString& remoteOs)
 {
     if (!m_messaging || !m_messaging->isReady()) {
         emit errorOccurred(deviceId, "NOT_READY", "Client process is not ready");
@@ -131,6 +132,7 @@ QString ClientManager::connectToHost(const QString& deviceId,
     // (used as the first-frame WS auth credential, NOT for SPAKE2).
     message["signalToken"] = signalToken;
     message["serverUrl"] = serverUrl;
+    message["remoteOs"] = remoteOs;
     
     // Pass runtime API key so client process can authenticate with signaling server
     QString apiKey = core::LocalConfigCenter::instance().apiKey();

@@ -11,9 +11,10 @@ export class KeyboardHandler {
      * @param {HTMLElement} targetElement - 键盘事件目标元素
      * @param {DataChannelHandler} dataChannelHandler - DataChannel 处理器
      */
-    constructor(targetElement, dataChannelHandler) {
+    constructor(targetElement, dataChannelHandler, remoteOs = '') {
         this.targetElement = targetElement;
         this.dcHandler = dataChannelHandler;
+        this._swapAltAndMeta = this._requiresModifierRemapping(remoteOs);
         this._enabled = false;
         this._handlers = {};
         this._pressedKeys = new Set();
@@ -80,11 +81,7 @@ export class KeyboardHandler {
         event.stopPropagation();
 
         this._pressedKeys.add(code);
-        this.dcHandler.sendKeyEvent({
-            pressed: true,
-            usbKeycode: usbKeycode,
-            ...this._getLockStates(event),
-        });
+        this._sendKeyEvent(usbKeycode, true, this._getLockStates(event));
     }
 
     /** @private */
@@ -108,11 +105,7 @@ export class KeyboardHandler {
 
         if (!this._pressedKeys.delete(code)) return;
 
-        this.dcHandler.sendKeyEvent({
-            pressed: false,
-            usbKeycode: usbKeycode,
-            ...this._getLockStates(event),
-        });
+        this._sendKeyEvent(usbKeycode, false, this._getLockStates(event));
     }
 
     consumeBrowserPaste() {
@@ -123,16 +116,16 @@ export class KeyboardHandler {
         if (!this._browserPaste) return false;
         const { locks, modifiers } = this._browserPaste;
         this.consumeBrowserPaste();
-        // Preserve the original Ctrl/Cmd/Shift chord; the host OS is unknown.
+        // Preserve the original Ctrl/Cmd/Shift chord while applying the
+        // session's cross-platform modifier mapping at send time.
         // Recreate only modifiers released before paste/KeyV-up, then restore
         // the actual currently-held state. Never translate Cmd into Ctrl.
         const current = ['ControlLeft', 'ControlRight', 'MetaLeft', 'MetaRight',
             'ShiftLeft', 'ShiftRight'].filter(key => this._pressedKeys.has(key));
         const released = current.filter(key => !modifiers.includes(key));
         const synthesized = modifiers.filter(key => !current.includes(key));
-        const send = (key, pressed) => this.dcHandler.sendKeyEvent({
-            pressed, usbKeycode: this._mapKeyCode(key), ...locks,
-        });
+        const send = (key, pressed) => this._sendKeyEvent(
+            this._mapKeyCode(key), pressed, locks);
         released.forEach(key => send(key, false));
         synthesized.forEach(key => send(key, true));
         send('KeyV', true);
@@ -148,10 +141,7 @@ export class KeyboardHandler {
         for (const code of this._pressedKeys) {
             const usbKeycode = this._mapKeyCode(code);
             if (usbKeycode !== 0) {
-                this.dcHandler.sendKeyEvent({
-                    pressed: false,
-                    usbKeycode: usbKeycode,
-                });
+                this._sendKeyEvent(usbKeycode, false);
             }
         }
         this._pressedKeys.clear();
@@ -173,6 +163,32 @@ export class KeyboardHandler {
             result.numLockState = event.getModifierState('NumLock') ? 1 : 0;
         }
         return result;
+    }
+
+    _requiresModifierRemapping(remoteOs) {
+        const os = String(remoteOs).toLowerCase();
+        const localIsMac = /Mac|iPhone|iPad|iPod/.test(navigator.platform || '') ||
+            /Mac|iPhone|iPad|iPod/.test(navigator.userAgent || '');
+        return (localIsMac && (os === 'windows' || os === 'win')) ||
+            (!localIsMac && (os === 'macos' || os === 'mac' || os === 'osx'));
+    }
+
+    _sendKeyEvent(usbKeycode, pressed, locks = {}) {
+        this.dcHandler.sendKeyEvent({
+            pressed,
+            usbKeycode: this._swapAltAndMeta ? this._remapAltAndMeta(usbKeycode) : usbKeycode,
+            ...locks,
+        });
+    }
+
+    _remapAltAndMeta(usbKeycode) {
+        switch (usbKeycode) {
+        case USB_PAGE | 0xE2: return USB_PAGE | 0xE3;
+        case USB_PAGE | 0xE3: return USB_PAGE | 0xE2;
+        case USB_PAGE | 0xE6: return USB_PAGE | 0xE7;
+        case USB_PAGE | 0xE7: return USB_PAGE | 0xE6;
+        default: return usbKeycode;
+        }
     }
 
     /**

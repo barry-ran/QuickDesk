@@ -108,14 +108,17 @@ export class RemoteDesktopApp {
         const signalTokenFromUrl = params.get('st');
         const handoff = this._readHandoff(signalTokenFromUrl);
         let accessCode = handoff && handoff.access_code;
+        this._remoteOs = handoff && handoff.remote_os || '';
         const preferredVideoCodec = params.get('codec') || '';
         userApi.setBaseUrl(serverUrl);
 
         let signalToken = signalTokenFromUrl;
         if (handoff && accessCode) {
-            this._writeCurrentAccessCode(deviceId, accessCode);
+            this._writeCurrentAccessCode(deviceId, accessCode, this._remoteOs);
         } else {
-            accessCode = this._readCurrentAccessCode(deviceId);
+            const currentSession = this._readCurrentAccessCode(deviceId);
+            accessCode = currentSession?.access_code || '';
+            this._remoteOs = currentSession?.remote_os || '';
             // On refresh, the URL's `st` is usually already consumed.
             // Re-verify the saved access_code to get a fresh one-shot
             // signal_token. As long as the access_code remains valid,
@@ -191,18 +194,19 @@ export class RemoteDesktopApp {
             const raw = sessionStorage.getItem(this._currentSessionKey(deviceId));
             if (!raw) return '';
             const obj = JSON.parse(raw);
-            return obj && obj.device_id === deviceId ? (obj.access_code || '') : '';
+            return obj && obj.device_id === deviceId ? obj : null;
         } catch {
             return '';
         }
     }
 
-    _writeCurrentAccessCode(deviceId, accessCode) {
+    _writeCurrentAccessCode(deviceId, accessCode, remoteOs = '') {
         if (!deviceId || !accessCode) return;
         try {
             sessionStorage.setItem(this._currentSessionKey(deviceId), JSON.stringify({
                 device_id: deviceId,
                 access_code: accessCode,
+                remote_os: remoteOs,
                 updated_at: Date.now(),
             }));
         } catch {}
@@ -629,7 +633,8 @@ export class RemoteDesktopApp {
             this.mouseHandler.setRemoteDisplay(w, h, display?.positionX ?? 0, display?.positionY ?? 0);
             this.mouseHandler.enable();
 
-            this.keyboardHandler = new KeyboardHandler(videoContainer || video, this.dcHandler);
+            this.keyboardHandler = new KeyboardHandler(
+                videoContainer || video, this.dcHandler, this._remoteOs);
             this.keyboardHandler.enable();
         }
 
