@@ -80,102 +80,102 @@
 <context>
     <name>DeviceListPage</name>
     <message>
-        <location filename="../../qml/pages/DeviceListPage.qml" line="39"/>
+        <location filename="../../qml/pages/DeviceListPage.qml" line="40"/>
         <source>Please login to view device list</source>
         <translation>请登录以查看设备列表</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/DeviceListPage.qml" line="46"/>
+        <location filename="../../qml/pages/DeviceListPage.qml" line="47"/>
         <source>Login</source>
         <translation>登录</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/DeviceListPage.qml" line="67"/>
+        <location filename="../../qml/pages/DeviceListPage.qml" line="68"/>
         <source>My Devices</source>
         <translation>我的设备</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/DeviceListPage.qml" line="79"/>
+        <location filename="../../qml/pages/DeviceListPage.qml" line="80"/>
         <source>No devices bound yet</source>
         <translation>暂无绑定设备</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/DeviceListPage.qml" line="125"/>
-        <location filename="../../qml/pages/DeviceListPage.qml" line="242"/>
+        <location filename="../../qml/pages/DeviceListPage.qml" line="126"/>
+        <location filename="../../qml/pages/DeviceListPage.qml" line="243"/>
         <source>Device</source>
         <translation>设备</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/DeviceListPage.qml" line="138"/>
-        <location filename="../../qml/pages/DeviceListPage.qml" line="254"/>
+        <location filename="../../qml/pages/DeviceListPage.qml" line="139"/>
+        <location filename="../../qml/pages/DeviceListPage.qml" line="255"/>
         <source>Connect</source>
         <translation>连接</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/DeviceListPage.qml" line="145"/>
-        <location filename="../../qml/pages/DeviceListPage.qml" line="171"/>
+        <location filename="../../qml/pages/DeviceListPage.qml" line="146"/>
+        <location filename="../../qml/pages/DeviceListPage.qml" line="172"/>
         <source>Access code not available</source>
         <translation>访问码不可用</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/DeviceListPage.qml" line="182"/>
+        <location filename="../../qml/pages/DeviceListPage.qml" line="183"/>
         <source>My Favorites</source>
         <translation>我的收藏</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/DeviceListPage.qml" line="194"/>
+        <location filename="../../qml/pages/DeviceListPage.qml" line="195"/>
         <source>No favorites yet</source>
         <translation>暂无收藏</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/DeviceListPage.qml" line="261"/>
-        <location filename="../../qml/pages/DeviceListPage.qml" line="286"/>
+        <location filename="../../qml/pages/DeviceListPage.qml" line="262"/>
+        <location filename="../../qml/pages/DeviceListPage.qml" line="287"/>
         <source>No password saved for this device</source>
         <translation>该设备无保存密码</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/DeviceListPage.qml" line="298"/>
+        <location filename="../../qml/pages/DeviceListPage.qml" line="299"/>
         <source>Connection Logs</source>
         <translation>连接日志</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/DeviceListPage.qml" line="309"/>
+        <location filename="../../qml/pages/DeviceListPage.qml" line="310"/>
         <source>No connection logs</source>
         <translation>暂无连接日志</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/DeviceListPage.qml" line="380"/>
-        <location filename="../../qml/pages/DeviceListPage.qml" line="447"/>
+        <location filename="../../qml/pages/DeviceListPage.qml" line="381"/>
+        <location filename="../../qml/pages/DeviceListPage.qml" line="448"/>
         <source>Set Remark</source>
         <translation>设置备注</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/DeviceListPage.qml" line="390"/>
+        <location filename="../../qml/pages/DeviceListPage.qml" line="391"/>
         <source>Remove</source>
         <translation>移除</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/DeviceListPage.qml" line="404"/>
+        <location filename="../../qml/pages/DeviceListPage.qml" line="405"/>
         <source>Edit Remark</source>
         <translation>编辑备注</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/DeviceListPage.qml" line="414"/>
+        <location filename="../../qml/pages/DeviceListPage.qml" line="415"/>
         <source>Remove Favorite</source>
         <translation>取消收藏</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/DeviceListPage.qml" line="456"/>
+        <location filename="../../qml/pages/DeviceListPage.qml" line="457"/>
         <source>Enter remark name</source>
         <translation>输入备注名称</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/DeviceListPage.qml" line="464"/>
+        <location filename="../../qml/pages/DeviceListPage.qml" line="465"/>
         <source>Cancel</source>
         <translation>取消</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/DeviceListPage.qml" line="469"/>
+        <location filename="../../qml/pages/DeviceListPage.qml" line="470"/>
         <source>Save</source>
         <translation>保存</translation>
     </message>
@@ -183,384 +183,386 @@
 <context>
     <name>FloatingToolButton</name>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="234"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="244"/>
         <source>Displays</source>
         <translation>显示器</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="282"/>
         <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="292"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="302"/>
         <source>Display</source>
         <translation>显示器</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="284"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="294"/>
         <source>Switched to %1</source>
         <translation>已切换到%1</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="320"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="336"/>
         <source>Smart Boost</source>
         <translation>智能加速</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="368"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="384"/>
         <source>Target Framerate</source>
         <translation>目标帧率</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="416"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="432"/>
         <source>Resolution</source>
         <translation>分辨率</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="469"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="485"/>
         <source>Bitrate</source>
         <translation>比特率</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="516"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="532"/>
         <source>Display Mode</source>
         <translation>显示模式</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="538"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="554"/>
         <source>Fit Window</source>
         <translation>适应窗口</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="544"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="560"/>
         <source>Window resized to fit remote desktop</source>
         <translation>窗口已调整为适应远端桌面</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="550"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="566"/>
         <source>Video Stats</source>
         <translation>视频统计</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="559"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="575"/>
         <source>Mute Audio</source>
         <translation>静音</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="559"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="575"/>
         <source>Unmute Audio</source>
         <translation>取消静音</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="567"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="583"/>
         <source>Audio: Enabled</source>
         <translation>音频：已开启</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="567"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="583"/>
         <source>Audio: Muted</source>
         <translation>音频：已静音</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="581"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="597"/>
         <source>Send Ctrl+Alt+Del</source>
         <translation>发送Ctrl+Alt+Del</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="587"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="603"/>
         <source>Ctrl+Alt+Del sent</source>
         <translation>Ctrl+Alt+Del已发送</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="594"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="610"/>
         <source>Lock Screen</source>
         <translation>锁屏</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="600"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="616"/>
         <source>Lock screen sent</source>
         <translation>锁屏已发送</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="607"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="623"/>
         <source>Disable Privacy Screen</source>
         <translation>关闭隐私屏</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="607"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="623"/>
         <source>Privacy Screen</source>
         <translation>隐私屏</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="616"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="632"/>
         <source>Privacy Screen: On</source>
         <translation>隐私屏：开启</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="616"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="632"/>
         <source>Privacy Screen: Off</source>
         <translation>隐私屏：关闭</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="625"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="641"/>
         <source>Virtual Display</source>
         <translation>虚拟显示器</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="668"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="684"/>
         <source>Upload File</source>
         <translation>上传文件</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="678"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="694"/>
         <source>Download File</source>
         <translation>下载文件</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="688"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="704"/>
         <source>Transfers</source>
         <translation>传输</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="700"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="716"/>
         <source>Deactivate Emergency Stop</source>
         <translation>解除紧急停止</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="700"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="716"/>
         <source>Emergency Stop</source>
         <translation>紧急停止</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="711"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="727"/>
         <source>Disconnect</source>
         <translation>断开连接</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="734"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="750"/>
         <source>Fit to Screen</source>
         <translation>适应屏幕</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="741"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="757"/>
         <source>Display mode: Fit to Screen</source>
         <translation>显示模式：适应屏幕</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="746"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="762"/>
         <source>Original Size</source>
         <translation>原始尺寸</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="753"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="769"/>
         <source>Display mode: Original Size</source>
         <translation>显示模式：原始尺寸</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="758"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="774"/>
         <source>Stretch to Fill</source>
         <translation>拉伸填充</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="765"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="781"/>
         <source>Display mode: Stretch to Fill</source>
         <translation>显示模式：拉伸填充</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="772"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="788"/>
         <source>Show Mini Map</source>
         <translation>显示小地图</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="794"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="810"/>
         <source>Off</source>
         <translation>关闭</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="799"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="815"/>
         <source>Smart Boost: Off</source>
         <translation>智能加速：关闭</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="804"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="820"/>
         <source>Office</source>
         <translation>办公模式</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="809"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="825"/>
         <source>Smart Boost: Office Mode</source>
         <translation>智能加速：办公模式</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="814"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="830"/>
         <source>Gaming</source>
         <translation>游戏模式</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="819"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="835"/>
         <source>Smart Boost: Gaming Mode</source>
         <translation>智能加速：游戏模式</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="844"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="860"/>
         <source>Target Framerate: 60 FPS</source>
         <translation>目标帧率：60 FPS</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="856"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="872"/>
         <source>Target Framerate: 30 FPS</source>
         <translation>目标帧率：30 FPS</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="868"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="884"/>
         <source>Target Framerate: 15 FPS</source>
         <translation>目标帧率：15 FPS</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="880"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="896"/>
         <source>Target Framerate: 5 FPS</source>
         <translation>目标帧率：5 FPS</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="902"/>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="904"/>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="917"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="918"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="920"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="933"/>
         <source>Original</source>
         <translation>原始</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="917"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="933"/>
         <source>Resolution: </source>
         <translation>分辨率：</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="932"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="948"/>
         <source>Resolution: 3840x2160 (4K)</source>
         <translation>分辨率：3840x2160 (4K)</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="943"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="959"/>
         <source>Resolution: 2560x1440 (2K)</source>
         <translation>分辨率：2560x1440 (2K)</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="954"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="970"/>
         <source>Resolution: 1920x1080 (FHD)</source>
         <translation>分辨率：1920x1080 (FHD)</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="965"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="981"/>
         <source>Resolution: 1600x900</source>
         <translation>分辨率：1600x900</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="976"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="992"/>
         <source>Resolution: 1366x768</source>
         <translation>分辨率：1366x768</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="987"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="1003"/>
         <source>Resolution: 1280x720</source>
         <translation>分辨率：1280x720</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="998"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="1014"/>
         <source>Resolution: 1024x768</source>
         <translation>分辨率：1024x768</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="1024"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="1040"/>
         <source>Bitrate: 100 MiB</source>
         <translation>比特率：100 MiB</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="1036"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="1052"/>
         <source>Bitrate: 50 MiB</source>
         <translation>比特率：50 MiB</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="1048"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="1064"/>
         <source>Bitrate: 10 MiB</source>
         <translation>比特率：10 MiB</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="1060"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="1076"/>
         <source>Bitrate: 5 MiB</source>
         <translation>比特率：5 MiB</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="1072"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="1088"/>
         <source>Bitrate: 2 MiB</source>
         <translation>比特率：2 MiB</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="1113"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="1129"/>
         <source>Add 1920×1080 @60Hz</source>
         <translation>添加 1920×1080 @60Hz</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="1118"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="1134"/>
         <source>Creating virtual display: 1920×1080</source>
         <translation>创建虚拟显示器：1920×1080</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="1102"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="1118"/>
         <source>Add 2560×1440 @60Hz</source>
         <translation>添加 2560×1440 @60Hz</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="1107"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="1123"/>
         <source>Creating virtual display: 2560×1440</source>
         <translation>创建虚拟显示器： 2560×1440</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="1091"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="1107"/>
         <source>Add 3840×2160 @60Hz</source>
         <translation>添加 3840×2160 @60Hz</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="1096"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="1112"/>
         <source>Creating virtual display: 3840×2160</source>
         <translation>创建虚拟显示器：3840×2160</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="1124"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="1140"/>
         <source>Add 1280×720 @60Hz</source>
         <translation>添加 1280×720 @60Hz</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="1129"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="1145"/>
         <source>Creating virtual display: 1280×720</source>
         <translation>创建虚拟显示器：1280×720</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="1141"/>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="1155"/>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="1169"/>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="1183"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="1157"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="1171"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="1185"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="1199"/>
         <source>Remove #%1</source>
         <translation>移除 #%1</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="1147"/>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="1161"/>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="1175"/>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="1189"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="1163"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="1177"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="1191"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="1205"/>
         <source>Removing virtual display #%1</source>
         <translation>移除虚拟显示器 #%1</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="1200"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="1216"/>
         <source>Remove All</source>
         <translation>移除所有</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="1206"/>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="1222"/>
         <source>Removing all virtual displays</source>
         <translation>移除所有虚拟显示器</translation>
     </message>
     <message>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="328"/>
         <source>Enter Fullscreen</source>
         <translation>进入全屏</translation>
     </message>
     <message>
+        <location filename="../../qml/quickdeskcomponent/FloatingToolButton.qml" line="328"/>
         <source>Exit Fullscreen</source>
         <translation>退出全屏</translation>
     </message>
@@ -568,8 +570,9 @@
 <context>
     <name>LanguageManage</name>
     <message>
+        <location filename="../../src/language/languagemanage.cpp" line="68"/>
         <source>Auto</source>
-        <translation type="vanished">自动</translation>
+        <translation>自动</translation>
     </message>
 </context>
 <context>
@@ -783,34 +786,34 @@
         <translation>设置</translation>
     </message>
     <message>
-        <location filename="../../qml/views/MainWindow.qml" line="698"/>
-        <location filename="../../qml/views/MainWindow.qml" line="729"/>
+        <location filename="../../qml/views/MainWindow.qml" line="688"/>
+        <location filename="../../qml/views/MainWindow.qml" line="719"/>
         <source>Host</source>
         <translation>主机</translation>
     </message>
     <message>
+        <location filename="../../qml/views/MainWindow.qml" line="756"/>
+        <location filename="../../qml/views/MainWindow.qml" line="761"/>
+        <location filename="../../qml/views/MainWindow.qml" line="762"/>
+        <location filename="../../qml/views/MainWindow.qml" line="763"/>
+        <location filename="../../qml/views/MainWindow.qml" line="764"/>
+        <location filename="../../qml/views/MainWindow.qml" line="765"/>
         <location filename="../../qml/views/MainWindow.qml" line="766"/>
+        <location filename="../../qml/views/MainWindow.qml" line="769"/>
+        <location filename="../../qml/views/MainWindow.qml" line="770"/>
         <location filename="../../qml/views/MainWindow.qml" line="771"/>
         <location filename="../../qml/views/MainWindow.qml" line="772"/>
         <location filename="../../qml/views/MainWindow.qml" line="773"/>
-        <location filename="../../qml/views/MainWindow.qml" line="774"/>
-        <location filename="../../qml/views/MainWindow.qml" line="775"/>
-        <location filename="../../qml/views/MainWindow.qml" line="776"/>
-        <location filename="../../qml/views/MainWindow.qml" line="779"/>
-        <location filename="../../qml/views/MainWindow.qml" line="780"/>
-        <location filename="../../qml/views/MainWindow.qml" line="781"/>
-        <location filename="../../qml/views/MainWindow.qml" line="782"/>
-        <location filename="../../qml/views/MainWindow.qml" line="783"/>
         <source>Client</source>
         <translation>客户端</translation>
     </message>
     <message>
-        <location filename="../../qml/views/MainWindow.qml" line="698"/>
+        <location filename="../../qml/views/MainWindow.qml" line="688"/>
+        <location filename="../../qml/views/MainWindow.qml" line="699"/>
         <location filename="../../qml/views/MainWindow.qml" line="709"/>
-        <location filename="../../qml/views/MainWindow.qml" line="719"/>
+        <location filename="../../qml/views/MainWindow.qml" line="756"/>
         <location filename="../../qml/views/MainWindow.qml" line="766"/>
-        <location filename="../../qml/views/MainWindow.qml" line="776"/>
-        <location filename="../../qml/views/MainWindow.qml" line="783"/>
+        <location filename="../../qml/views/MainWindow.qml" line="773"/>
         <source>Unknown</source>
         <translation>未知</translation>
     </message>
@@ -822,7 +825,7 @@
     <message>
         <location filename="../../qml/views/MainWindow.qml" line="91"/>
         <source>Host version mismatch — please upgrade QuickDesk.</source>
-        <translation type="unfinished"></translation>
+        <translation>被控端版本不匹配，请升级 QuickDesk。</translation>
     </message>
     <message>
         <location filename="../../qml/views/MainWindow.qml" line="247"/>
@@ -871,97 +874,96 @@
         <translation>退出登录</translation>
     </message>
     <message>
-        <location filename="../../qml/views/MainWindow.qml" line="574"/>
+        <location filename="../../qml/views/MainWindow.qml" line="578"/>
         <source>Already connected, switched to existing window</source>
         <translation>已连接，切换到现有窗口</translation>
     </message>
     <message>
-        <location filename="../../qml/views/MainWindow.qml" line="579"/>
-        <location filename="../../qml/views/MainWindow.qml" line="620"/>
+        <location filename="../../qml/views/MainWindow.qml" line="583"/>
         <source>Connecting...</source>
         <translation>连接中...</translation>
     </message>
     <message>
-        <location filename="../../qml/views/MainWindow.qml" line="711"/>
-        <location filename="../../qml/views/MainWindow.qml" line="779"/>
+        <location filename="../../qml/views/MainWindow.qml" line="701"/>
+        <location filename="../../qml/views/MainWindow.qml" line="769"/>
         <source>Not Started</source>
         <translation>未启动</translation>
     </message>
     <message>
-        <location filename="../../qml/views/MainWindow.qml" line="713"/>
-        <location filename="../../qml/views/MainWindow.qml" line="780"/>
+        <location filename="../../qml/views/MainWindow.qml" line="703"/>
+        <location filename="../../qml/views/MainWindow.qml" line="770"/>
         <source>Starting</source>
         <translation>启动中</translation>
     </message>
     <message>
-        <location filename="../../qml/views/MainWindow.qml" line="715"/>
-        <location filename="../../qml/views/MainWindow.qml" line="781"/>
+        <location filename="../../qml/views/MainWindow.qml" line="705"/>
+        <location filename="../../qml/views/MainWindow.qml" line="771"/>
         <source>Start Failed</source>
         <translation>启动失败</translation>
     </message>
     <message>
-        <location filename="../../qml/views/MainWindow.qml" line="717"/>
-        <location filename="../../qml/views/MainWindow.qml" line="782"/>
+        <location filename="../../qml/views/MainWindow.qml" line="707"/>
+        <location filename="../../qml/views/MainWindow.qml" line="772"/>
         <source>Restarting</source>
         <translation>重启中</translation>
     </message>
     <message>
-        <location filename="../../qml/views/MainWindow.qml" line="832"/>
+        <location filename="../../qml/views/MainWindow.qml" line="822"/>
         <source>MCP [%1]: Off</source>
         <translation>MCP [%1]：已关闭</translation>
     </message>
     <message>
-        <location filename="../../qml/views/MainWindow.qml" line="834"/>
+        <location filename="../../qml/views/MainWindow.qml" line="824"/>
         <source>MCP [%1]: %2 client(s)</source>
         <translation>MCP [%1]：%2 个客户端</translation>
     </message>
     <message>
-        <location filename="../../qml/views/MainWindow.qml" line="835"/>
+        <location filename="../../qml/views/MainWindow.qml" line="825"/>
         <source>MCP [%1]: Ready</source>
         <translation>MCP [%1]：就绪</translation>
     </message>
     <message>
-        <location filename="../../qml/views/MainWindow.qml" line="856"/>
+        <location filename="../../qml/views/MainWindow.qml" line="846"/>
         <source>Click to configure MCP integration</source>
         <translation>点击配置MCP集成</translation>
     </message>
     <message>
-        <location filename="../../qml/views/MainWindow.qml" line="907"/>
+        <location filename="../../qml/views/MainWindow.qml" line="897"/>
         <source>Server Connection Error</source>
         <translation>服务器连接错误</translation>
     </message>
     <message>
-        <location filename="../../qml/views/MainWindow.qml" line="915"/>
+        <location filename="../../qml/views/MainWindow.qml" line="905"/>
         <source>Upgrade Required</source>
         <translation>要求升级</translation>
     </message>
     <message>
-        <location filename="../../qml/views/MainWindow.qml" line="704"/>
-        <location filename="../../qml/views/MainWindow.qml" line="771"/>
+        <location filename="../../qml/views/MainWindow.qml" line="694"/>
+        <location filename="../../qml/views/MainWindow.qml" line="761"/>
         <source>Disconnected</source>
         <translation>未连接</translation>
     </message>
     <message>
-        <location filename="../../qml/views/MainWindow.qml" line="705"/>
-        <location filename="../../qml/views/MainWindow.qml" line="772"/>
+        <location filename="../../qml/views/MainWindow.qml" line="695"/>
+        <location filename="../../qml/views/MainWindow.qml" line="762"/>
         <source>Connecting</source>
         <translation>连接中</translation>
     </message>
     <message>
-        <location filename="../../qml/views/MainWindow.qml" line="706"/>
-        <location filename="../../qml/views/MainWindow.qml" line="773"/>
+        <location filename="../../qml/views/MainWindow.qml" line="696"/>
+        <location filename="../../qml/views/MainWindow.qml" line="763"/>
         <source>Connected</source>
         <translation>已连接</translation>
     </message>
     <message>
-        <location filename="../../qml/views/MainWindow.qml" line="707"/>
-        <location filename="../../qml/views/MainWindow.qml" line="774"/>
+        <location filename="../../qml/views/MainWindow.qml" line="697"/>
+        <location filename="../../qml/views/MainWindow.qml" line="764"/>
         <source>Connection Failed</source>
         <translation>连接失败</translation>
     </message>
     <message>
-        <location filename="../../qml/views/MainWindow.qml" line="708"/>
-        <location filename="../../qml/views/MainWindow.qml" line="775"/>
+        <location filename="../../qml/views/MainWindow.qml" line="698"/>
+        <location filename="../../qml/views/MainWindow.qml" line="765"/>
         <source>Reconnecting</source>
         <translation>重连中</translation>
     </message>
@@ -1095,173 +1097,189 @@
     </message>
 </context>
 <context>
+    <name>QDDialog</name>
+    <message>
+        <location filename="../../qml/component/QDDialog.qml" line="11"/>
+        <source>Dialog</source>
+        <translation>对话框</translation>
+    </message>
+</context>
+<context>
+    <name>QDNavigationView</name>
+    <message>
+        <location filename="../../qml/component/QDNavigationView.qml" line="137"/>
+        <source>Item %1</source>
+        <translation>项目 %1</translation>
+    </message>
+</context>
+<context>
     <name>RemoteControlPage</name>
     <message>
-        <location filename="../../qml/pages/RemoteControlPage.qml" line="61"/>
+        <location filename="../../qml/pages/RemoteControlPage.qml" line="77"/>
         <source>Host Information</source>
         <translation>主机信息</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/RemoteControlPage.qml" line="80"/>
-        <location filename="../../qml/pages/RemoteControlPage.qml" line="207"/>
+        <location filename="../../qml/pages/RemoteControlPage.qml" line="96"/>
+        <location filename="../../qml/pages/RemoteControlPage.qml" line="223"/>
         <source>Device ID</source>
         <translation>设备ID</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/RemoteControlPage.qml" line="92"/>
-        <location filename="../../qml/pages/RemoteControlPage.qml" line="153"/>
+        <location filename="../../qml/pages/RemoteControlPage.qml" line="108"/>
+        <location filename="../../qml/pages/RemoteControlPage.qml" line="169"/>
         <source>Loading...</source>
         <translation>加载中...</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/RemoteControlPage.qml" line="109"/>
+        <location filename="../../qml/pages/RemoteControlPage.qml" line="125"/>
         <source>Device ID copied</source>
         <translation>设备ID已复制</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/RemoteControlPage.qml" line="114"/>
+        <location filename="../../qml/pages/RemoteControlPage.qml" line="130"/>
         <source>Copy Device ID</source>
         <translation>复制设备ID</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/RemoteControlPage.qml" line="175"/>
+        <location filename="../../qml/pages/RemoteControlPage.qml" line="191"/>
         <source>Connect to server first</source>
         <translation>请先连接服务器</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/RemoteControlPage.qml" line="131"/>
-        <location filename="../../qml/pages/RemoteControlPage.qml" line="208"/>
+        <location filename="../../qml/pages/RemoteControlPage.qml" line="147"/>
+        <location filename="../../qml/pages/RemoteControlPage.qml" line="224"/>
         <source>Access Code</source>
         <translation>访问码</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/RemoteControlPage.qml" line="138"/>
+        <location filename="../../qml/pages/RemoteControlPage.qml" line="154"/>
         <source>Auto-refresh: </source>
         <translation>自动刷新：</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/RemoteControlPage.qml" line="138"/>
+        <location filename="../../qml/pages/RemoteControlPage.qml" line="154"/>
         <source>Never</source>
         <translation>从不</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/RemoteControlPage.qml" line="175"/>
+        <location filename="../../qml/pages/RemoteControlPage.qml" line="191"/>
         <source>Refresh Access Code</source>
         <translation>刷新访问码</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/RemoteControlPage.qml" line="186"/>
+        <location filename="../../qml/pages/RemoteControlPage.qml" line="202"/>
         <source>Access Code copied</source>
         <translation>访问码已复制</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/RemoteControlPage.qml" line="191"/>
+        <location filename="../../qml/pages/RemoteControlPage.qml" line="207"/>
         <source>Copy Access Code</source>
         <translation>复制访问码</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/RemoteControlPage.qml" line="198"/>
+        <location filename="../../qml/pages/RemoteControlPage.qml" line="214"/>
         <source>Copy Device Info</source>
         <translation>复制设备信息</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/RemoteControlPage.qml" line="215"/>
+        <location filename="../../qml/pages/RemoteControlPage.qml" line="231"/>
         <source>Access Link</source>
         <translation>访问链接</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/RemoteControlPage.qml" line="218"/>
+        <location filename="../../qml/pages/RemoteControlPage.qml" line="234"/>
         <source>Device info copied to clipboard</source>
         <translation>设备信息已复制到剪切板</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/RemoteControlPage.qml" line="256"/>
+        <location filename="../../qml/pages/RemoteControlPage.qml" line="272"/>
         <source>Connect to Remote</source>
         <translation>连接到远程</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/RemoteControlPage.qml" line="278"/>
+        <location filename="../../qml/pages/RemoteControlPage.qml" line="294"/>
         <source>Remote Device ID</source>
         <translation>远程设备ID</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/RemoteControlPage.qml" line="286"/>
+        <location filename="../../qml/pages/RemoteControlPage.qml" line="302"/>
         <source>Enter 9-digit device ID</source>
         <translation>请输入9位设备ID</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/RemoteControlPage.qml" line="306"/>
+        <location filename="../../qml/pages/RemoteControlPage.qml" line="322"/>
         <source>Device removed from history</source>
         <translation>设备已从历史记录中移除</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/RemoteControlPage.qml" line="318"/>
-        <location filename="../../qml/pages/RemoteControlPage.qml" line="388"/>
+        <location filename="../../qml/pages/RemoteControlPage.qml" line="33"/>
+        <location filename="../../qml/pages/RemoteControlPage.qml" line="334"/>
         <source>Device ID must be 9 digits</source>
         <translation>设备ID必须是9位数字</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/RemoteControlPage.qml" line="330"/>
+        <location filename="../../qml/pages/RemoteControlPage.qml" line="346"/>
         <source>Access Password</source>
         <translation>访问密码</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/RemoteControlPage.qml" line="338"/>
+        <location filename="../../qml/pages/RemoteControlPage.qml" line="354"/>
         <source>Enter access password</source>
         <translation>请输入访问密码</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/RemoteControlPage.qml" line="356"/>
+        <location filename="../../qml/pages/RemoteControlPage.qml" line="372"/>
         <source>Hide password</source>
         <translation>隐藏密码</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/RemoteControlPage.qml" line="356"/>
+        <location filename="../../qml/pages/RemoteControlPage.qml" line="372"/>
         <source>Show password</source>
         <translation>显示密码</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/RemoteControlPage.qml" line="367"/>
+        <location filename="../../qml/pages/RemoteControlPage.qml" line="383"/>
         <source>Connect</source>
         <translation>连接</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/RemoteControlPage.qml" line="394"/>
+        <location filename="../../qml/pages/RemoteControlPage.qml" line="37"/>
         <source>Please enter access password</source>
         <translation>请输入访问密码</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/RemoteControlPage.qml" line="500"/>
+        <location filename="../../qml/pages/RemoteControlPage.qml" line="493"/>
         <source>Access code refreshed successfully</source>
         <translation>访问码刷新成功</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/RemoteControlPage.qml" line="466"/>
+        <location filename="../../qml/pages/RemoteControlPage.qml" line="459"/>
         <source>Connected successfully</source>
         <translation>连接成功</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/RemoteControlPage.qml" line="468"/>
+        <location filename="../../qml/pages/RemoteControlPage.qml" line="461"/>
         <source>Connection failed</source>
         <translation>连接失败</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/RemoteControlPage.qml" line="469"/>
+        <location filename="../../qml/pages/RemoteControlPage.qml" line="462"/>
         <source>Connection failed: </source>
         <translation>连接失败：</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/RemoteControlPage.qml" line="471"/>
+        <location filename="../../qml/pages/RemoteControlPage.qml" line="464"/>
         <source>Disconnected</source>
         <translation>已断开连接</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/RemoteControlPage.qml" line="477"/>
+        <location filename="../../qml/pages/RemoteControlPage.qml" line="470"/>
         <source>Error: </source>
         <translation>错误：</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/RemoteControlPage.qml" line="502"/>
+        <location filename="../../qml/pages/RemoteControlPage.qml" line="495"/>
         <source>Refresh failed: </source>
         <translation>刷新失败：</translation>
     </message>
@@ -1269,12 +1287,12 @@
 <context>
     <name>RemoteDesktopView</name>
     <message>
-        <location filename="../../qml/quickdeskcomponent/RemoteDesktopView.qml" line="414"/>
+        <location filename="../../qml/quickdeskcomponent/RemoteDesktopView.qml" line="459"/>
         <source>Drop files here to upload</source>
         <translation>拖拽文件到此上传</translation>
     </message>
     <message>
-        <location filename="../../qml/quickdeskcomponent/RemoteDesktopView.qml" line="509"/>
+        <location filename="../../qml/quickdeskcomponent/RemoteDesktopView.qml" line="584"/>
         <source>Waiting for video...</source>
         <translation>等待视频...</translation>
     </message>
@@ -1329,7 +1347,8 @@
         <location filename="../../qml/quickdeskcomponent/RemoteTab.qml" line="166"/>
         <source>Resolution: %1 × %2
 Frame rate: %3 fps</source>
-        <translation type="unfinished"></translation>
+        <translation>分辨率：%1 × %2
+帧率：%3 fps</translation>
     </message>
 </context>
 <context>
@@ -1353,92 +1372,114 @@ Frame rate: %3 fps</source>
         <translation>QuickDesk - 远程桌面</translation>
     </message>
     <message>
-        <location filename="../../qml/views/RemoteWindow.qml" line="661"/>
-        <location filename="../../qml/views/RemoteWindow.qml" line="1299"/>
+        <location filename="../../qml/views/RemoteWindow.qml" line="630"/>
+        <location filename="../../qml/views/RemoteWindow.qml" line="636"/>
+        <source>Record this session</source>
+        <translation>录制本次会话</translation>
+    </message>
+    <message>
+        <location filename="../../qml/views/RemoteWindow.qml" line="635"/>
+        <source>Stop recording and upload</source>
+        <translation>停止录制并上传</translation>
+    </message>
+    <message>
+        <location filename="../../qml/views/RemoteWindow.qml" line="741"/>
+        <location filename="../../qml/views/RemoteWindow.qml" line="1338"/>
         <source>Emergency stop deactivated</source>
         <translation>紧急停止已解除</translation>
     </message>
     <message>
-        <location filename="../../qml/views/RemoteWindow.qml" line="665"/>
+        <location filename="../../qml/views/RemoteWindow.qml" line="745"/>
         <source>Emergency stop activated - all AI operations halted</source>
         <translation>紧急停止已激活，所有AI操作已暂停</translation>
     </message>
     <message>
-        <location filename="../../qml/views/RemoteWindow.qml" line="910"/>
+        <location filename="../../qml/views/RemoteWindow.qml" line="994"/>
         <source>Select Files to Upload</source>
         <translation>选择文件上传</translation>
     </message>
     <message>
-        <location filename="../../qml/views/RemoteWindow.qml" line="1001"/>
-        <source>Upload complete: %1</source>
-        <translation>上传完成：%1</translation>
-    </message>
-    <message>
-        <location filename="../../qml/views/RemoteWindow.qml" line="1020"/>
-        <source>Upload failed: %1</source>
-        <translation>上传失败：%1</translation>
-    </message>
-    <message>
-        <location filename="../../qml/views/RemoteWindow.qml" line="1052"/>
-        <source>Download complete: %1</source>
-        <translation>下载完成：%1</translation>
-    </message>
-    <message>
-        <location filename="../../qml/views/RemoteWindow.qml" line="1061"/>
-        <source>Download failed: %1</source>
-        <translation>下载失败：%1</translation>
-    </message>
-    <message>
-        <location filename="../../qml/views/RemoteWindow.qml" line="1070"/>
+        <location filename="../../qml/views/RemoteWindow.qml" line="1089"/>
         <source>File Transfers</source>
         <translation>文件传输</translation>
     </message>
     <message>
-        <location filename="../../qml/views/RemoteWindow.qml" line="1083"/>
+        <location filename="../../qml/views/RemoteWindow.qml" line="1102"/>
         <source>No Transfers</source>
         <translation>没有传输</translation>
     </message>
     <message>
-        <location filename="../../qml/views/RemoteWindow.qml" line="1084"/>
+        <location filename="../../qml/views/RemoteWindow.qml" line="1103"/>
         <source>Use the menu to upload or download files</source>
         <translation>使用菜单上传下载文件</translation>
     </message>
     <message>
-        <location filename="../../qml/views/RemoteWindow.qml" line="1166"/>
-        <source>Cancelled</source>
-        <translation>已取消</translation>
-    </message>
-    <message>
-        <location filename="../../qml/views/RemoteWindow.qml" line="1180"/>
+        <location filename="../../qml/views/RemoteWindow.qml" line="1205"/>
         <source>Open File</source>
         <translation>打开文件</translation>
     </message>
     <message>
-        <location filename="../../qml/views/RemoteWindow.qml" line="1189"/>
+        <location filename="../../qml/views/RemoteWindow.qml" line="1214"/>
         <source>Open Folder</source>
         <translation>打开目录</translation>
     </message>
     <message>
-        <location filename="../../qml/views/RemoteWindow.qml" line="1198"/>
+        <location filename="../../qml/views/RemoteWindow.qml" line="1223"/>
         <source>Delete File</source>
         <translation>删除文件</translation>
     </message>
     <message>
-        <location filename="../../qml/views/RemoteWindow.qml" line="1202"/>
+        <location filename="../../qml/views/RemoteWindow.qml" line="1051"/>
         <source>File deleted</source>
         <translation>文件已删除</translation>
     </message>
     <message>
-        <location filename="../../qml/views/RemoteWindow.qml" line="1259"/>
+        <location filename="../../qml/views/RemoteWindow.qml" line="1162"/>
+        <source>Queued</source>
+        <translation>排队中</translation>
+    </message>
+    <message>
+        <location filename="../../qml/views/RemoteWindow.qml" line="1163"/>
+        <source>Cancelling</source>
+        <translation>正在取消</translation>
+    </message>
+    <message>
+        <location filename="../../qml/views/RemoteWindow.qml" line="1164"/>
+        <source>Waiting</source>
+        <translation>等待中</translation>
+    </message>
+    <message>
+        <location filename="../../qml/views/RemoteWindow.qml" line="1193"/>
+        <source>Copy Downloaded File</source>
+        <translation>复制已下载的文件</translation>
+    </message>
+    <message>
+        <location filename="../../qml/views/RemoteWindow.qml" line="1196"/>
+        <source>File copied to clipboard</source>
+        <translation>文件已复制到剪贴板</translation>
+    </message>
+    <message>
+        <location filename="../../qml/views/RemoteWindow.qml" line="1254"/>
+        <source>Device: %1</source>
+        <translation>设备：%1</translation>
+    </message>
+    <message>
+        <location filename="../../qml/views/RemoteWindow.qml" line="1275"/>
+        <source>Transfer state is uncertain. Reconnect before starting another transfer.</source>
+        <translation>传输状态不确定，请重新连接后再开始新的传输。</translation>
+    </message>
+    <message>
+        <location filename="../../qml/views/RemoteWindow.qml" line="1295"/>
         <source>Clear Completed</source>
         <translation>清理已完成</translation>
     </message>
     <message>
-        <location filename="../../qml/views/RemoteWindow.qml" line="1295"/>
+        <location filename="../../qml/views/RemoteWindow.qml" line="1334"/>
         <source>Emergency stop activated: </source>
         <translation>紧急停止已激活：</translation>
     </message>
     <message>
+        <location filename="../../qml/views/RemoteWindow.qml" line="48"/>
         <source>Fullscreen keyboard control is unavailable. Returned to windowed mode.</source>
         <translation>全屏键盘控制暂不可用，已返回窗口模式。</translation>
     </message>
@@ -1516,301 +1557,301 @@ Frame rate: %3 fps</source>
         <translation>远程客户端连接时自动开启隐私屏</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="251"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="256"/>
         <source>Lock device when remote sessions end</source>
         <translation>远程会话结束时锁定设备</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="256"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="261"/>
         <source>Lock this device when the last remote session ends, including unexpected disconnections</source>
         <translation>最后一个远程会话结束时锁定此设备，包括意外断线</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="247"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="288"/>
         <source>Network</source>
         <translation>网络</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="261"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="302"/>
         <source>Signaling Server</source>
         <translation>信令服务器</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="268"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="309"/>
         <source>Configure the signaling server address for remote connections.</source>
         <translation>配置远程连接的信令服务器地址。</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="290"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="331"/>
         <source>Current:</source>
         <translation>当前：</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="313"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="354"/>
         <source>wss://your-server.com</source>
         <translation>wss://your-server.com</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="318"/>
-        <location filename="../../qml/pages/SettingsPage.qml" line="378"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="359"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="419"/>
         <source>Update</source>
         <translation>更新</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="331"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="372"/>
         <source>Server URL must start with wss://</source>
         <translation>服务器URL必须以 wss:// 开头</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="336"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="377"/>
         <source>Server URL updated. Restart to apply changes.</source>
         <translation>服务器URL已更新。重启后生效。</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="350"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="391"/>
         <source>API Key</source>
         <translation>API Key</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="357"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="398"/>
         <source>If your signaling server has API Key protection enabled, enter the key here. No recompilation needed.</source>
         <translation>如果你的信令服务器启用了API Key，需要在这里输入key，无需重新编译。</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="371"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="412"/>
         <source>Enter API Key</source>
         <translation>输入API Key</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="385"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="426"/>
         <source>API Key updated. Restart to apply changes.</source>
         <translation>API Key已更新，重启生效。</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="391"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="432"/>
         <source>Clear</source>
         <translation>清除</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="398"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="439"/>
         <source>API Key cleared. Restart to apply changes.</source>
         <translation>API Key已清除，重启生效。</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="405"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="446"/>
         <source>API Key is configured (%1 characters)</source>
         <translation>API Key已配置（%1 字符）</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="420"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="461"/>
         <source>TURN/STUN Servers</source>
         <translation>TURN/STUN 服务器</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="455"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="496"/>
         <source>TURN Server</source>
         <translation>TURN 服务器</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="455"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="496"/>
         <source>STUN Server</source>
         <translation>STUN 服务器</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="475"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="516"/>
         <source>No custom servers configured</source>
         <translation>未配置自定义服务器</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="490"/>
-        <location filename="../../qml/pages/SettingsPage.qml" line="521"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="531"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="562"/>
         <source>Add TURN Server</source>
         <translation>添加 TURN 服务器</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="499"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="540"/>
         <source>turn:your-server.com:3478</source>
         <translation>turn:your-server.com:3478</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="509"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="550"/>
         <source>Username</source>
         <translation>用户名</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="515"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="556"/>
         <source>Password</source>
         <translation>密码</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="537"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="578"/>
         <source>TURN server added. Restart to apply changes.</source>
         <translation>TURN 服务器已添加。重启后生效。</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="539"/>
-        <location filename="../../qml/pages/SettingsPage.qml" line="576"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="580"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="617"/>
         <source>Invalid server URL format</source>
         <translation>服务器URL格式无效</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="552"/>
-        <location filename="../../qml/pages/SettingsPage.qml" line="565"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="593"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="606"/>
         <source>Add STUN Server</source>
         <translation>添加 STUN 服务器</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="561"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="602"/>
         <source>stun:stun.l.google.com:19302</source>
         <translation>stun:stun.l.google.com:19302</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="574"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="615"/>
         <source>STUN server added. Restart to apply changes.</source>
         <translation>STUN 服务器已添加。重启后生效。</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="589"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="630"/>
         <source>Application</source>
         <translation>应用</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="607"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="648"/>
         <source>Language</source>
         <translation>语言</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="635"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="676"/>
         <source>Language updated. Restart to apply changes.</source>
         <translation>语言已更新。请重新启动以应用更改。</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="661"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="702"/>
         <source>Video Codec</source>
         <translation>视频编码</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="667"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="708"/>
         <source>Preferred video codec for remote connections</source>
         <translation>远程连接的首选视频编解码器</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="693"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="734"/>
         <source>Video codec updated. Effective on next connection.</source>
         <translation>视频编解码器已更新，下次连接时生效。</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="715"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="756"/>
         <source>Theme</source>
         <translation>主题</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="723"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="764"/>
         <source>Light</source>
         <translation>浅色</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="723"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="764"/>
         <source>Dark</source>
         <translation>深色</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="750"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="791"/>
         <source>Launch at Startup</source>
         <translation>开机自启</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="756"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="797"/>
         <source>Automatically start the application when you log in</source>
         <translation>当你登录的时候自动启动软件</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="782"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="823"/>
         <source>AI</source>
         <translation>AI</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="801"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="842"/>
         <source>Skills</source>
         <translation>Skills</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="807"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="848"/>
         <source>Enable host-side skill execution for remote tool operations</source>
         <translation>开启被控端技能执行用于远程工具操作</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="823"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="864"/>
         <source>Skills enabled</source>
         <translation>Skills已启用</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="823"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="864"/>
         <source>Skills disabled</source>
         <translation>Skills已禁用</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="842"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="883"/>
         <source>Operation Confirmation</source>
         <translation>操作确认</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="848"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="889"/>
         <source>How to handle high-risk operation requests from AI agent</source>
         <translation>如何处理AI代理的高风险操作请求</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="860"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="901"/>
         <source>Manual Confirm</source>
         <translation>手动确认</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="860"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="901"/>
         <source>Auto Approve</source>
         <translation>自动批准</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="870"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="911"/>
         <source>Operations will be auto-approved</source>
         <translation>操作将自动批准</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="871"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="912"/>
         <source>Operations require manual confirmation</source>
         <translation>操作需要手动确认</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="887"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="928"/>
         <source>Skills Directories</source>
         <translation>Skills目录</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="894"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="935"/>
         <source>Built-in skills are loaded from the installation directory. Add extra directories below.</source>
         <translation>内建skills在安装目录下，在下面添加额外目录。</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="933"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="974"/>
         <source>Skills directory removed</source>
         <translation>Skills目录已移除</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="942"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="983"/>
         <source>No extra directories configured</source>
         <translation>没有额外目录配置</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="958"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="999"/>
         <source>C:path	oskills</source>
         <translation>C:\\path\\to\\skills</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="963"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="1004"/>
         <source>Add</source>
         <translation>添加</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/SettingsPage.qml" line="972"/>
+        <location filename="../../qml/pages/SettingsPage.qml" line="1013"/>
         <source>Skills directory added. Skill host will reload.</source>
         <translation>Skills目录已添加。Skill Host将重新加载。</translation>
     </message>
@@ -1844,100 +1885,349 @@ Frame rate: %3 fps</source>
     </message>
 </context>
 <context>
+    <name>VideoStatsOverlay</name>
+    <message>
+        <location filename="../../qml/quickdeskcomponent/VideoStatsOverlay.qml" line="34"/>
+        <source>P2P (Direct)</source>
+        <translation>P2P（直连）</translation>
+    </message>
+    <message>
+        <location filename="../../qml/quickdeskcomponent/VideoStatsOverlay.qml" line="35"/>
+        <source>P2P (STUN)</source>
+        <translation>P2P（STUN）</translation>
+    </message>
+    <message>
+        <location filename="../../qml/quickdeskcomponent/VideoStatsOverlay.qml" line="36"/>
+        <source>Relay (TURN)</source>
+        <translation>中继（TURN）</translation>
+    </message>
+    <message>
+        <location filename="../../qml/quickdeskcomponent/VideoStatsOverlay.qml" line="54"/>
+        <source>hidden:%1</source>
+        <translation>已隐藏：%1</translation>
+    </message>
+    <message>
+        <location filename="../../qml/quickdeskcomponent/VideoStatsOverlay.qml" line="85"/>
+        <source>Video Stats</source>
+        <translation>视频统计</translation>
+    </message>
+    <message>
+        <location filename="../../qml/quickdeskcomponent/VideoStatsOverlay.qml" line="100"/>
+        <source>LATENCY</source>
+        <translation>延迟</translation>
+    </message>
+    <message>
+        <location filename="../../qml/quickdeskcomponent/VideoStatsOverlay.qml" line="110"/>
+        <source>Capture</source>
+        <translation>采集</translation>
+    </message>
+    <message>
+        <location filename="../../qml/quickdeskcomponent/VideoStatsOverlay.qml" line="111"/>
+        <source>Encode</source>
+        <translation>编码</translation>
+    </message>
+    <message>
+        <location filename="../../qml/quickdeskcomponent/VideoStatsOverlay.qml" line="112"/>
+        <source>Network</source>
+        <translation>网络</translation>
+    </message>
+    <message>
+        <location filename="../../qml/quickdeskcomponent/VideoStatsOverlay.qml" line="113"/>
+        <source>Decode</source>
+        <translation>解码</translation>
+    </message>
+    <message>
+        <location filename="../../qml/quickdeskcomponent/VideoStatsOverlay.qml" line="114"/>
+        <source>Paint</source>
+        <translation>绘制</translation>
+    </message>
+    <message>
+        <location filename="../../qml/quickdeskcomponent/VideoStatsOverlay.qml" line="159"/>
+        <source>Total</source>
+        <translation>总计</translation>
+    </message>
+    <message>
+        <location filename="../../qml/quickdeskcomponent/VideoStatsOverlay.qml" line="177"/>
+        <source>CONNECTION</source>
+        <translation>连接</translation>
+    </message>
+    <message>
+        <location filename="../../qml/quickdeskcomponent/VideoStatsOverlay.qml" line="191"/>
+        <source>Resolution</source>
+        <translation>分辨率</translation>
+    </message>
+    <message>
+        <location filename="../../qml/quickdeskcomponent/VideoStatsOverlay.qml" line="199"/>
+        <source>Codec</source>
+        <translation>编解码器</translation>
+    </message>
+    <message>
+        <location filename="../../qml/quickdeskcomponent/VideoStatsOverlay.qml" line="206"/>
+        <source>Quality</source>
+        <translation>画质</translation>
+    </message>
+    <message>
+        <location filename="../../qml/quickdeskcomponent/VideoStatsOverlay.qml" line="213"/>
+        <source>Frame Rate</source>
+        <translation>帧率</translation>
+    </message>
+    <message>
+        <location filename="../../qml/quickdeskcomponent/VideoStatsOverlay.qml" line="220"/>
+        <source>Bandwidth</source>
+        <translation>带宽</translation>
+    </message>
+    <message>
+        <location filename="../../qml/quickdeskcomponent/VideoStatsOverlay.qml" line="227"/>
+        <source>Input RTT</source>
+        <translation>输入往返延迟</translation>
+    </message>
+    <message>
+        <location filename="../../qml/quickdeskcomponent/VideoStatsOverlay.qml" line="234"/>
+        <source>Packet Rate</source>
+        <translation>数据包速率</translation>
+    </message>
+    <message>
+        <location filename="../../qml/quickdeskcomponent/VideoStatsOverlay.qml" line="241"/>
+        <source>Encoded Rect</source>
+        <translation>编码区域</translation>
+    </message>
+    <message>
+        <location filename="../../qml/quickdeskcomponent/VideoStatsOverlay.qml" line="256"/>
+        <source>ICE / ROUTE</source>
+        <translation>ICE / 路由</translation>
+    </message>
+    <message>
+        <location filename="../../qml/quickdeskcomponent/VideoStatsOverlay.qml" line="270"/>
+        <source>Type</source>
+        <translation>类型</translation>
+    </message>
+    <message>
+        <location filename="../../qml/quickdeskcomponent/VideoStatsOverlay.qml" line="281"/>
+        <source>Protocol</source>
+        <translation>协议</translation>
+    </message>
+    <message>
+        <location filename="../../qml/quickdeskcomponent/VideoStatsOverlay.qml" line="289"/>
+        <source>Local</source>
+        <translation>本地</translation>
+    </message>
+    <message>
+        <location filename="../../qml/quickdeskcomponent/VideoStatsOverlay.qml" line="300"/>
+        <source>Remote</source>
+        <translation>远端</translation>
+    </message>
+    <message>
+        <location filename="../../qml/quickdeskcomponent/VideoStatsOverlay.qml" line="312"/>
+        <source>CLIENT CANDIDATES</source>
+        <translation>客户端候选地址</translation>
+    </message>
+    <message>
+        <location filename="../../qml/quickdeskcomponent/VideoStatsOverlay.qml" line="377"/>
+        <source>HOST CANDIDATES</source>
+        <translation>被控端候选地址</translation>
+    </message>
+</context>
+<context>
     <name>quickdesk::ClientManager</name>
     <message>
+        <location filename="../../src/manager/ClientManager.cpp" line="599"/>
+        <location filename="../../src/manager/ClientManager.cpp" line="654"/>
+        <source>File transfer is not available for this connection.</source>
+        <translation>当前连接不支持文件传输。</translation>
+    </message>
+    <message>
+        <location filename="../../src/manager/ClientManager.cpp" line="605"/>
+        <location filename="../../src/manager/ClientManager.cpp" line="671"/>
+        <source>Disconnect and reconnect to reset this session&apos;s file queue.</source>
+        <translation>请断开并重新连接，以重置本次会话的文件队列。</translation>
+    </message>
+    <message>
+        <location filename="../../src/manager/ClientManager.cpp" line="625"/>
+        <source>The downloaded file is no longer available.</source>
+        <translation>已下载的文件已不可用。</translation>
+    </message>
+    <message>
+        <location filename="../../src/manager/ClientManager.cpp" line="1227"/>
         <source>Authentication failed</source>
-        <translation type="vanished">认证失败</translation>
+        <translation>认证失败</translation>
     </message>
     <message>
+        <location filename="../../src/manager/ClientManager.cpp" line="1228"/>
         <source>Channel error</source>
-        <translation type="vanished">通道错误</translation>
+        <translation>通道错误</translation>
     </message>
     <message>
+        <location filename="../../src/manager/ClientManager.cpp" line="1229"/>
         <source>Connection timeout</source>
-        <translation type="vanished">连接超时</translation>
+        <translation>连接超时</translation>
     </message>
     <message>
+        <location filename="../../src/manager/ClientManager.cpp" line="1230"/>
         <source>Network error</source>
-        <translation type="vanished">网络错误</translation>
+        <translation>网络错误</translation>
     </message>
     <message>
+        <location filename="../../src/manager/ClientManager.cpp" line="1231"/>
         <source>Connection failed (error code: %1)</source>
-        <translation type="vanished">连接失败（错误代码：%1）</translation>
+        <translation>连接失败（错误代码：%1）</translation>
+    </message>
+</context>
+<context>
+    <name>quickdesk::FileTransferQueue</name>
+    <message>
+        <location filename="../../src/manager/FileTransferQueue.cpp" line="44"/>
+        <source>Connection closed. This transfer was not confirmed complete.</source>
+        <translation>连接已关闭，未确认此次传输是否完成。</translation>
+    </message>
+    <message>
+        <location filename="../../src/manager/FileTransferQueue.cpp" line="93"/>
+        <source>Folders are not supported. Select individual files to upload.</source>
+        <translation>不支持上传文件夹，请选择单个文件上传。</translation>
+    </message>
+    <message>
+        <location filename="../../src/manager/FileTransferQueue.cpp" line="94"/>
+        <source>Select an existing, readable local file.</source>
+        <translation>请选择存在且可读取的本地文件。</translation>
+    </message>
+    <message>
+        <location filename="../../src/manager/FileTransferQueue.cpp" line="108"/>
+        <source>The upload queue is full. Wait for pending files to finish.</source>
+        <translation>上传队列已满，请等待队列中的文件传输完成。</translation>
+    </message>
+    <message>
+        <location filename="../../src/manager/FileTransferQueue.cpp" line="150"/>
+        <source>The local file is no longer available.</source>
+        <translation>本地文件已不可用。</translation>
+    </message>
+    <message>
+        <location filename="../../src/manager/FileTransferQueue.cpp" line="170"/>
+        <source>Cancelled before upload started.</source>
+        <translation>已在上传开始前取消。</translation>
+    </message>
+    <message>
+        <location filename="../../src/manager/FileTransferQueue.cpp" line="175"/>
+        <source>Cancellation requested. Waiting for the remote transfer result.</source>
+        <translation>已请求取消，正在等待远端传输结果。</translation>
+    </message>
+    <message>
+        <location filename="../../src/manager/FileTransferQueue.cpp" line="195"/>
+        <source>Cancellation was not confirmed. Reconnect to reset this session&apos;s queue; the remote file may be incomplete.</source>
+        <translation>取消操作未得到确认。请重新连接以重置本次会话的队列；远端文件可能不完整。</translation>
+    </message>
+    <message>
+        <location filename="../../src/manager/FileTransferQueue.cpp" line="239"/>
+        <source>A transfer result arrived without an identifier. Reconnect to reset this session&apos;s queue.</source>
+        <translation>收到的传输结果缺少标识符，请重新连接以重置本次会话的队列。</translation>
+    </message>
+    <message>
+        <location filename="../../src/manager/FileTransferQueue.cpp" line="291"/>
+        <source>Download could not start: %1</source>
+        <translation>下载未能开始：%1</translation>
+    </message>
+    <message>
+        <location filename="../../src/manager/FileTransferQueue.cpp" line="299"/>
+        <source>Completed before cancellation took effect.</source>
+        <translation>传输已在取消操作生效前完成。</translation>
+    </message>
+    <message>
+        <location filename="../../src/manager/FileTransferQueue.cpp" line="302"/>
+        <source>File transfer failed.</source>
+        <translation>文件传输失败。</translation>
+    </message>
+    <message>
+        <location filename="../../src/manager/FileTransferQueue.cpp" line="304"/>
+        <source>Transfer ended after a cancellation request: %1</source>
+        <translation>传输在请求取消后结束：%1</translation>
     </message>
 </context>
 <context>
     <name>quickdesk::HostManager</name>
     <message>
+        <location filename="../../src/manager/HostManager.cpp" line="247"/>
         <source>Remote Device %1</source>
-        <translation type="vanished">远程设备 %1</translation>
+        <translation>远程设备 %1</translation>
     </message>
     <message>
+        <location filename="../../src/manager/HostManager.cpp" line="249"/>
         <source>Unknown Device</source>
-        <translation type="vanished">未知设备</translation>
+        <translation>未知设备</translation>
     </message>
 </context>
 <context>
     <name>quickdesk::MainController</name>
     <message>
+        <location filename="../../src/controller/MainController.cpp" line="527"/>
         <source>Device ID: %1
 Access Code: %2</source>
-        <translation type="vanished">设备ID：%1
+        <translation>设备ID：%1
 访问码：%2</translation>
     </message>
     <message>
+        <location filename="../../src/controller/MainController.cpp" line="619"/>
         <source>Connected</source>
-        <translation type="vanished">已连接</translation>
+        <translation>已连接</translation>
     </message>
     <message>
+        <location filename="../../src/controller/MainController.cpp" line="621"/>
         <source>Connecting...</source>
-        <translation type="vanished">连接中...</translation>
+        <translation>连接中...</translation>
     </message>
     <message>
+        <location filename="../../src/controller/MainController.cpp" line="623"/>
         <source>Disconnected</source>
-        <translation type="vanished">未连接</translation>
+        <translation>未连接</translation>
     </message>
     <message>
+        <location filename="../../src/controller/MainController.cpp" line="625"/>
         <source>Connection failed</source>
-        <translation type="vanished">连接失败</translation>
+        <translation>连接失败</translation>
     </message>
     <message>
+        <location filename="../../src/controller/MainController.cpp" line="631"/>
         <source>Reconnecting (attempt %1)</source>
-        <translation type="vanished">重连中（第 %1 次尝试）</translation>
+        <translation>重连中（第 %1 次尝试）</translation>
     </message>
     <message>
+        <location filename="../../src/controller/MainController.cpp" line="633"/>
         <source>, retry in %1s</source>
-        <translation type="vanished">，%1秒后重试</translation>
+        <translation>，%1秒后重试</translation>
     </message>
     <message>
+        <location filename="../../src/controller/MainController.cpp" line="668"/>
+        <location filename="../../src/controller/MainController.cpp" line="672"/>
         <source>Never</source>
-        <translation type="vanished">从不</translation>
+        <translation>从不</translation>
     </message>
 </context>
 <context>
     <name>quickdesk::PresetManager</name>
     <message>
+        <location filename="../../src/manager/PresetManager.cpp" line="108"/>
         <source>Unable to connect to server for %1 minutes</source>
-        <translation type="vanished">无法连接到服务器，已持续%1分钟</translation>
+        <translation>无法连接到服务器，已持续%1分钟</translation>
     </message>
 </context>
 <context>
     <name>quickdesk::SystemTrayManager</name>
     <message>
+        <location filename="../../src/component/SystemTrayManager.cpp" line="37"/>
         <source>Show</source>
-        <translation type="vanished">显示</translation>
+        <translation>显示</translation>
     </message>
     <message>
+        <location filename="../../src/component/SystemTrayManager.cpp" line="38"/>
         <source>Quit</source>
-        <translation type="vanished">退出</translation>
+        <translation>退出</translation>
     </message>
     <message>
+        <location filename="../../src/component/SystemTrayManager.cpp" line="66"/>
         <source>QuickDesk</source>
-        <translation type="vanished">QuickDesk</translation>
+        <translation>QuickDesk</translation>
     </message>
     <message>
+        <location filename="../../src/component/SystemTrayManager.cpp" line="67"/>
         <source>QuickDesk is still running in the background.</source>
-        <translation type="vanished">QuickDesk始终在后台运行。</translation>
+        <translation>QuickDesk始终在后台运行。</translation>
     </message>
 </context>
 </TS>

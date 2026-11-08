@@ -8,7 +8,7 @@ Item {
     
     // ============ Custom Properties ============
     
-    property string title: "Dialog"
+    property string title: qsTr("Dialog")
     property bool showing: false
     property bool closeOnOverlay: true
     property bool showCloseButton: true

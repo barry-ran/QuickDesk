@@ -134,7 +134,7 @@ Item {
                                     
                                     Text {
                                         visible: control.isExpanded
-                                        text: modelData.text || "Item " + (index + 1)
+                                        text: modelData.text || qsTr("Item %1").arg(index + 1)
                                         font.family: Theme.fontFamily
                                         font.pixelSize: Theme.fontSizeMedium
                                         color: isSelected ? Theme.primary : Theme.text
