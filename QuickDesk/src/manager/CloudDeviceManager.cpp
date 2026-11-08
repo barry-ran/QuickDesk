@@ -486,6 +486,21 @@ QString CloudDeviceManager::getDeviceAccessCode(const QString& deviceId) const
     return QString();
 }
 
+QString CloudDeviceManager::getDeviceOs(const QString& deviceId) const
+{
+    // Unknown devices keep the native mapping; never infer OS from a name.
+    for (const auto* devices : {&m_myDevices, &m_myFavorites}) {
+        for (const auto& value : *devices) {
+            const auto device = value.toMap();
+            if (device.value("device_id").toString() == deviceId) {
+                const QString os = device.value("os").toString().trimmed().toLower();
+                if (!os.isEmpty()) return os;
+            }
+        }
+    }
+    return {};
+}
+
 QString CloudDeviceManager::getDeviceDisplayName(const QString& deviceId) const
 {
     for (const auto& v : m_myDevices) {
