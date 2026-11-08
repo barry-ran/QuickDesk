@@ -25,6 +25,22 @@ Item {
     // Signal for showing toast (unified toast in MainWindow)
     signal showToast(string message, int toastType)
     
+    // All connection entry points fill the same form and use the same flow.
+    function connectWithCredentials(deviceId, password) {
+        remoteDeviceSelector.deviceId = deviceId
+        remotePasswordInput.text = password
+        if (!/^\d{9}$/.test(deviceId)) {
+            root.showToast(qsTr("Device ID must be 9 digits"), 2)
+            return
+        }
+        if (password.length === 0) {
+            root.showToast(qsTr("Please enter access password"), 2)
+            return
+        }
+        connectBtn.connectingState = true
+        root.connectRequested(deviceId, password)
+    }
+
     // Function to reset connecting state (called when duplicate connection detected)
     function resetConnectingState() {
         if (connectBtn) {
@@ -377,32 +393,9 @@ Item {
                                 connectingState = false
                             }
                             
-                            onClicked: {
-                                var deviceId = remoteDeviceSelector.deviceId
-                                var password = remotePasswordInput.text
-                                
-                                console.log("Connect clicked, deviceId:", deviceId)
-                                
-                                // Validate device ID (9 digits)
-                                if (deviceId.length !== 9) {
-                                    root.showToast(qsTr("Device ID must be 9 digits"), 2) // Error type
-                                    return
-                                }
-                                
-                                // Validate password
-                                if (password.length === 0) {
-                                    root.showToast(qsTr("Please enter access password"), 2) // Error type
-                                    return
-                                }
-                                
-                                // Start connecting
-                                connectingState = true
-                                
-                                // Emit signal to MainWindow which will create the remote window
-                                console.log("Connection requested, waiting for window creation")
-                                root.connectRequested(deviceId, password)
-                            }
-                            
+                            onClicked: root.connectWithCredentials(
+                                remoteDeviceSelector.deviceId, remotePasswordInput.text)
+
                             // Reset connecting state after timeout
                             Timer {
                                 id: connectTimeout
