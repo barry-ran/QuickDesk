@@ -6,14 +6,34 @@ function event(code, extras = {}) {
     return { code, ...extras, prevented: false,
         preventDefault() { this.prevented = true; }, stopPropagation() {} };
 }
-function setup() {
+function setup(remoteOs = '') {
     const calls = [];
     const transport = {
         sendKeyEvent(value) { calls.push({ kind: 'key', ...value }); },
         sendClipboardEvent(value) { calls.push({ kind: 'clipboard', ...value }); },
     };
-    return { keyboard: new KeyboardHandler({}, transport), transport, calls };
+    return { keyboard: new KeyboardHandler({}, transport, remoteOs), transport, calls };
 }
+test('Windows client swaps Alt and Meta for a macOS host', () => {
+    const previousNavigator = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+    Object.defineProperty(globalThis, 'navigator', {
+        configurable: true,
+        value: { platform: 'Win32', userAgent: 'Windows' },
+    });
+    try {
+        const { keyboard, calls } = setup('macos');
+        keyboard._onKeyDown(event('AltLeft'));
+        keyboard._onKeyUp(event('AltLeft'));
+        keyboard._onKeyDown(event('MetaRight'));
+        keyboard._onKeyUp(event('MetaRight'));
+        assert.deepEqual(calls.map(value => [value.usbKeycode, value.pressed]), [
+            [0x0700e3, true], [0x0700e3, false], [0x0700e6, true], [0x0700e6, false],
+        ]);
+    } finally {
+        if (previousNavigator) Object.defineProperty(globalThis, 'navigator', previousNavigator);
+        else delete globalThis.navigator;
+    }
+});
 test('Ctrl+V permits native paste and consumed file paste sends no remote V or unmatched release', () => {
     const { keyboard, calls } = setup();
     keyboard._onKeyDown(event('ControlLeft'));

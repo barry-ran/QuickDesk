@@ -37,7 +37,7 @@
               v-if="d.online && d.logged_in"
               class="btn btn-primary btn-sm"
               :disabled="connecting === d.device_id"
-              @click="connectDevice(d.device_id, d.access_code)"
+              @click="connectDevice(d.device_id, d.access_code, d.os)"
             >
               {{ connecting === d.device_id ? '...' : $t('devices.connect') }}
             </button>
@@ -156,7 +156,7 @@ async function loadLogs() {
 // §2.18: verify → signal_token → open remote.html?st=<token>. The access
 // code is passed to the remote window via sessionStorage (keyed by the
 // short-lived signal_token) so it never enters the URL or browser history.
-async function connectDevice(deviceId, accessCode) {
+async function connectDevice(deviceId, accessCode, remoteOs = '') {
   if (!accessCode) { showToast(t('devices.noAccessCode'), 'error'); return }
   if (connecting.value) return
   connecting.value = deviceId
@@ -171,7 +171,7 @@ async function connectDevice(deviceId, accessCode) {
     }
     const signalToken = v.data?.signal_token
     if (!signalToken) { showToast(t('toast.networkError'), 'error'); return }
-    openRemoteSession({ deviceId, signalToken, accessCode })
+    openRemoteSession({ deviceId, signalToken, accessCode, remoteOs })
   } finally {
     connecting.value = null
   }

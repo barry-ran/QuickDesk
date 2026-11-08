@@ -12,7 +12,7 @@
 //     (§2.6 "同样可验证"). sessionStorage is same-origin only and is
 //     cleared by remote-main.js after it reads the entry.
 
-export function openRemoteSession({ deviceId, signalToken, accessCode }) {
+export function openRemoteSession({ deviceId, signalToken, accessCode, remoteOs = '' }) {
   const serverUrl = localStorage.getItem('quickdesk_signaling_url')
     || 'wss://qdsignaling.quickcoder.cc'
   const codec = localStorage.getItem('quickdesk_video_codec') || 'AV1'
@@ -25,6 +25,7 @@ export function openRemoteSession({ deviceId, signalToken, accessCode }) {
     sessionStorage.setItem(key, JSON.stringify({
       access_code: accessCode,
       device_id: deviceId,
+      remote_os: remoteOs,
       created_at: Date.now(),
     }))
   } catch { /* storage full / disabled — SPAKE2 will fail loudly */ }
