@@ -31,9 +31,9 @@ Rectangle {
     }
 
     function routeTypeLabel(type) {
-        if (type === "direct") return "P2P (Direct)"
-        if (type === "stun")   return "P2P (STUN)"
-        if (type === "relay")  return "Relay (TURN)"
+        if (type === "direct") return qsTr("P2P (Direct)")
+        if (type === "stun")   return qsTr("P2P (STUN)")
+        if (type === "relay")  return qsTr("Relay (TURN)")
         return "—"
     }
 
@@ -51,7 +51,7 @@ Rectangle {
         if (!addr) return "—"
         if (addr.indexOf("redacted-ip.invalid") >= 0) {
             var port = addr.split(":").pop()
-            return "hidden:" + port
+            return qsTr("hidden:%1").arg(port)
         }
         return addr
     }
@@ -82,7 +82,7 @@ Rectangle {
 
         // ── Title ──
         QDText {
-            text: "Video Stats"
+            text: qsTr("Video Stats")
             type: QDText.Type.Body
             font.weight: Font.DemiBold
             colorRole: QDText.ColorRole.Custom
@@ -97,7 +97,7 @@ Rectangle {
 
         // ── Latency Breakdown ──
         QDText {
-            text: "LATENCY"
+            text: qsTr("LATENCY")
             type: QDText.Type.Caption
             font.weight: Font.Bold
             font.letterSpacing: 1.5
@@ -107,11 +107,11 @@ Rectangle {
 
         Repeater {
             model: [
-                { label: "Capture",  key: "captureMs",      barColor: "#4FC3F7" },
-                { label: "Encode",   key: "encodeMs",       barColor: "#81C784" },
-                { label: "Network",  key: "networkDelayMs", barColor: "#FFA726" },
-                { label: "Decode",   key: "decodeMs",       barColor: "#FFB74D" },
-                { label: "Paint",    key: "paintMs",        barColor: "#E57373" }
+                { label: qsTr("Capture"),  key: "captureMs",      barColor: "#4FC3F7" },
+                { label: qsTr("Encode"),   key: "encodeMs",       barColor: "#81C784" },
+                { label: qsTr("Network"),  key: "networkDelayMs", barColor: "#FFA726" },
+                { label: qsTr("Decode"),   key: "decodeMs",       barColor: "#FFB74D" },
+                { label: qsTr("Paint"),    key: "paintMs",        barColor: "#E57373" }
             ]
 
             RowLayout {
@@ -156,7 +156,7 @@ Rectangle {
         // Total latency
         QDLabel {
             Layout.fillWidth: true
-            label: "Total"
+            label: qsTr("Total")
             value: root.fmtMs(root.stats ? root.stats.totalLatencyMs : 0)
             labelColor: root._overlayValue
             valueColor: root._overlayValue
@@ -174,7 +174,7 @@ Rectangle {
 
         // ── Connection Info ──
         QDText {
-            text: "CONNECTION"
+            text: qsTr("CONNECTION")
             type: QDText.Type.Caption
             font.weight: Font.Bold
             font.letterSpacing: 1.5
@@ -188,7 +188,7 @@ Rectangle {
 
             QDLabel {
                 Layout.fillWidth: true
-                label: "Resolution"
+                label: qsTr("Resolution")
                 value: root.stats && root.stats.frameWidth > 0
                        ? root.stats.frameWidth + " x " + root.stats.frameHeight : "—"
                 labelColor: root._overlayLabel; valueColor: root._overlayValue; monoValue: true
@@ -196,49 +196,49 @@ Rectangle {
 
             QDLabel {
                 Layout.fillWidth: true
-                label: "Codec"
+                label: qsTr("Codec")
                 value: root.stats && root.stats.codec ? root.stats.codec : "—"
                 labelColor: root._overlayLabel; valueColor: root._overlayValue; monoValue: true
             }
 
             QDLabel {
                 Layout.fillWidth: true
-                label: "Quality"
+                label: qsTr("Quality")
                 value: root.stats && root.stats.frameQuality >= 0 ? root.stats.frameQuality : "—"
                 labelColor: root._overlayLabel; valueColor: root._overlayValue; monoValue: true
             }
 
             QDLabel {
                 Layout.fillWidth: true
-                label: "Frame Rate"
+                label: qsTr("Frame Rate")
                 value: root.stats ? Math.round(root.stats.frameRate || 0) + " fps" : "—"
                 labelColor: root._overlayLabel; valueColor: root._overlayValue; monoValue: true
             }
 
             QDLabel {
                 Layout.fillWidth: true
-                label: "Bandwidth"
+                label: qsTr("Bandwidth")
                 value: root.fmtBandwidth(root.stats ? root.stats.bandwidthKbps : 0)
                 labelColor: root._overlayLabel; valueColor: root._overlayValue; monoValue: true
             }
 
             QDLabel {
                 Layout.fillWidth: true
-                label: "Input RTT"
+                label: qsTr("Input RTT")
                 value: root.fmtMs(root.stats ? root.stats.inputRoundtripMs : 0)
                 labelColor: root._overlayLabel; valueColor: root._overlayValue; monoValue: true
             }
 
             QDLabel {
                 Layout.fillWidth: true
-                label: "Packet Rate"
+                label: qsTr("Packet Rate")
                 value: root.stats ? Math.round(root.stats.packetRate || 0) + " /s" : "—"
                 labelColor: root._overlayLabel; valueColor: root._overlayValue; monoValue: true
             }
 
             QDLabel {
                 Layout.fillWidth: true
-                label: "Encoded Rect"
+                label: qsTr("Encoded Rect")
                 value: root.stats && root.stats.encodedRectWidth > 0
                        ? root.stats.encodedRectWidth + " x " + root.stats.encodedRectHeight : "—"
                 labelColor: root._overlayLabel; valueColor: root._overlayValue; monoValue: true
@@ -253,7 +253,7 @@ Rectangle {
         }
 
         QDText {
-            text: "ICE / ROUTE"
+            text: qsTr("ICE / ROUTE")
             type: QDText.Type.Caption
             font.weight: Font.Bold
             font.letterSpacing: 1.5
@@ -267,7 +267,7 @@ Rectangle {
 
             QDLabel {
                 Layout.fillWidth: true
-                label: "Type"
+                label: qsTr("Type")
                 value: root.stats ? root.routeTypeLabel(root.stats.routeType) : "—"
                 labelColor: root._overlayLabel
                 valueColor: root.stats ? root.routeTypeColor(root.stats.routeType)
@@ -278,7 +278,7 @@ Rectangle {
 
             QDLabel {
                 Layout.fillWidth: true
-                label: "Protocol"
+                label: qsTr("Protocol")
                 value: root.stats && root.stats.transportProtocol
                        ? root.stats.transportProtocol : "—"
                 labelColor: root._overlayLabel; valueColor: root._overlayValue; monoValue: true
@@ -286,7 +286,7 @@ Rectangle {
 
             QDLabel {
                 Layout.fillWidth: true
-                label: "Local"
+                label: qsTr("Local")
                 value: {
                     if (!root.stats || !root.stats.localAddress) return "—"
                     var t = root.stats.localCandidateType || ""
@@ -297,7 +297,7 @@ Rectangle {
 
             QDLabel {
                 Layout.fillWidth: true
-                label: "Remote"
+                label: qsTr("Remote")
                 value: {
                     if (!root.stats || !root.stats.remoteAddress) return "—"
                     var t = root.stats.remoteCandidateType || ""
@@ -309,7 +309,7 @@ Rectangle {
 
         // ── Client Candidates ──
         QDText {
-            text: "CLIENT CANDIDATES"
+            text: qsTr("CLIENT CANDIDATES")
             type: QDText.Type.Caption
             font.weight: Font.Bold
             font.letterSpacing: 1.5
@@ -374,7 +374,7 @@ Rectangle {
 
         // ── Host Candidates ──
         QDText {
-            text: "HOST CANDIDATES"
+            text: qsTr("HOST CANDIDATES")
             type: QDText.Type.Caption
             font.weight: Font.Bold
             font.letterSpacing: 1.5
