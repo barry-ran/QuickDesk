@@ -132,7 +132,7 @@ QString ClientManager::connectToHost(const QString& deviceId,
     // (used as the first-frame WS auth credential, NOT for SPAKE2).
     message["signalToken"] = signalToken;
     message["serverUrl"] = serverUrl;
-    message["remoteOs"] = remoteOs;
+    message["remoteOs"] = remoteOs.trimmed().toLower();
     
     // Pass runtime API key so client process can authenticate with signaling server
     QString apiKey = core::LocalConfigCenter::instance().apiKey();
