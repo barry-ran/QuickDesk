@@ -25,6 +25,30 @@ Window {
     property bool showVideoStats: false  // Toggle video stats overlay
     property var closingConnections: ({})  // Guard against re-entrant closeConnection calls
     property bool emergencyStopActive: false
+    property int windowedVisibility: Window.Windowed
+    function toggleFullscreen() {
+        if (visibility === Window.FullScreen) {
+            visibility = windowedVisibility
+        } else {
+            windowedVisibility = visibility
+            showFullScreen()
+        }
+        var item = desktopRepeater.itemAt(currentTabIndex)
+        if (item) Qt.callLater(function() { item.remoteDesktopView.forceActiveFocus() })
+    }
+    Connections {
+        target: remoteWindow.clientManager
+        function onKeyboardCaptureStopped(deviceId, reason) {
+            if (remoteWindow.visibility !== Window.FullScreen) return
+            if (reason === "escape-shortcut") {
+                remoteWindow.visibility = remoteWindow.windowedVisibility
+            } else if (["hook-failed", "wrong-session", "capture-busy", "unsupported",
+                         "frontend-stalled", "lease-expired", "ipc-error"].indexOf(reason) >= 0) {
+                remoteWindow.visibility = remoteWindow.windowedVisibility
+                toast.show(qsTr("Fullscreen keyboard control is unavailable. Returned to windowed mode."), QDToast.Type.Error)
+            }
+        }
+    }
     readonly property bool tabBarPinned: tabBarConfig.remoteTabBarPinned
     readonly property bool miniMapEnabled: tabBarConfig.remoteDesktopMiniMapVisible
     property bool tabBarExpanded: false
@@ -439,6 +463,7 @@ Window {
                     clientManager: remoteWindow.clientManager
                     active: delegateItem.index === remoteWindow.currentTabIndex
                     inputEnabled: !delegateItem.isSelfConnection  // Disable input for self-connection
+                    localControlActive: sessionTools.menuOpen
                     suppressRemoteCursor: remoteWindow.tabBarPointerActive
                     showMiniMap: remoteWindow.miniMapEnabled
 
@@ -622,6 +647,9 @@ Window {
 
         // Single floating button bound to current active connection
         FloatingToolButton {
+            id: sessionTools
+            fullscreen: remoteWindow.visibility === Window.FullScreen
+            onToggleFullscreenRequested: remoteWindow.toggleFullscreen()
             x: parent.width - width - Theme.spacingXLarge
             y: Theme.spacingXLarge + (remoteWindow.tabBarShown ? tabBar.height : 0)
             z: 1000

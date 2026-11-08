@@ -12,6 +12,10 @@ Item {
     property var desktopView: null
     property var videoInfo: null  // Video info including original resolution
     property bool miniMapEnabled: true
+    property bool fullscreen: false
+    readonly property bool menuOpen: floatingMenu.visible
+    property bool fullscreenTogglePending: false
+    signal toggleFullscreenRequested()
     
     // Audio state
     property bool audioEnabled: true  // Default: audio enabled
@@ -222,11 +226,17 @@ Item {
         id: floatingMenu
         parent: root.parent
         width: 220
+        onClosed: {
+            if (root.fullscreenTogglePending) {
+                root.fullscreenTogglePending = false
+                root.toggleFullscreenRequested()
+            }
+        }
 
-        // Display switcher header (multi-monitor) — shown above menu items
+        // Always show reported displays, including a single display.
         header: Component {
             Column {
-                visible: root.displayList && root.displayList.length > 1
+                visible: root.displayList && root.displayList.length > 0
                 width: parent ? parent.width : 0
                 spacing: Theme.spacingXSmall
 
@@ -242,7 +252,7 @@ Item {
                     spacing: Theme.spacingXSmall
 
                     Repeater {
-                        model: (root.displayList && root.displayList.length > 1)
+                        model: (root.displayList && root.displayList.length > 0)
                                ? root.displayList.length : 0
 
                         Rectangle {
@@ -309,9 +319,15 @@ Item {
                     height: 1
                     anchors.horizontalCenter: parent.horizontalCenter
                     color: Theme.border
-                    visible: root.displayList && root.displayList.length > 1
+                    visible: root.displayList && root.displayList.length > 0
                 }
             }
+        }
+
+        QDMenuItem {
+            text: root.fullscreen ? qsTr("Exit Fullscreen") : qsTr("Enter Fullscreen")
+            iconText: root.fullscreen ? FluentIconGlyph.chromeRestoreGlyph : FluentIconGlyph.fullScreenGlyph
+            onTriggered: root.fullscreenTogglePending = true
         }
 
         // Smart Boost submenu (帧率提升)

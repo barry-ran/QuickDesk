@@ -104,3 +104,15 @@ Web 手机模式与 Flutter Android 采用共同的触控板交互契约、显�
 ### App 画质与被控连接管理补齐
 
 App 增加桌面端 best-effort 帧率/优先最低码率/远端分辨率请求、下次连接 codec 偏好和音频静音；Android Host 展示已认证客户端并支持确认后逐个断开、停止后安全刷新访问码。协议字段、能力推断边界和真机待验项见 [App 画质与被控连接管理](App画质与被控连接管理.md)。不宣称 Android 被控支持远端画质调节或音频采集。
+
+### Windows 全屏键盘捕获（方案 A，待 review）
+
+- 控制端 Qt 只负责全屏/焦点策略；`quickdesk_client` 在同一交互桌面安装钩子，继承 Chromium `KeyboardHookWinBase`，不跨进程同步 `SetKeyboardState`。
+- 全屏且远程画面聚焦时独占物理键流；窗口化保持现有 Qt 转发与本地系统快捷键行为，不承诺本地组合键的修饰键前缀完全不进入远端。
+- `helloResponse.keyboardCapture` 协商能力；`keyboardCapture` 使用 connectionId、generation、windowHandle、processId 和 enabled，400 ms 续租、2 s 超时。失焦/桌面切换/退出/断线释放输入；Ctrl+Alt+Shift+F12 释放并退出全屏。
+- 捕获事件按 sequence 经 Qt 确认（保留文件粘贴特例），后端保存原始事件并统一转换/映射；Qt 不再重复发送普通键事件。旧 generation 和乱序确认不执行；待确认队列上限 256。
+- Alt/Meta 仅在统一输入入口按连接映射一次；`remoteOs` 从已知设备/收藏元数据传入，未知 OS 保持原键位。CapsLock 使用切换后的锁定状态，人工释放不重放旧锁定状态。
+- 此功能需同步部署新版 Qt 与 `quickdesk_client`。旧后端未声明能力时不启用捕获。Windows 原生捕获单测、IPC 冒烟测试在仓库外保存，测试代码不纳入提交。
+- Ctrl+Alt+Del 等系统特殊路径继续使用现有远端动作按钮；全屏物理键捕获不是任意系统组合键保证。跨机器/macOS 实际输入法及长时断网恢复仍需实机验收。
+
+开发联调：Qt Debug 默认搜索 Debug remoting；本次 Release 客户端可通过进程环境 `QUICKDESK_CLIENT_PATH=D:\chromium\remoting\src\out\Release\quickdesk_client.exe` 显式选择，避免覆盖旧 Debug 或随包二进制。未设置时保持原搜索顺序。
