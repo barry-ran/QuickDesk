@@ -124,6 +124,7 @@ function keyboardFixture() {
         root: {
             inputEnabled: true, deviceId: 'a', filePasteKeyHeld: false, forwardedKeys: {},
             clientManager: {
+                setKeyboardCapture() {},
                 pasteFilesFromClipboard() { calls.push('paste'); return fileClipboard; },
                 sendKeyPress() { calls.push('down'); },
                 sendKeyRelease() { calls.push('up'); },
