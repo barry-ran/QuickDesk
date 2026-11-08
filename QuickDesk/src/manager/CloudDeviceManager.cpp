@@ -529,6 +529,39 @@ QString CloudDeviceManager::getDeviceDisplayName(const QString& deviceId) const
     return deviceId;
 }
 
+void CloudDeviceManager::fetchDeviceOs(
+    const QString& deviceId,
+    std::function<void(const QString& os)> callback)
+{
+    const QString cachedOs = getDeviceOs(deviceId);
+    if (!cachedOs.isEmpty() || !m_authManager->isLoggedIn()) {
+        callback(cachedOs);
+        return;
+    }
+
+    QUrl url(httpBaseUrl() + "v1/me/devices/" + deviceId);
+    m_authManager->request(
+        "GET", url, QString(),
+        [this, deviceId, callback = std::move(callback)](
+            int statusCode, const std::string& errorMsg,
+            const std::string& data) mutable {
+            QMetaObject::invokeMethod(
+                this, [deviceId, callback = std::move(callback), statusCode,
+                       errorMsg, data]() mutable {
+                    if (statusCode != 200 || !errorMsg.empty()) {
+                        LOG_WARN("[CloudDeviceManager] fetchDeviceOs failed: "
+                                 "device={} status={} err={}",
+                                 deviceId.toStdString(), statusCode, errorMsg);
+                        callback(QString());
+                        return;
+                    }
+                    const QJsonObject device = QJsonDocument::fromJson(
+                        QByteArray::fromStdString(data)).object();
+                        callback(device.value("os").toString().trimmed().toLower());
+                });
+        });
+}
+
 // ========================================================================
 // Connection record
 // ========================================================================

@@ -40,28 +40,28 @@ QString firstReachableIpv4Address() {
             continue;
         }
 
-        const auto entries = networkInterface.addressEntries();
-        for (const auto& entry : entries) {
-            const auto address = entry.ip();
-            if (address.protocol() == QAbstractSocket::IPv4Protocol &&
-                !address.isLoopback()) {
-                return address.toString();
-            }
-        }
-    }
-    return QString();
-}
-}
-
-namespace quickdesk {
-
-MainController::MainController(QObject* parent)
-    : QObject(parent)
-    , m_processManager(std::make_unique<ProcessManager>(this))
-    , m_serverManager(std::make_unique<ServerManager>(this))
-    , m_turnServerManager(std::make_unique<TurnServerManager>(this))
-    , m_hostManager(std::make_unique<HostManager>(this))
-    , m_clientManager(std::make_unique<ClientManager>(this))
+                    if (allowRefreshRetry && code == QLatin1String("INVALID_CODE")) {
+                        LOG_WARN("verifyAccessCode INVALID_CODE for device={}, refreshing cloud access_code and retrying once",
+                                 deviceId.toStdString());
+                        m_cloudDeviceManager->refreshAccessCodeNow(
+                            deviceId,
+                            [this, deviceId, accessCode, serverUrl, httpStatus, code, detail](const QString& latestCode) {
+                                if (latestCode.isEmpty() || latestCode == accessCode) {
+                                    LOG_WARN("Refreshed access_code for device={} is unchanged; not retrying",
+                                             deviceId.toStdString());
+                                    reportVerifyAccessCodeFailure(deviceId, httpStatus, code, detail);
+                                    return;
+                                }
+                                LOG_INFO("Retrying verifyAccessCode for device={} with refreshed access_code",
+                                         deviceId.toStdString());
+                                verifyAndConnectToRemoteHost(deviceId, latestCode, serverUrl, false);
+                            },
+                            [this, deviceId, httpStatus, code, detail](int, const QString&, const QString&) {
+                                reportVerifyAccessCodeFailure(deviceId, httpStatus, code, detail);
+                            });
+                        return;
+                    }
+                    reportVerifyAccessCodeFailure(deviceId, httpStatus, code, detail);
     , m_remoteDeviceManager(std::make_unique<RemoteDeviceManager>(this))
     , m_presetManager(std::make_unique<PresetManager>(m_serverManager.get(), this))
 {
@@ -419,20 +419,24 @@ void MainController::verifyAndConnectToRemoteHost(const QString& deviceId,
                                                   const QString& serverUrl,
                                                   bool allowRefreshRetry)
 {
-    m_cloudDeviceManager->verifyAccessCode(
-        deviceId, accessCode,
-        [this, deviceId, accessCode, serverUrl](const QString& signalToken) {
-            LOG_INFO("verifyAccessCode OK for device={} — spawning client",
-                     deviceId.toStdString());
-            QString result = m_clientManager->connectToHost(
-                deviceId, accessCode, signalToken, serverUrl,
-                m_cloudDeviceManager->getDeviceOs(deviceId));
-            if (result.isEmpty()) {
-                m_connectionTracks.remove(deviceId);
-            }
-        },
+    m_cloudDeviceManager->fetchDeviceOs(
+        deviceId,
         [this, deviceId, accessCode, serverUrl, allowRefreshRetry](
-            int httpStatus, const QString& code, const QString& detail) {
+            const QString& remoteOs) {
+            m_cloudDeviceManager->verifyAccessCode(
+                deviceId, accessCode,
+                [this, deviceId, accessCode, serverUrl, remoteOs](
+                    const QString& signalToken) {
+                    LOG_INFO("verifyAccessCode OK for device={} — spawning client",
+                             deviceId.toStdString());
+                    QString result = m_clientManager->connectToHost(
+                        deviceId, accessCode, signalToken, serverUrl, remoteOs);
+                    if (result.isEmpty()) {
+                        m_connectionTracks.remove(deviceId);
+                    }
+                },
+                [this, deviceId, accessCode, serverUrl, allowRefreshRetry](
+                    int httpStatus, const QString& code, const QString& detail) {
             if (allowRefreshRetry && code == QLatin1String("INVALID_CODE")) {
                 LOG_WARN("verifyAccessCode INVALID_CODE for device={}, refreshing cloud access_code and retrying once",
                          deviceId.toStdString());
@@ -455,6 +459,7 @@ void MainController::verifyAndConnectToRemoteHost(const QString& deviceId,
                 return;
             }
             reportVerifyAccessCodeFailure(deviceId, httpStatus, code, detail);
+                });
         });
 }
 

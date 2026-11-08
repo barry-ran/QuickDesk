@@ -108,10 +108,14 @@ async function connect() {
       errorMsg.value = t('toast.networkError')
       return
     }
+    let remoteOs = ''
+    const device = await userApi.getDevice(deviceId.value)
+    if (device.ok) remoteOs = device.data?.os || ''
     openRemoteSession({
       deviceId: deviceId.value,
       signalToken,
       accessCode: accessCode.value,
+      remoteOs,
     })
     showToast(t('connect.connecting', { deviceId: deviceId.value }), 'info')
   } finally {
