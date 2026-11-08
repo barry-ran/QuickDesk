@@ -40,28 +40,28 @@ QString firstReachableIpv4Address() {
             continue;
         }
 
-                    if (allowRefreshRetry && code == QLatin1String("INVALID_CODE")) {
-                        LOG_WARN("verifyAccessCode INVALID_CODE for device={}, refreshing cloud access_code and retrying once",
-                                 deviceId.toStdString());
-                        m_cloudDeviceManager->refreshAccessCodeNow(
-                            deviceId,
-                            [this, deviceId, accessCode, serverUrl, httpStatus, code, detail](const QString& latestCode) {
-                                if (latestCode.isEmpty() || latestCode == accessCode) {
-                                    LOG_WARN("Refreshed access_code for device={} is unchanged; not retrying",
-                                             deviceId.toStdString());
-                                    reportVerifyAccessCodeFailure(deviceId, httpStatus, code, detail);
-                                    return;
-                                }
-                                LOG_INFO("Retrying verifyAccessCode for device={} with refreshed access_code",
-                                         deviceId.toStdString());
-                                verifyAndConnectToRemoteHost(deviceId, latestCode, serverUrl, false);
-                            },
-                            [this, deviceId, httpStatus, code, detail](int, const QString&, const QString&) {
-                                reportVerifyAccessCodeFailure(deviceId, httpStatus, code, detail);
-                            });
-                        return;
-                    }
-                    reportVerifyAccessCodeFailure(deviceId, httpStatus, code, detail);
+        const auto entries = networkInterface.addressEntries();
+        for (const auto& entry : entries) {
+            const auto address = entry.ip();
+            if (address.protocol() == QAbstractSocket::IPv4Protocol &&
+                !address.isLoopback()) {
+                return address.toString();
+            }
+        }
+    }
+    return QString();
+}
+}
+
+namespace quickdesk {
+
+MainController::MainController(QObject* parent)
+    : QObject(parent)
+    , m_processManager(std::make_unique<ProcessManager>(this))
+    , m_serverManager(std::make_unique<ServerManager>(this))
+    , m_turnServerManager(std::make_unique<TurnServerManager>(this))
+    , m_hostManager(std::make_unique<HostManager>(this))
+    , m_clientManager(std::make_unique<ClientManager>(this))
     , m_remoteDeviceManager(std::make_unique<RemoteDeviceManager>(this))
     , m_presetManager(std::make_unique<PresetManager>(m_serverManager.get(), this))
 {
