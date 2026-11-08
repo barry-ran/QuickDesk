@@ -108,9 +108,9 @@ async function connect() {
       errorMsg.value = t('toast.networkError')
       return
     }
-    let remoteOs = ''
-    const device = await userApi.getDevice(deviceId.value)
-    if (device.ok) remoteOs = device.data?.os || ''
+    // OS metadata is optional; do not block a verified connection on an account lookup.
+    const device = userSync.getDevices().find(d => d.device_id === deviceId.value)
+    const remoteOs = device?.os || ''
     openRemoteSession({
       deviceId: deviceId.value,
       signalToken,
