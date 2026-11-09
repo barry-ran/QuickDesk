@@ -51,6 +51,10 @@ public:
     // Privacy screen
     LCC_FUNCTION_DEC_BOOL(autoPrivacyScreenOnConnect, AutoPrivacyScreenOnConnect, false) // Auto-enable privacy screen when a client connects
 
+    // Permanent password: when enabled, savedAccessCode holds a user-chosen
+    // access code that is never regenerated (manually, by timer or via API).
+    LCC_FUNCTION_DEC_BOOL(permanentPasswordEnabled, PermanentPasswordEnabled, false)
+
     // User authentication
     LCC_FUNCTION_DEC_STRING(userToken, UserToken, "")    // Persisted user access token (short-lived; used to bootstrap restoreSession only)
     LCC_FUNCTION_DEC_STRING(refreshToken, RefreshToken, "")    // Persisted refresh token (30d) — refresh via POST /v1/auth/tokens:refresh
