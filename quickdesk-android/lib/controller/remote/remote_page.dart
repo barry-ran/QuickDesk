@@ -829,7 +829,9 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
               focusNode: _textFocus,
               autofocus: true,
               autocorrect: false,
-              enableSuggestions: false,
+              // Disabling suggestions adds Android visible-password flags,
+              // which can force secure keyboards and prevent Chinese IME input.
+              enableSuggestions: true,
               textInputAction: TextInputAction.done,
               onSubmitted: (_) => _sendControlKey(0x28),
               decoration: InputDecoration(
