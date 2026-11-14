@@ -193,7 +193,10 @@ test(`real remote page: ${viewport.width}px toolbar, help, keyboard and accessib
         });
         await page.waitForFunction(() => inputEvents.some(e => e.kind === 'text'));
         assert.deepEqual(await page.evaluate(() => inputEvents.filter(e => e.kind === 'text').map(e => e.text)), ['你好']);
-        await keyboard.tap();
+        assert.equal(await row.isVisible(), false);
+        assert.ok((await page.locator('#mobileKeyRow').boundingBox()).height <= 50, 'input accessory stays one row');
+        await page.locator('#btnHideKeyboard').tap();
+        assert.equal(await row.isVisible(), true);
         assert.equal(await keyboard.getAttribute('aria-pressed'), 'false');
         assert.equal(await page.locator('#mobileKeyRow').isVisible(), false);
         // Rotating and visual viewport resize must not blur the IME bridge.
@@ -202,7 +205,10 @@ test(`real remote page: ${viewport.width}px toolbar, help, keyboard and accessib
         assert.equal(await page.locator('#mobileKeyInput').evaluate(el => document.activeElement === el), true);
         await page.evaluate(() => window.visualViewport?.dispatchEvent(new Event('resize')));
         assert.equal(await keyboard.getAttribute('aria-pressed'), 'true');
-        await keyboard.tap();
+        assert.equal(await row.isVisible(), false);
+        assert.ok((await page.locator('#mobileKeyRow').boundingBox()).height <= 50, 'input accessory stays one row');
+        await page.locator('#btnHideKeyboard').tap();
+        assert.equal(await row.isVisible(), true);
         assert.equal(await keyboard.getAttribute('aria-pressed'), 'false');
         await page.evaluate(() => remoteDesktopApp._cleanupInputHandlers());
         assert.deepEqual(errors, []);

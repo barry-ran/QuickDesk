@@ -1436,11 +1436,14 @@ export class RemoteDesktopApp {
         keyboardButton?.setAttribute('aria-pressed', 'false');
         keyboardButton?.addEventListener('pointerdown', e => e.preventDefault());
         const keyRow = document.getElementById('mobileKeyRow');
+        document.getElementById('btnHideKeyboard')?.addEventListener('click', () => keyInput?.blur());
         keyInput?.addEventListener('focus', () => {
+            document.body.classList.add('mobile-input-active');
             keyboardButton?.setAttribute('aria-pressed', 'true');
             if (keyRow) keyRow.hidden = false;
         });
         keyInput?.addEventListener('blur', () => {
+            document.body.classList.remove('mobile-input-active');
             keyboardButton?.setAttribute('aria-pressed', 'false');
             if (keyRow) keyRow.hidden = true;
         });

@@ -65,9 +65,18 @@ class RemoteToolbar extends StatelessWidget {
     return Material(
       color: Colors.black54,
       borderRadius: BorderRadius.circular(24),
-      child: Wrap(
-        alignment: WrapAlignment.end,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
         children: [
+          IconButton(
+            icon: Icon(
+              Icons.keyboard,
+              color: keyboardVisible ? Colors.lightBlueAccent : Colors.white,
+            ),
+            tooltip: L10n.t('remote.keyboard'),
+            onPressed: onToggleKeyboard,
+          ),
           IconButton(
             icon: const Icon(Icons.mouse, color: Colors.white),
             tooltip: L10n.t('remote.leftClick'),
@@ -85,14 +94,6 @@ class RemoteToolbar extends StatelessWidget {
             ),
             tooltip: L10n.t(dragArmed ? 'remote.cancelDrag' : 'remote.armDrag'),
             onPressed: onToggleDrag,
-          ),
-          IconButton(
-            icon: Icon(
-              Icons.keyboard,
-              color: keyboardVisible ? Colors.lightBlueAccent : Colors.white,
-            ),
-            tooltip: L10n.t('remote.keyboard'),
-            onPressed: onToggleKeyboard,
           ),
           IconButton(
             icon: const Icon(Icons.zoom_out_map, color: Colors.white),
@@ -196,7 +197,7 @@ class RemoteToolbar extends StatelessWidget {
             ],
           ),
         ],
-      ),
+      )),
     );
   }
 }

@@ -655,6 +655,19 @@
         #mobileGestureHelp { padding: 8px 16px; font-size: 13px; line-height: 1.6; color: var(--text-primary); }
         .mobile-btn svg { width: 22px; height: 22px; fill: currentColor; }
 
+        /* Match the native input accessory: one 48px row, persistent dismiss. */
+        body.mobile-input-active #connectionBar,
+        body.mobile-input-active #mobileToolbar > .mobile-toolbar-row,
+        body.mobile-input-active #mobileGestureHelp { display: none; }
+        body.mobile-input-active #mobileToolbar { padding: 0; }
+        body.mobile-input-active #mobileKeyRow { display: flex; }
+        #mobileKeyRow > .mobile-toolbar-row { flex: 1; min-width: 0; justify-content: flex-start; }
+        #mobileKeyRow .mobile-btn { height: 48px; padding: 0 8px; justify-content: center; }
+        #btnHideKeyboard { flex: 0 0 48px; }
+        @media (pointer: coarse) {
+            #mobileToolbar > .mobile-toolbar-row { justify-content: flex-start; }
+            #mobileToolbar .mobile-btn { min-width: 48px; }
+        }
         /* Mobile overrides */
         @media (max-width: 768px) {
             body { height: 100dvh; }
@@ -758,6 +771,7 @@
                 <button class="mobile-btn" data-remote-key="458833" aria-label="Down arrow" data-i18n-aria-label="mobile.down">↓</button>
                 <button class="mobile-btn" data-remote-key="458831" aria-label="Right arrow" data-i18n-aria-label="mobile.right">→</button>
             </div>
+            <button class="mobile-btn" id="btnHideKeyboard" aria-label="Hide keyboard" title="Hide keyboard">⌄</button>
         </div>
         <div class="mobile-toolbar-row">
             <button class="mobile-btn" id="btnKeyboard" data-i18n-title="mobile.keyboard" title="Keyboard">
@@ -768,13 +782,13 @@
                 <span aria-hidden="true" style="font-size:22px;line-height:22px">↖</span>
                 <span data-i18n="mobile.click">Click</span>
             </button>
-            <button class="mobile-btn" id="btnDrag" aria-pressed="false">
-                <span aria-hidden="true" style="font-size:22px;line-height:22px">✥</span>
-                <span data-i18n="mobile.drag">Drag</span>
-            </button>
             <button class="mobile-btn" id="btnRightClick" data-i18n-title="mobile.rightClick" title="Right Click">
                 <svg viewBox="0 0 24 24"><path d="M13 1.07V9h7c0-4.08-3.05-7.44-7-7.93zM4 15c0 4.42 3.58 8 8 8s8-3.58 8-8v-4H4v4zm7-13.93C7.05 1.56 4 4.92 4 9h7V1.07z"/></svg>
                 <span data-i18n="mobile.rightClick">Right Click</span>
+            </button>
+            <button class="mobile-btn" id="btnDrag" aria-pressed="false">
+                <span aria-hidden="true" style="font-size:22px;line-height:22px">✥</span>
+                <span data-i18n="mobile.drag">Drag</span>
             </button>
             <button class="mobile-btn" id="btnZoomReset" data-i18n-title="mobile.zoom" title="Fit to screen">
                 <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/><path d="M12 10h-2v2H9v-2H7V9h2V7h1v2h2v1z"/></svg>

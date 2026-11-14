@@ -739,7 +739,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                   ],
                 ),
               ),
-              if (connected)
+              if (connected && !_keyboardVisible)
                 Padding(
                   padding: const EdgeInsets.all(8),
                   child: RemoteToolbar(
@@ -791,11 +791,10 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   Widget _buildKeyboard() {
     return Container(
       color: Theme.of(context).colorScheme.surface,
-      padding: const EdgeInsets.all(8),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Row(
         children: [
-          SingleChildScrollView(
+          Expanded(child: SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
               children: [
@@ -806,8 +805,8 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                   0x2a: '⌫',
                   0x50: '←',
                   0x52: '↑',
-                  0x4f: '→',
                   0x51: '↓',
+                  0x4f: '→',
                 }.entries)
                   TextButton(
                     style: TextButton.styleFrom(
@@ -818,8 +817,8 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                   ),
               ],
             ),
-          ),
-          Focus(
+          )),
+          SizedBox(width: 1, height: 1, child: Opacity(opacity: 0, child: Focus(
             onKeyEvent: _onKey,
             onFocusChange: (focused) {
               if (!focused) _cancelAllInput();
@@ -834,18 +833,13 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
               enableSuggestions: true,
               textInputAction: TextInputAction.done,
               onSubmitted: (_) => _sendControlKey(0x28),
-              decoration: InputDecoration(
-                hintText: L10n.t('remote.textInputHint'),
-                labelText: L10n.t('remote.keyboard'),
-                suffixIcon: IconButton(
-                  tooltip: L10n.t('remote.hideKeyboard'),
-                  onPressed: _toggleKeyboard,
-                  icon: const Icon(Icons.keyboard_hide),
-                ),
-                border: const OutlineInputBorder(),
-                isDense: true,
-              ),
+              decoration: const InputDecoration.collapsed(hintText: ''),
             ),
+          ))),
+          IconButton(
+            tooltip: L10n.t('remote.hideKeyboard'),
+            onPressed: _toggleKeyboard,
+            icon: const Icon(Icons.keyboard_hide),
           ),
         ],
       ),
