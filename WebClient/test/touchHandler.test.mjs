@@ -340,3 +340,24 @@ test('display switch releases drag using old origin and frame resize retains new
     assert.equal(messages.at(-1).x, 799);
     assert.equal(messages.at(-1).y, 450);
 });
+
+
+test('keyboard preserves desktop pixel scale and restores browsing transform', () => {
+    const { rect } = fixture();
+    rect.width = 844; rect.height = 390;
+    handler._cursorX = 1400; handler._cursorY = 750;
+    handler.setKeyboardMode(true);
+    rect.height = 150;
+    handler._handlers.resize();
+    assert.ok(Math.abs(handler._scale - 390 / 150) < 0.001);
+    assert.ok(handler._translateY < 0);
+    handler.setKeyboardMode(false);
+    rect.height = 220;
+    handler._handlers.resize();
+    assert.ok(handler._beforeKeyboard, "closing animation retains snapshot");
+    rect.height = 390;
+    handler._handlers.resize();
+    assert.equal(handler._scale, 1);
+    assert.equal(handler._translateX, 0);
+    assert.equal(handler._translateY, 0);
+});

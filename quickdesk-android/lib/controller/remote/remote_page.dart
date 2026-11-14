@@ -491,6 +491,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
 
   void _toggleKeyboard() {
     _cancelAllInput();
+    _touch.setKeyboardMode(!_keyboardVisible);
     setState(() => _keyboardVisible = !_keyboardVisible);
     if (_keyboardVisible) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -583,6 +584,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && _keyboardVisible && !_imeWasVisible) {
           _textFocus.unfocus();
+          _touch.setKeyboardMode(false);
           setState(() => _keyboardVisible = false);
         }
       });

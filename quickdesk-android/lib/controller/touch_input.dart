@@ -73,6 +73,30 @@ class TouchInputController {
 
   TouchInputController(this.dcHandler);
 
+  (double, double, double)? _beforeKeyboard;
+  double? _keyboardPixelScale;
+  double _beforeKeyboardWidth = 0;
+  double _beforeKeyboardHeight = 0;
+  bool _restoreKeyboardView = false;
+
+  double get _fitScale => remoteWidth > 0 && remoteHeight > 0
+      ? math.min(viewportWidth / remoteWidth, viewportHeight / remoteHeight)
+      : 0;
+
+  /// Keep desktop text readable while the IME reduces the visible viewport.
+  void setKeyboardMode(bool active) {
+    if (active && _beforeKeyboard == null) {
+      _beforeKeyboard = (scale, translateX, translateY);
+      _beforeKeyboardWidth = viewportWidth;
+      _beforeKeyboardHeight = viewportHeight;
+      _keyboardPixelScale = _fitScale * scale;
+      _restoreKeyboardView = false;
+    } else if (!active && _beforeKeyboard != null) {
+      _keyboardPixelScale = null;
+      _restoreKeyboardView = true;
+    }
+  }
+
   bool get isZoomed => scale > 1.05;
 
   Offset get _center => Offset(viewportWidth / 2, viewportHeight / 2);
@@ -106,6 +130,21 @@ class TouchInputController {
     if (_activeTouches > 0) cancelGesture(notify: false);
     viewportWidth = w;
     viewportHeight = h;
+    if (_restoreKeyboardView &&
+        _beforeKeyboard != null &&
+        (h >= _beforeKeyboardHeight - 1 || w != _beforeKeyboardWidth)) {
+      final saved = _beforeKeyboard!;
+      scale = saved.$1;
+      translateX = saved.$2;
+      translateY = saved.$3;
+      _beforeKeyboard = null;
+      _restoreKeyboardView = false;
+    } else if (_keyboardPixelScale != null && _fitScale > 0) {
+      scale = (_keyboardPixelScale! / _fitScale).clamp(_minScale, _maxScale);
+      // Center the mouse anchor only at viewport transitions, not each keystroke.
+      translateX = (remoteWidth / 2 - cursorX) * _fitScale * scale;
+      translateY = (remoteHeight / 2 - cursorY) * _fitScale * scale;
+    }
     _clampTranslate();
   }
 
