@@ -117,6 +117,7 @@ export class TouchHandler {
         h.visibility = () => { if (document.hidden) this.cancelGesture(); };
         h.resize = () => {
             this.cancelGesture();
+            this._resizeKeyboardView();
             this._applyTransform();
             this._updateCursorElement();
             if (this.isZoomed) this._autoPanToFollow();
@@ -496,6 +497,36 @@ export class TouchHandler {
         const maxY = Math.max(0, (renderHeight * this._scale - rect.height) / 2);
         this._translateX = Math.max(-maxX, Math.min(maxX, this._translateX));
         this._translateY = Math.max(-maxY, Math.min(maxY, this._translateY));
+    }
+
+    setKeyboardMode(active) {
+        const rect = this.video.parentElement.getBoundingClientRect();
+        if (active && !this._beforeKeyboard) {
+            this._beforeKeyboard = [this._scale, this._translateX, this._translateY];
+            this._beforeKeyboardSize = [rect.width, rect.height];
+            this._keyboardPixelScale = Math.min(rect.width / this.remoteWidth, rect.height / this.remoteHeight) * this._scale;
+            this._restoreKeyboardView = false;
+        } else if (!active && this._beforeKeyboard) {
+            this._keyboardPixelScale = null;
+            this._restoreKeyboardView = true;
+        }
+    }
+
+    _resizeKeyboardView() {
+        const viewport = this.video.parentElement.getBoundingClientRect();
+        if (this._restoreKeyboardView && this._beforeKeyboard &&
+            (viewport.height >= this._beforeKeyboardSize[1] - 1 || viewport.width !== this._beforeKeyboardSize[0])) {
+            [this._scale, this._translateX, this._translateY] = this._beforeKeyboard;
+            this._beforeKeyboard = null;
+            this._restoreKeyboardView = false;
+        } else if (this._keyboardPixelScale > 0 && Number.isFinite(this._keyboardPixelScale)) {
+            const rect = this.video.parentElement.getBoundingClientRect();
+            const fit = Math.min(rect.width / this.remoteWidth, rect.height / this.remoteHeight);
+            if (!(fit > 0)) return;
+            this._scale = Math.max(1, Math.min(5, this._keyboardPixelScale / fit));
+            this._translateX = (this.remoteWidth / 2 - this._cursorX) * fit * this._scale;
+            this._translateY = (this.remoteHeight / 2 - this._cursorY) * fit * this._scale;
+        }
     }
 
     resetZoom() {

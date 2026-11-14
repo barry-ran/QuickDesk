@@ -36,6 +36,25 @@ void main() {
   late _RecordingDataChannelHandler channel;
   late TouchInputController controller;
 
+  test('keyboard preserves text pixel scale and restores the browsing view',
+      () {
+    final c = TouchInputController(_RecordingDataChannelHandler());
+    c.setRemoteResolution(1600, 900);
+    c.setViewportSize(844, 390);
+    c.cursorX = 1400;
+    c.cursorY = 750;
+    c.setKeyboardMode(true);
+    c.setViewportSize(844, 150);
+    expect(c.scale, closeTo(390 / 150, 0.001));
+    expect(c.translateY, lessThan(0));
+    c.setKeyboardMode(false);
+    c.setViewportSize(844, 220);
+    c.setViewportSize(844, 390);
+    expect(c.scale, 1);
+    expect(c.translateX, 0);
+    expect(c.translateY, 0);
+  });
+
   setUp(() {
     channel = _RecordingDataChannelHandler();
     controller = TouchInputController(channel)
@@ -53,7 +72,9 @@ void main() {
     const Offset(1920, 100),
     const Offset(-1000, -800),
   ]) {
-    test('display origin $origin maps clicks, drag and scroll, not local cursor', () {
+    test(
+        'display origin $origin maps clicks, drag and scroll, not local cursor',
+        () {
       controller.setRemoteDisplay(
         1000,
         800,
@@ -93,7 +114,8 @@ void main() {
     });
   }
 
-  test('switch releases drag at old origin and frame resize preserves mapping', () {
+  test('switch releases drag at old origin and frame resize preserves mapping',
+      () {
     controller.setRemoteDisplay(1000, 800, originX: -1000, originY: 100);
     controller.toggleDrag();
     controller.onPointerDown(_down(const Offset(100, 100)), 1);
@@ -250,7 +272,8 @@ void main() {
           default:
             fail('Unknown drag action: ${step['action']}');
         }
-        expect(controller.dragArmed || controller.leftButtonHeld, step['active']);
+        expect(
+            controller.dragArmed || controller.leftButtonHeld, step['active']);
         expect(displayedActive, step['active']);
         expect(
           channel.mouseEvents
