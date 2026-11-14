@@ -152,8 +152,8 @@ test(`real remote page: ${viewport.width}px toolbar, help, keyboard and accessib
             app._setupInputHandlers();
         });
         const row = page.locator('#mobileToolbar > .mobile-toolbar-row');
-        if (viewport.width === 320) assert.equal(await row.evaluate(el => el.scrollWidth > el.clientWidth), true);
-        for (const id of ['btnKeyboard', 'btnLeftClick', 'btnDrag', 'btnRightClick', 'btnZoomReset', 'btnGestureHelp', 'btnMobileMore']) {
+        if (viewport.width === 320) assert.equal(await row.evaluate(el => el.scrollWidth <= el.clientWidth), true);
+        for (const id of ['btnKeyboard', 'btnLeftClick', 'btnDrag', 'btnRightClick', 'btnZoomReset', 'btnMobileMore']) {
             const button = page.locator(`#${id}`);
             await button.scrollIntoViewIfNeeded();
             const bounds = await button.boundingBox();
@@ -170,6 +170,7 @@ test(`real remote page: ${viewport.width}px toolbar, help, keyboard and accessib
         await page.evaluate(() => remoteDesktopApp.floatingToolbar.setVisible(false));
         await page.locator('#btnMobileMore').tap();
         assert.equal(await page.locator('#mobileMoreMenu').isVisible(), false);
+        await page.locator('#btnMobileMore').tap();
         const help = page.locator('#btnGestureHelp');
         await help.tap();
         assert.equal(await help.getAttribute('aria-expanded'), 'true');
@@ -177,6 +178,7 @@ test(`real remote page: ${viewport.width}px toolbar, help, keyboard and accessib
         await help.tap();
         assert.equal(await help.getAttribute('aria-expanded'), 'false');
         assert.equal(await page.locator('#mobileGestureHelp').isVisible(), false);
+        await page.locator('#btnMobileMore').tap();
 
         const drag = page.locator('#btnDrag');
         await drag.tap();
