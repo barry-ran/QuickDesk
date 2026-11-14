@@ -37,7 +37,7 @@ Shizuku 增强档（AIDL UserService + `injectInputEvent` 反射）、USB→Andr
 
 ## 开发环境
 
-- Flutter SDK stable 3.44+
+- Flutter SDK stable **3.44.0**（与 CI 一致；3.50 要求不同的 Gradle 工具链）
 - **JDK 17**：GraalVM / JDK 21 与 AGP 的 jlink 变换不兼容，需 `flutter config --jdk-dir "<jdk17>"` 指定
 - Android SDK：platform-tools + platforms;android-36 + build-tools;36.0.0（NDK 由 Gradle 自动安装）
 - 已内置 `compileSdk 36` / `minSdk 24`（插件依赖与被控输入 API 要求）

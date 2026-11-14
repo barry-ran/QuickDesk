@@ -44,10 +44,19 @@ void main() {
       ),
     );
     expect(tester.takeException(), isNull);
+    final keyboardX = tester.getTopLeft(find.byIcon(Icons.keyboard)).dx;
+    final leftX = tester.getTopLeft(find.byIcon(Icons.mouse)).dx;
+    final rightX = tester.getTopLeft(find.byIcon(Icons.ads_click)).dx;
+    final dragX = tester.getTopLeft(find.byIcon(Icons.pan_tool)).dx;
+    expect(keyboardX, lessThan(leftX));
+    expect(leftX, lessThan(rightX));
+    expect(rightX, lessThan(dragX));
+    await tester.ensureVisible(find.byIcon(Icons.help_outline));
     await tester.tap(find.byIcon(Icons.help_outline));
     await tester.tap(find.byIcon(Icons.zoom_out_map));
     expect(help, 1);
     expect(fit, 1);
+    await tester.ensureVisible(find.byIcon(Icons.more_vert));
     await tester.tap(find.byIcon(Icons.more_vert));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Esc'));

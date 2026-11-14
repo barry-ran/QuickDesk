@@ -89,6 +89,9 @@ const zh = {
 
     // Mobile toolbar
     'mobile.keyboard': '键盘',
+    'mobile.hideKeyboard': '收起键盘',
+    'mobile.more': '更多',
+    'mobile.settings': '会话设置',
     'mobile.click': '左键',
     'mobile.drag': '拖拽',
     'mobile.help': '手势',
@@ -399,6 +402,9 @@ const en = {
 
     // Mobile toolbar
     'mobile.keyboard': 'Keyboard',
+    'mobile.hideKeyboard': 'Hide keyboard',
+    'mobile.more': 'More',
+    'mobile.settings': 'Session settings',
     'mobile.click': 'Click',
     'mobile.drag': 'Drag',
     'mobile.help': 'Help',
