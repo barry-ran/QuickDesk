@@ -15,4 +15,6 @@ if (!existsSync(dist)) {
 cpSync(resolve(root, 'remote.html'), resolve(dist, 'remote.html'));
 cpSync(resolve(root, 'js'), resolve(dist, 'js'), { recursive: true });
 
-console.log('Copied remote.html + js/ to dist/');
+cpSync(resolve(root, 'licenses'), resolve(dist, 'licenses'), { recursive: true });
+cpSync(resolve(root, 'THIRD_PARTY_NOTICES.md'), resolve(dist, 'THIRD_PARTY_NOTICES.md'));
+console.log('Copied remote.html + js/ and third-party notices to dist/');

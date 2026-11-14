@@ -35,5 +35,5 @@ for (const [client, sort] of [['web', sortedDeviceRows], ['qt-qml-source', qt.so
 }
 test('Qt/Web implementation bodies remain identical', () => {
   const web = fs.readFileSync(new URL('../src/utils/deviceSort.js', import.meta.url), 'utf8')
-  assert.equal(web.replace('\nexport { sortedDeviceRows, displayName };\n', ''), qtSource)
+  assert.equal(web.replace(/\r\n/g, '\n').replace('\nexport { sortedDeviceRows, displayName };\n', ''), qtSource.replace(/\r\n/g, '\n'))
 })

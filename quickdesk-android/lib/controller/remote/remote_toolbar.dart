@@ -68,136 +68,139 @@ class RemoteToolbar extends StatelessWidget {
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Row(
-        children: [
-          IconButton(
-            icon: Icon(
-              Icons.keyboard,
-              color: keyboardVisible ? Colors.lightBlueAccent : Colors.white,
+          children: [
+            IconButton(
+              icon: Icon(
+                Icons.keyboard,
+                color: keyboardVisible ? Colors.lightBlueAccent : Colors.white,
+              ),
+              tooltip: L10n.t('remote.keyboard'),
+              onPressed: onToggleKeyboard,
             ),
-            tooltip: L10n.t('remote.keyboard'),
-            onPressed: onToggleKeyboard,
-          ),
-          IconButton(
-            icon: const Icon(Icons.mouse, color: Colors.white),
-            tooltip: L10n.t('remote.leftClick'),
-            onPressed: onLeftClick,
-          ),
-          IconButton(
-            icon: const Icon(Icons.ads_click, color: Colors.white),
-            tooltip: L10n.t('remote.rightClick'),
-            onPressed: onRightClick,
-          ),
-          IconButton(
-            icon: Icon(
-              Icons.pan_tool,
-              color: dragArmed ? Colors.lightBlueAccent : Colors.white,
+            IconButton(
+              icon: const Icon(Icons.mouse, color: Colors.white),
+              tooltip: L10n.t('remote.leftClick'),
+              onPressed: onLeftClick,
             ),
-            tooltip: L10n.t(dragArmed ? 'remote.cancelDrag' : 'remote.armDrag'),
-            onPressed: onToggleDrag,
-          ),
-          IconButton(
-            icon: const Icon(Icons.zoom_out_map, color: Colors.white),
-            tooltip: L10n.t('remote.resetZoom'),
-            onPressed: onResetZoom,
-          ),
-          IconButton(
-            icon: const Icon(Icons.help_outline, color: Colors.white),
-            tooltip: L10n.t('remote.gestureHelp'),
-            onPressed: onHelp,
-          ),
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.more_vert, color: Colors.white),
-            tooltip: L10n.t('remote.more'),
-            onSelected: (value) async {
-              if (value.startsWith('display:')) {
-                onSelectDisplay(int.parse(value.split(':').last));
-              } else if (value.startsWith('key:')) {
-                onControlKey(int.parse(value.split(':').last));
-              } else {
-                switch (value) {
-                  case 'quality':
-                    onQuality?.call();
-                  case 'rotate':
-                    onToggleOrientation();
-                  case 'clipboard':
-                    await onSendClipboard();
-                  case 'stats':
-                    onToggleStats();
-                  case 'upload':
-                    onUpload();
-                  case 'download':
-                    onDownload();
-                  case 'transfers':
-                    onTransfers?.call();
-                  case 'disconnect':
-                    onDisconnect();
+            IconButton(
+              icon: const Icon(Icons.ads_click, color: Colors.white),
+              tooltip: L10n.t('remote.rightClick'),
+              onPressed: onRightClick,
+            ),
+            IconButton(
+              icon: Icon(
+                Icons.pan_tool,
+                color: dragArmed ? Colors.lightBlueAccent : Colors.white,
+              ),
+              tooltip: L10n.t(
+                dragArmed ? 'remote.cancelDrag' : 'remote.armDrag',
+              ),
+              onPressed: onToggleDrag,
+            ),
+            IconButton(
+              icon: const Icon(Icons.zoom_out_map, color: Colors.white),
+              tooltip: L10n.t('remote.resetZoom'),
+              onPressed: onResetZoom,
+            ),
+            IconButton(
+              icon: const Icon(Icons.help_outline, color: Colors.white),
+              tooltip: L10n.t('remote.gestureHelp'),
+              onPressed: onHelp,
+            ),
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.more_vert, color: Colors.white),
+              tooltip: L10n.t('remote.more'),
+              onSelected: (value) async {
+                if (value.startsWith('display:')) {
+                  onSelectDisplay(int.parse(value.split(':').last));
+                } else if (value.startsWith('key:')) {
+                  onControlKey(int.parse(value.split(':').last));
+                } else {
+                  switch (value) {
+                    case 'quality':
+                      onQuality?.call();
+                    case 'rotate':
+                      onToggleOrientation();
+                    case 'clipboard':
+                      await onSendClipboard();
+                    case 'stats':
+                      onToggleStats();
+                    case 'upload':
+                      onUpload();
+                    case 'download':
+                      onDownload();
+                    case 'transfers':
+                      onTransfers?.call();
+                    case 'disconnect':
+                      onDisconnect();
+                  }
                 }
-              }
-            },
-            itemBuilder: (context) => [
-              for (final entry in const <int, String>{
-                0x29: 'Esc',
-                0x2b: 'Tab',
-                0x28: 'Enter',
-                0x2a: '⌫ Backspace',
-                0x50: '←',
-                0x52: '↑',
-                0x4f: '→',
-                0x51: '↓',
-              }.entries)
+              },
+              itemBuilder: (context) => [
+                for (final entry in const <int, String>{
+                  0x29: 'Esc',
+                  0x2b: 'Tab',
+                  0x28: 'Enter',
+                  0x2a: '⌫ Backspace',
+                  0x50: '←',
+                  0x52: '↑',
+                  0x4f: '→',
+                  0x51: '↓',
+                }.entries)
+                  PopupMenuItem(
+                    value: 'key:${entry.key}',
+                    child: Text(entry.value),
+                  ),
+                const PopupMenuDivider(),
+                if (onQuality != null)
+                  PopupMenuItem(
+                    value: 'quality',
+                    child: Text(L10n.t('quality.title')),
+                  ),
+                for (var i = 0; i < displays.length; i++)
+                  CheckedPopupMenuItem(
+                    value: 'display:$i',
+                    checked: i == activeDisplayIndex,
+                    child: Text(L10n.t('remote.display', {'n': i + 1})),
+                  ),
                 PopupMenuItem(
-                  value: 'key:${entry.key}',
-                  child: Text(entry.value),
+                  value: 'rotate',
+                  child: Text(L10n.t('remote.rotate')),
                 ),
-              const PopupMenuDivider(),
-              if (onQuality != null)
                 PopupMenuItem(
-                  value: 'quality',
-                  child: Text(L10n.t('quality.title')),
+                  value: 'clipboard',
+                  child: Text(L10n.t('remote.sendClipboard')),
                 ),
-              for (var i = 0; i < displays.length; i++)
                 CheckedPopupMenuItem(
-                  value: 'display:$i',
-                  checked: i == activeDisplayIndex,
-                  child: Text(L10n.t('remote.display', {'n': i + 1})),
+                  value: 'stats',
+                  checked: statsVisible,
+                  child: Text(L10n.t('remote.stats')),
                 ),
-              PopupMenuItem(
-                value: 'rotate',
-                child: Text(L10n.t('remote.rotate')),
-              ),
-              PopupMenuItem(
-                value: 'clipboard',
-                child: Text(L10n.t('remote.sendClipboard')),
-              ),
-              CheckedPopupMenuItem(
-                value: 'stats',
-                checked: statsVisible,
-                child: Text(L10n.t('remote.stats')),
-              ),
-              if (supportsFileTransfer) ...[
+                if (supportsFileTransfer) ...[
+                  PopupMenuItem(
+                    value: 'upload',
+                    child: Text(L10n.t('file.upload')),
+                  ),
+                  PopupMenuItem(
+                    value: 'download',
+                    child: Text(L10n.t('file.download')),
+                  ),
+                ],
+                if (onTransfers != null)
+                  PopupMenuItem(
+                    value: 'transfers',
+                    child: Text(L10n.t('file.transfers')),
+                  ),
+                const PopupMenuDivider(),
                 PopupMenuItem(
-                  value: 'upload',
-                  child: Text(L10n.t('file.upload')),
-                ),
-                PopupMenuItem(
-                  value: 'download',
-                  child: Text(L10n.t('file.download')),
+                  value: 'disconnect',
+                  child: Text(L10n.t('remote.disconnect')),
                 ),
               ],
-              if (onTransfers != null)
-                PopupMenuItem(
-                  value: 'transfers',
-                  child: Text(L10n.t('file.transfers')),
-                ),
-              const PopupMenuDivider(),
-              PopupMenuItem(
-                value: 'disconnect',
-                child: Text(L10n.t('remote.disconnect')),
-              ),
-            ],
-          ),
-        ],
-      )),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

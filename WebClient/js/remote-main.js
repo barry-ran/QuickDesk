@@ -398,7 +398,7 @@ export class RemoteDesktopApp {
             case SessionState.CONNECTED:
                 this._setConnectionState('connected', t('status.connected'));
                 this._recordConnectionResult('success');
-                if (this.floatingToolbar) this.floatingToolbar.setVisible(true);
+                if (this.floatingToolbar) this.floatingToolbar.setVisible(!this._isMobile);
                 if (this.videoStats) this.videoStats.setPeerConnection(this.session.pc);
                 this._startConnBarStats();
                 if (window.opener && !window.opener.closed) {
@@ -1430,6 +1430,16 @@ export class RemoteDesktopApp {
         if (!toolbar) return;
         toolbar.style.display = 'block';
 
+        document.getElementById('btnMobileSettings')?.addEventListener('click', event => {
+            event.stopPropagation();
+            this.floatingToolbar?.showMenuFrom(event.currentTarget);
+        });
+        const more = document.getElementById('mobileMoreMenu');
+        const moreButton = document.getElementById('btnMobileMore');
+        moreButton?.addEventListener('click', () => {
+            more.hidden = !more.hidden;
+            moreButton.setAttribute('aria-expanded', String(!more.hidden));
+        });
         const keyInput = document.getElementById('mobileKeyInput');
 
         const keyboardButton = document.getElementById('btnKeyboard');
@@ -1439,6 +1449,7 @@ export class RemoteDesktopApp {
         document.getElementById('btnHideKeyboard')?.addEventListener('click', () => keyInput?.blur());
         keyInput?.addEventListener('focus', () => {
             document.body.classList.add('mobile-input-active');
+            if (this._isMobile) this.floatingToolbar?.setVisible(false);
             keyboardButton?.setAttribute('aria-pressed', 'true');
             if (keyRow) keyRow.hidden = false;
         });

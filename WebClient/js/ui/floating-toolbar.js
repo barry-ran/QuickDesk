@@ -613,7 +613,11 @@ export class FloatingToolbar extends EventTarget {
         }
     }
 
-    _showMenu() {
+    showMenuFrom(anchor) {
+        this._showMenu(anchor);
+    }
+
+    _showMenu(anchor = this._element) {
         this._menuVisible = true;
         this._refreshDisplayHeader();
 
@@ -623,7 +627,7 @@ export class FloatingToolbar extends EventTarget {
             }
         }
 
-        const btnRect = this._element.getBoundingClientRect();
+        const btnRect = anchor.getBoundingClientRect();
         const containerRect = this.container.getBoundingClientRect();
 
         this._menuElement.style.display = 'block';
