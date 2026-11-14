@@ -102,11 +102,6 @@ class RemoteToolbar extends StatelessWidget {
               tooltip: L10n.t('remote.resetZoom'),
               onPressed: onResetZoom,
             ),
-            IconButton(
-              icon: const Icon(Icons.help_outline, color: Colors.white),
-              tooltip: L10n.t('remote.gestureHelp'),
-              onPressed: onHelp,
-            ),
             PopupMenuButton<String>(
               icon: const Icon(Icons.more_vert, color: Colors.white),
               tooltip: L10n.t('remote.more'),
@@ -117,6 +112,8 @@ class RemoteToolbar extends StatelessWidget {
                   onControlKey(int.parse(value.split(':').last));
                 } else {
                   switch (value) {
+                    case 'help':
+                      onHelp();
                     case 'quality':
                       onQuality?.call();
                     case 'rotate':
@@ -137,6 +134,8 @@ class RemoteToolbar extends StatelessWidget {
                 }
               },
               itemBuilder: (context) => [
+                PopupMenuItem(
+                    value: 'help', child: Text(L10n.t('remote.gestureHelp'))),
                 for (final entry in const <int, String>{
                   0x29: 'Esc',
                   0x2b: 'Tab',
