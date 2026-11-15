@@ -6,6 +6,10 @@
 #include "base/singleton.h"
 #include "infra/env/applicationcontext.h"
 
+#ifndef QUICKDESK_SERVER_URL
+#define QUICKDESK_SERVER_URL "wss://qdsignaling.quickcoder.cc"
+#endif
+
 namespace core {
 
 #define LCC_FUNCTION_DEC_FLOAT(getName, setName, defaultValue) LCC_FUNCTION_DEC(float, getName, setName, defaultValue)
@@ -37,7 +41,7 @@ public:
     LCC_FUNCTION_DEC_STRING(savedAccessCode, SavedAccessCode, "")  // Saved access code for "never refresh" mode
     LCC_FUNCTION_DEC_STRING(preferredVideoCodec, PreferredVideoCodec, "AV1")  // Video codec: "H264", "VP8", "VP9", "AV1"
     LCC_FUNCTION_DEC_STRING(accessCodeNextRefreshTime, AccessCodeNextRefreshTime, "")  // ISO datetime of next scheduled refresh
-    LCC_FUNCTION_DEC_STRING(signalingServerUrl, SignalingServerUrl, "wss://qdsignaling.quickcoder.cc") // Signaling server URL
+    LCC_FUNCTION_DEC_STRING(signalingServerUrl, SignalingServerUrl, QUICKDESK_SERVER_URL) // Signaling server URL
     LCC_FUNCTION_DEC_STRING(turnServersJson, TurnServersJson, "") // TURN/STUN servers configuration in JSON format
     LCC_FUNCTION_DEC_STRING(apiKey, ApiKey, "") // API Key for signaling server authentication (runtime override, takes precedence over compile-time key)
 

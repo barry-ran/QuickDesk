@@ -688,7 +688,20 @@ QString ProcessManager::findExecutable(const QString& name)
     // Contents/Frameworks/ for .app bundles (publish layout)
     searchPaths << QDir(appDir).filePath("../Frameworks");
 #endif
-    
+
+#ifdef Q_OS_LINUX
+    // 3rdparty directory (for development); zip extracts under Linux-<arch>/
+#if defined(__x86_64__)
+    searchPaths << QDir(appDir).filePath("../../../QuickDesk/3rdparty/quickdesk-remoting/x64/Linux-x64");
+    searchPaths << QDir(appDir).filePath("../../../QuickDesk/3rdparty/quickdesk-remoting/x64");
+#else
+    searchPaths << QDir(appDir).filePath("../../../QuickDesk/3rdparty/quickdesk-remoting/arm64/Linux-arm64");
+    searchPaths << QDir(appDir).filePath("../../../QuickDesk/3rdparty/quickdesk-remoting/arm64");
+#endif
+    // Publish layout: core binaries alongside the Qt executable (AppImage usr/bin)
+    searchPaths << appDir;
+#endif
+
 #ifdef Q_OS_WIN
     QString exeName = name + ".exe";
 
@@ -716,6 +729,15 @@ QString ProcessManager::findExecutable(const QString& name)
         QFileInfo plainInfo(plainPath);
         if (plainInfo.exists() && plainInfo.isExecutable()) {
             return plainInfo.absoluteFilePath();
+        }
+    }
+#else
+    // Linux: plain executables
+    for (const QString& path : searchPaths) {
+        QString fullPath = QDir(path).filePath(name);
+        QFileInfo fileInfo(fullPath);
+        if (fileInfo.exists() && fileInfo.isExecutable()) {
+            return fileInfo.absoluteFilePath();
         }
     }
 #endif

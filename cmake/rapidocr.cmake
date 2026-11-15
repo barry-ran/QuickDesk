@@ -1,25 +1,37 @@
 include(FetchContent)
 
-set(RAPIDOCR_URL https://github.com/barry-ran/3rdparty-prebuilt/releases/download/1.0.0)
-if(WIN32)
-    set(RAPIDOCR_URL ${RAPIDOCR_URL}/rapidocr-windows-${QD_CPU_ARCH}-shared-release-mt.zip)
-elseif(APPLE)
-    set(RAPIDOCR_URL ${RAPIDOCR_URL}/rapidocr-mac-${QD_CPU_ARCH}-shared-release.zip)
-endif()
-
-
-# 如果FetchContent下载的顶级目录包含CMakeLists.txt文件，则调用add_subdirectory()将其添加到主构建中。
-# 没有CMakeLists.txt文件也没问题，这允许仅使用FetchContent下载内容而不添加到构建流程中（例如导入外部构建好的二进制）
-# FetchContent_Declare是配置阶段就去下载，所以URL不能使用生成器表达式，因为生成器表达式是在生成阶段才确定的
-FetchContent_Declare(
-    rapidocr
-    URL             ${RAPIDOCR_URL}
-    SOURCE_DIR      ${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/rapidocr/${QD_CPU_ARCH}
-)
-FetchContent_MakeAvailable(rapidocr)
-FetchContent_GetProperties(rapidocr)
-
 set(rapidocr_path "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/rapidocr/${QD_CPU_ARCH}")
+
+if(UNIX AND NOT APPLE)
+    # Upstream publishes no Linux prebuilt. OCR is enabled when a prebuilt tree
+    # exists at cmake/3rdparty/rapidocr/<arch>; build it with
+    # scripts/linux/build_rapidocr.sh (RapidOcrOnnx + ONNX Runtime + models).
+    if(NOT EXISTS "${rapidocr_path}/include")
+        message(STATUS
+            "[rapidocr] No Linux prebuilt at ${rapidocr_path}; OCR features disabled.\n"
+            "To enable: bash scripts/linux/build_rapidocr.sh")
+        set(RAPIDOCR_FOUND FALSE)
+        return()
+    endif()
+else()
+    set(RAPIDOCR_URL https://github.com/barry-ran/3rdparty-prebuilt/releases/download/1.0.0)
+    if(WIN32)
+        set(RAPIDOCR_URL ${RAPIDOCR_URL}/rapidocr-windows-${QD_CPU_ARCH}-shared-release-mt.zip)
+    elseif(APPLE)
+        set(RAPIDOCR_URL ${RAPIDOCR_URL}/rapidocr-mac-${QD_CPU_ARCH}-shared-release.zip)
+    endif()
+
+    # 如果FetchContent下载的顶级目录包含CMakeLists.txt文件，则调用add_subdirectory()将其添加到主构建中。
+    # 没有CMakeLists.txt文件也没问题，这允许仅使用FetchContent下载内容而不添加到构建流程中（例如导入外部构建好的二进制）
+    # FetchContent_Declare是配置阶段就去下载，所以URL不能使用生成器表达式，因为生成器表达式是在生成阶段才确定的
+    FetchContent_Declare(
+        rapidocr
+        URL             ${RAPIDOCR_URL}
+        SOURCE_DIR      ${rapidocr_path}
+    )
+    FetchContent_MakeAvailable(rapidocr)
+    FetchContent_GetProperties(rapidocr)
+endif()
 
 # -------------------------------------------------------------------------
 # 检查预编译库是否存在
@@ -63,6 +75,10 @@ elseif(APPLE)
     # 链接目录（供 target_link_directories 使用）
     set(RAPIDOCR_LINK_DIRS "${rapidocr_bin_path}")
     set(RAPIDOCR_DLLS "${rapidocr_bin_path}/libRapidOcrOnnx.dylib")
+else()
+    # Linux
+    set(RAPIDOCR_LINK_DIRS "${rapidocr_lib_path}")
+    set(RAPIDOCR_DLLS "${rapidocr_lib_path}/libRapidOcrOnnx.so")
 endif()
 
 # -------------------------------------------------------------------------
