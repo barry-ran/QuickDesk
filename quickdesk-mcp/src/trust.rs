@@ -61,7 +61,7 @@ pub struct TrustPolicy {
 impl Default for TrustPolicy {
     fn default() -> Self {
         Self {
-            confirm_medium: true,
+            confirm_medium: false,
             block_critical: true,
             auto_approve_tools: vec![
                 "screenshot".to_string(),
@@ -149,6 +149,8 @@ pub struct AuditEntry {
     pub action: String,
     pub outcome: String,
     pub user_decision: String,
+    #[serde(default)]
+    pub duration_ms: i64,
 }
 
 // ---- Emergency Stop State ----
@@ -182,8 +184,9 @@ impl TrustEngine {
             .map_err(|e| format!("pragma: {e}"))?;
         Self::init_tables(&conn)?;
         Self::migrate_audit_device_column(&conn)?;
+        Self::migrate_audit_duration_column(&conn)?;
 
-        let policy = Self::load_policy(&conn);
+        let policy = Self::load_or_init_policy(&conn);
 
         info!("TrustEngine initialized at {}", db_path.display());
         Ok(Self {
@@ -214,7 +217,8 @@ impl TrustEngine {
                 risk_level      TEXT NOT NULL,
                 action          TEXT NOT NULL,
                 outcome         TEXT DEFAULT '',
-                user_decision   TEXT DEFAULT ''
+                user_decision   TEXT DEFAULT '',
+                duration_ms     INTEGER DEFAULT 0
             );
             CREATE INDEX IF NOT EXISTS idx_audit_time ON audit_log(timestamp);
 
@@ -255,16 +259,47 @@ impl TrustEngine {
         Ok(())
     }
 
-    fn load_policy(conn: &Connection) -> TrustPolicy {
-        conn.query_row(
-            "SELECT policy FROM trust_policy WHERE id=1",
-            [],
-            |row| {
-                let json: String = row.get(0)?;
-                Ok(serde_json::from_str(&json).unwrap_or_default())
-            },
-        )
-        .unwrap_or_default()
+    fn migrate_audit_duration_column(conn: &Connection) -> Result<(), String> {
+        let mut stmt = conn
+            .prepare("SELECT name FROM pragma_table_info('audit_log')")
+            .map_err(|e| format!("pragma_table_info audit_log: {e}"))?;
+        let cols: Vec<String> = stmt
+            .query_map([], |row| row.get(0))
+            .map_err(|e| format!("read audit_log columns: {e}"))?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        if !cols.iter().any(|c| c == "duration_ms") {
+            conn.execute(
+                "ALTER TABLE audit_log ADD COLUMN duration_ms INTEGER DEFAULT 0",
+                [],
+            )
+            .map_err(|e| format!("migrate audit_log duration_ms: {e}"))?;
+        }
+        Ok(())
+    }
+
+    fn load_or_init_policy(conn: &Connection) -> TrustPolicy {
+        let stored: Option<String> = conn
+            .query_row("SELECT policy FROM trust_policy WHERE id=1", [], |row| row.get(0))
+            .ok();
+
+        match stored {
+            Some(json) => serde_json::from_str(&json).unwrap_or_default(),
+            None => {
+                // Persist the default on first run so get_trust_policy, the
+                // database, and later edits agree instead of the UI showing
+                // defaults that were never saved.
+                let policy = TrustPolicy::default();
+                if let Ok(json) = serde_json::to_string(&policy) {
+                    let _ = conn.execute(
+                        "INSERT OR IGNORE INTO trust_policy (id, policy) VALUES (1, ?1)",
+                        params![json],
+                    );
+                }
+                policy
+            }
+        }
     }
 
     // ---- Risk Assessment ----
@@ -454,9 +489,39 @@ impl TrustEngine {
         let _ = db.execute(
             "INSERT INTO audit_log
                 (timestamp, device_id, tool_name, arguments_summary,
-                 risk_level, action, outcome, user_decision)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8)",
-            params![now, device_id, tool_name, args_summary, level_str, action, outcome, user_decision],
+                 risk_level, action, outcome, user_decision, duration_ms)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)",
+            params![now, device_id, tool_name, args_summary, level_str, action, outcome, user_decision, 0],
+        );
+    }
+
+    /// Audit entry with the elapsed time of the operation. Transport-level
+    /// failures are recorded with outcome="transport error: …" so they are
+    /// distinguishable from the tool's own failure messages.
+    #[allow(clippy::too_many_arguments)]
+    pub fn log_audit_ext(
+        &self,
+        device_id: &str,
+        tool_name: &str,
+        arguments: &Value,
+        risk_level: RiskLevel,
+        action: &str,
+        outcome: &str,
+        user_decision: &str,
+        duration_ms: i64,
+    ) {
+        let now = Utc::now().to_rfc3339();
+        let args_summary = summarize_args(arguments);
+        let level_str = serde_json::to_string(&risk_level).unwrap_or_default();
+        let level_str = level_str.trim_matches('"');
+
+        let db = self.audit_db.lock().unwrap();
+        let _ = db.execute(
+            "INSERT INTO audit_log
+                (timestamp, device_id, tool_name, arguments_summary,
+                 risk_level, action, outcome, user_decision, duration_ms)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)",
+            params![now, device_id, tool_name, args_summary, level_str, action, outcome, user_decision, duration_ms],
         );
     }
 
@@ -469,7 +534,7 @@ impl TrustEngine {
         let (sql, conn_param) = if let Some(did) = device_id {
             (
                 "SELECT id, timestamp, device_id, tool_name, arguments_summary,
-                        risk_level, action, outcome, user_decision
+                        risk_level, action, outcome, user_decision, duration_ms
                  FROM audit_log WHERE device_id=?1
                  ORDER BY timestamp DESC LIMIT ?2".to_string(),
                 Some(did.to_string()),
@@ -477,7 +542,7 @@ impl TrustEngine {
         } else {
             (
                 "SELECT id, timestamp, device_id, tool_name, arguments_summary,
-                        risk_level, action, outcome, user_decision
+                        risk_level, action, outcome, user_decision, duration_ms
                  FROM audit_log ORDER BY timestamp DESC LIMIT ?1".to_string(),
                 None,
             )
@@ -515,6 +580,7 @@ impl TrustEngine {
             action: row.get(6)?,
             outcome: row.get(7)?,
             user_decision: row.get(8)?,
+            duration_ms: row.get(9).unwrap_or(0),
         })
     }
 

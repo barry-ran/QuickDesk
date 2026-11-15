@@ -137,6 +137,16 @@ struct SetClipboardParam {
 }
 
 #[derive(Deserialize, JsonSchema)]
+struct ClipboardTypeParam {
+    /// Remote session id: `deviceId` from list_connections (distinct from the 9-digit id used in connect_device).
+    device_id: String,
+    /// Text to place on the remote clipboard and paste (unicode allowed)
+    text: String,
+    /// Paste shortcut keys; default ["ctrl","v"], use ["cmd","v"] for macOS remotes
+    paste_keys: Option<Vec<String>>,
+}
+
+#[derive(Deserialize, JsonSchema)]
 struct MouseDragParam {
     /// Remote session id: `deviceId` from list_connections (distinct from the 9-digit id used in connect_device).
     device_id: String,
@@ -383,7 +393,7 @@ struct AssertScreenStateParam {
 struct SkillExecParam {
     /// Remote session on the host (`deviceId`)
     device_id: String,
-    /// Tool name to invoke on the remote skill host (e.g. "run_shell", "list_processes")
+    /// Tool name to invoke on the remote skill host (e.g. "run_command", "get_system_info", "list_processes", "read_file")
     tool: String,
     /// Arguments to pass to the tool as a JSON object
     #[serde(default, deserialize_with = "deserialize_args")]
@@ -405,6 +415,49 @@ where
         }
         Some(v) => Ok(Some(v)),
     }
+}
+
+fn append_skill_timeout_hint(mut text: String, device_id: &str) -> String {
+    let hint = if device_id == "local" {
+        "The local skill host did not answer."
+    } else {
+        "The remote app did not answer on the skill bridge. Not every remote build \
+supports it: the official Windows/macOS remoting cores do not advertise the qd-skill-bridge \
+capability (Linux QuickDesk builds do). Use device_id \"local\" to run tools on this machine."
+    };
+    if let Ok(mut v) = serde_json::from_str::<serde_json::Value>(&text) {
+        if let Some(obj) = v.as_object_mut() {
+            obj.insert("hint".to_string(), serde_json::Value::String(hint.to_string()));
+            text = serde_json::to_string_pretty(&v).unwrap_or(text);
+        }
+    }
+    text
+}
+
+fn collect_tool_names(v: &serde_json::Value) -> Vec<String> {
+    fn walk(v: &serde_json::Value, out: &mut Vec<String>) {
+        match v {
+            serde_json::Value::Object(map) => {
+                if let Some(name) = map.get("name").and_then(|n| n.as_str()) {
+                    if !out.iter().any(|n| n == name) {
+                        out.push(name.to_string());
+                    }
+                }
+                for value in map.values() {
+                    walk(value, out);
+                }
+            }
+            serde_json::Value::Array(items) => {
+                for item in items {
+                    walk(item, out);
+                }
+            }
+            _ => {}
+        }
+    }
+    let mut names = Vec::new();
+    walk(v, &mut names);
+    names
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -598,7 +651,7 @@ impl QuickDeskMcpServer {
         }
     }
 
-    #[tool(description = "List clients currently connected to this host machine.")]
+    #[tool(description = "List INBOUND clients currently connected to this machine as a host (people viewing this machine). This is not the list of remotes you control — for that, use list_connections. An empty list is normal when nobody is viewing this machine.")]
     async fn get_host_clients(&self) -> String {
         match self.ws.request("getHostClients", json!({})).await {
             Ok(v) => serde_json::to_string_pretty(&v).unwrap_or_default(),
@@ -630,7 +683,7 @@ impl QuickDeskMcpServer {
         }
     }
 
-    #[tool(description = "List active remote desktop sessions. Each entry includes deviceId (use this as device_id on other tools) and state. Call this first whenever you need a session id.")]
+    #[tool(description = "List OUTBOUND remote desktop sessions this app is controlling (the remotes you are connected to). Each entry includes deviceId (use this as device_id on other tools) and state. Call this first whenever you need a session id or want to know which remote is live. Contrast with get_host_clients, which lists inbound viewers of this machine.")]
     async fn list_connections(&self) -> String {
         match self.ws.request("listConnections", json!({})).await {
             Ok(v) => serde_json::to_string_pretty(&v).unwrap_or_default(),
@@ -666,7 +719,7 @@ impl QuickDeskMcpServer {
         if let Some(show) = p.show_window {
             req["showWindow"] = json!(show);
         }
-        match self.ws.request("connectToHost", req).await {
+        match self.ws.request_once("connectToHost", req).await {
             Ok(v) => {
                 self.state.memory.upsert_profile(&p.device_id, &v);
                 serde_json::to_string_pretty(&v).unwrap_or_default()
@@ -679,7 +732,7 @@ impl QuickDeskMcpServer {
     async fn disconnect_device(&self, params: Parameters<DeviceIdParam>) -> String {
         match self
             .ws
-            .request("disconnectFromHost", json!({ "deviceId": params.0.device_id }))
+            .request_once("disconnectFromHost", json!({ "deviceId": params.0.device_id }))
             .await
         {
             Ok(v) => serde_json::to_string_pretty(&v).unwrap_or_default(),
@@ -687,15 +740,52 @@ impl QuickDeskMcpServer {
         }
     }
 
-    #[tool(description = "Disconnect all remote connections.")]
+    #[tool(description = "Disconnect all remote connections. The WebSocket API blocks the bulk 'disconnectAll' method for safety, so this iterates list_connections and disconnects each device individually.")]
     async fn disconnect_all(&self) -> String {
-        match self.ws.request("disconnectAll", json!({})).await {
-            Ok(v) => serde_json::to_string_pretty(&v).unwrap_or_default(),
-            Err(e) => format!("Error: {e}"),
+        let list = match self.ws.request("listConnections", json!({})).await {
+            Ok(v) => v,
+            Err(e) => return format!("Error: {e}"),
+        };
+        // The WS layer unwraps the JSON-RPC "result" field, but tolerate both
+        // shapes so a protocol change cannot silently yield "no connections".
+        let container = list.get("result").unwrap_or(&list);
+        let ids: Vec<String> = container
+            .get("connections")
+            .and_then(|c| c.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|c| c.get("deviceId").and_then(|d| d.as_str()))
+                    .map(str::to_string)
+                    .collect()
+            })
+            .unwrap_or_default();
+        if ids.is_empty() {
+            return "No active connections.".to_string();
+        }
+        let mut ok = 0usize;
+        let mut failures: Vec<String> = Vec::new();
+        for id in &ids {
+            match self
+                .ws
+                .request_once("disconnectFromHost", json!({ "deviceId": id }))
+                .await
+            {
+                Ok(_) => ok += 1,
+                Err(e) => failures.push(format!("{id}: {e}")),
+            }
+        }
+        if failures.is_empty() {
+            format!("Disconnected {ok} connection(s): {}", ids.join(", "))
+        } else {
+            format!(
+                "Disconnected {ok}/{} connection(s). Failures: {}",
+                ids.len(),
+                failures.join("; ")
+            )
         }
     }
 
-    #[tool(description = "Screenshot the remote desktop. Returns base64 image data plus width/height. Requires device_id from list_connections. Use max_width to shrink the image. Prefer get_screen_text or get_ui_state for text-only work (fewer tokens).")]
+    #[tool(description = "Screenshot the remote desktop. Returns base64 image data plus width/height. Requires device_id from list_connections. Use max_width to shrink the image. This is the primary way to see the remote: analyze the image yourself. OCR tools (get_screen_text/get_ui_state) are best-effort and can misread text.")]
     async fn screenshot(&self, params: Parameters<ScreenshotParam>) -> String {
         let p = params.0;
         let mut req = json!({
@@ -719,7 +809,7 @@ impl QuickDeskMcpServer {
         let args = json!({"x": p.x, "y": p.y, "button": p.button.as_deref().unwrap_or("left")});
         match self
             .ws
-            .request(
+            .request_once(
                 "mouseClick",
                 json!({
                     "deviceId": conn,
@@ -745,7 +835,7 @@ impl QuickDeskMcpServer {
         let args = json!({"x": p.x, "y": p.y});
         match self
             .ws
-            .request(
+            .request_once(
                 "mouseDoubleClick",
                 json!({ "deviceId": conn, "x": p.x, "y": p.y }),
             )
@@ -767,7 +857,7 @@ impl QuickDeskMcpServer {
         let args = json!({"x": p.x, "y": p.y});
         match self
             .ws
-            .request(
+            .request_once(
                 "mouseMove",
                 json!({ "deviceId": conn, "x": p.x, "y": p.y }),
             )
@@ -791,7 +881,7 @@ impl QuickDeskMcpServer {
         let args = json!({"x": p.x, "y": p.y, "delta_x": dx, "delta_y": dy});
         match self
             .ws
-            .request(
+            .request_once(
                 "mouseScroll",
                 json!({ "deviceId": conn, "x": p.x, "y": p.y, "deltaX": dx, "deltaY": dy }),
             )
@@ -805,14 +895,14 @@ impl QuickDeskMcpServer {
         }
     }
 
-    #[tool(description = "Type text on the remote desktop. Uses clipboard paste for reliable unicode input.")]
+    #[tool(description = "Type ASCII text on the remote desktop by injecting key events (upper/lower case, digits, and shifted symbols are supported). Non-ASCII characters are rejected — use clipboard_type for unicode text.")]
     async fn keyboard_type(&self, params: Parameters<KeyboardTypeParam>) -> String {
         let p = params.0;
         let conn = p.device_id.clone();
         let args = json!({"text": p.text});
         match self
             .ws
-            .request("keyboardType", json!({"deviceId": conn, "text": p.text}))
+            .request_once("keyboardType", json!({"deviceId": conn, "text": p.text}))
             .await
         {
             Ok(_) => {
@@ -831,7 +921,7 @@ impl QuickDeskMcpServer {
         let args = json!({"keys": p.keys});
         match self
             .ws
-            .request("keyboardHotkey", json!({"deviceId": conn, "keys": p.keys}))
+            .request_once("keyboardHotkey", json!({"deviceId": conn, "keys": p.keys}))
             .await
         {
             Ok(_) => {
@@ -843,7 +933,7 @@ impl QuickDeskMcpServer {
         }
     }
 
-    #[tool(description = "Get the last known clipboard content from the remote desktop. Clipboard is synced automatically when something is copied on the remote machine.")]
+    #[tool(description = "Get the last known clipboard content from the remote desktop. Linux hosts built with the current core push the current clipboard at session start; Windows/macOS hosts only push after the remote user copies something.")]
     async fn get_clipboard(&self, params: Parameters<DeviceIdParam>) -> String {
         let p = params.0;
         match self
@@ -856,23 +946,81 @@ impl QuickDeskMcpServer {
         }
     }
 
-    #[tool(description = "Set remote clipboard content.")]
+    #[tool(description = "Set remote clipboard content. Delivery is best-effort: the update is applied only when the \
+remote build supports clipboard sync, so confirm by pasting and taking a screenshot.")]
     async fn set_clipboard(&self, params: Parameters<SetClipboardParam>) -> String {
         let p = params.0;
         let conn = p.device_id.clone();
         let args = json!({"text": p.text});
         match self
             .ws
-            .request("setClipboard", json!({"deviceId": conn, "text": p.text}))
+            .request_once("setClipboard", json!({"deviceId": conn, "text": p.text}))
             .await
         {
             Ok(_) => {
-                self.maybe_record(&conn, "set_clipboard", &args, "Clipboard set", true);
-                "Clipboard set".to_string()
+                let r = "Clipboard update sent (best-effort; verify on the remote)".to_string();
+                self.maybe_record(&conn, "set_clipboard", &args, &r, true);
+                r
             }
             Err(e) => format!("Error: {e}"),
         }
     }
+
+    #[tool(description = "Set remote clipboard content and immediately paste it (clipboard + paste shortcut in one call). \
+Use this for non-ASCII/unicode text that keyboard_type rejects. paste_keys defaults to [\"ctrl\",\"v\"]; \
+pass [\"cmd\",\"v\"] when the remote is macOS.")]
+    async fn clipboard_type(&self, params: Parameters<ClipboardTypeParam>) -> String {
+        let p = params.0;
+        let paste_keys = p
+            .paste_keys
+            .unwrap_or_else(|| vec!["ctrl".to_string(), "v".to_string()]);
+        let set_req = json!({"deviceId": p.device_id, "text": p.text});
+        if let Err(e) = self
+            .ws
+            .request_no_retry("setClipboard", set_req, std::time::Duration::from_secs(15))
+            .await
+        {
+            return format!("Error: setting clipboard failed: {e}");
+        }
+        // Give the remote clipboard bridge a moment before the paste.
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+        let hotkey_req = json!({"deviceId": p.device_id, "keys": paste_keys});
+        match self
+            .ws
+            .request_no_retry("keyboardHotkey", hotkey_req, std::time::Duration::from_secs(15))
+            .await
+        {
+            Ok(_) => format!("Clipboard set and paste shortcut sent ({} character(s); verify with a screenshot)", p.text.chars().count()),
+            Err(e) => format!("Error: paste shortcut failed: {e}"),
+        }
+    }
+
+    #[tool(description = "List keys currently held down on a remote session because of earlier key_press calls \
+that were never released. Use it to diagnose stuck modifiers, then call release_all_keys.")]
+    async fn get_held_keys(&self, params: Parameters<DeviceIdParam>) -> String {
+        match self
+            .ws
+            .request("getHeldKeys", json!({"deviceId": params.0.device_id}))
+            .await
+        {
+            Ok(v) => serde_json::to_string_pretty(&v).unwrap_or_default(),
+            Err(e) => format!("Error: {e}"),
+        }
+    }
+
+    #[tool(description = "Release every key currently held down on a remote session (recover from a stuck Ctrl/Shift/Alt). \
+Also clears all pressed mouse buttons on the remote.")]
+    async fn release_all_keys(&self, params: Parameters<DeviceIdParam>) -> String {
+        match self
+            .ws
+            .request_once("releaseAllKeys", json!({"deviceId": params.0.device_id}))
+            .await
+        {
+            Ok(v) => serde_json::to_string_pretty(&v).unwrap_or_default(),
+            Err(e) => format!("Error: {e}"),
+        }
+    }
+
 
     #[tool(description = "Drag the mouse from one position to another on the remote desktop. Useful for drag-and-drop, text selection, resizing windows, and moving objects.")]
     async fn mouse_drag(&self, params: Parameters<MouseDragParam>) -> String {
@@ -881,7 +1029,7 @@ impl QuickDeskMcpServer {
         let args = json!({"start_x": p.start_x, "start_y": p.start_y, "end_x": p.end_x, "end_y": p.end_y});
         match self
             .ws
-            .request(
+            .request_once(
                 "mouseDrag",
                 json!({
                     "deviceId": conn,
@@ -901,14 +1049,16 @@ impl QuickDeskMcpServer {
         }
     }
 
-    #[tool(description = "Press and hold a key on the remote desktop. The key stays pressed until explicitly released with key_release. Useful for modifier keys (shift, ctrl, alt) while performing mouse operations like Ctrl+click for multi-select.")]
+    #[tool(description = "Press and hold a key on the remote desktop. The key stays pressed until explicitly released with key_release \
+(the held keys are tracked: get_held_keys lists them and release_all_keys clears them). \
+Useful for modifier keys (shift, ctrl, alt) while performing mouse operations like Ctrl+click for multi-select.")]
     async fn key_press(&self, params: Parameters<KeyParam>) -> String {
         let p = params.0;
         let conn = p.device_id.clone();
         let args = json!({"key": p.key});
         match self
             .ws
-            .request("keyPress", json!({"deviceId": conn, "key": p.key}))
+            .request_once("keyPress", json!({"deviceId": conn, "key": p.key}))
             .await
         {
             Ok(_) => {
@@ -927,7 +1077,7 @@ impl QuickDeskMcpServer {
         let args = json!({"key": p.key});
         match self
             .ws
-            .request("keyRelease", json!({"deviceId": conn, "key": p.key}))
+            .request_once("keyRelease", json!({"deviceId": conn, "key": p.key}))
             .await
         {
             Ok(_) => {
@@ -1023,11 +1173,10 @@ impl QuickDeskMcpServer {
 
     // ---- OCR / UI state tools ----
 
-    #[tool(description = "Extract all text from the current remote desktop screen using OCR (PP-OCRv4). \
-Returns a list of text blocks with their text content, bounding box (x/y/w/h in pixels), center \
-coordinates, and confidence score. Supports both Chinese and English. \
-Results are cached per frame — calling this multiple times on the same frame costs nothing. \
-Use this instead of screenshot+vision for text-heavy tasks to reduce token cost and improve reliability.")]
+    #[tool(description = "Extract text from the current remote desktop screen with OCR (PP-OCRv4). Best-effort: \
+OCR can misread glyphs, so verify important text against a screenshot image before acting on it. \
+Returns text blocks with bounding boxes, center coordinates, and confidence scores; blocks have confidence \
+below ~0.6 should be treated as unreliable. Results are cached per frame.")]
     async fn get_screen_text(&self, params: Parameters<GetScreenTextParam>) -> String {
         let p = params.0;
         match self
@@ -1061,7 +1210,8 @@ without having to poll with repeated screenshots.")]
         }
     }
 
-    #[tool(description = "Find a UI element on the remote desktop by its visible text. \
+    #[tool(description = "Find a UI element on the remote desktop by its visible text (OCR-based, best-effort: \
+verify matches with a screenshot before clicking). \
 Runs OCR on the current screen and returns all blocks that match the search text. \
 Each match includes the bounding box and center coordinates. \
 Use exact=true for precise matching (e.g. button labels); leave it false for partial search. \
@@ -1103,7 +1253,7 @@ Prefer this over screenshot→find coordinates→click for text-based UI interac
         if let Some(btn) = p.button {
             req["button"] = json!(btn);
         }
-        match self.ws.request("clickText", req).await {
+        match self.ws.request_once("clickText", req).await {
             Ok(v) => {
                 let r = serde_json::to_string_pretty(&v).unwrap_or_default();
                 self.maybe_record(&conn, "click_text", &args, &r, true);
@@ -1256,7 +1406,7 @@ If no attempt succeeds, returns a summary of all failures.")]
             }
 
             // Execute the attempt
-            let action_result = self.ws.request(&attempt.method, req_params).await;
+            let action_result = self.ws.request_once(&attempt.method, req_params).await;
             let action_ok = action_result.is_ok();
             let action_value = match action_result {
                 Ok(v) => v,
@@ -1470,9 +1620,10 @@ If no attempt succeeds, returns a summary of all failures.")]
         Ok(())
     }
 
-    #[tool(description = "Execute a tool on the remote skill host (e.g. run_shell, list_processes). \
-The skill host runs on the host machine and can call any skill tool. \
-Use skill_list_tools first to discover available tools and their parameters.")]
+    #[tool(description = "Execute a tool on a machine's skill host (e.g. run_command, get_system_info, list_processes, read_file, list_directory). \
+The skill host runs on the target machine and exposes the sys-info, file-ops and shell-runner skills. \
+device_id is a session id from list_connections, or \"local\" to run on this machine's own skill host. \
+Tool names are exact: use run_command (not run_shell). Call skill_list_tools first to discover the available names and their input schemas.")]
     async fn skill_exec(&self, params: Parameters<SkillExecParam>) -> String {
         let p = params.0;
         let args = p.args.unwrap_or(json!({}));
@@ -1487,19 +1638,62 @@ Use skill_list_tools first to discover available tools and their parameters.")]
             "tool": p.tool,
             "args": args,
         });
-        let (success, result_str, error_msg) = match self.ws.request("skillExec", req).await {
-            Ok(v) => {
-                let s = serde_json::to_string_pretty(&v).unwrap_or_default();
-                (true, s, String::new())
-            }
-            Err(e) => (false, format!("Error: {e}"), e),
-        };
+        // The Qt bridge waits tool timeout + 15 s. Give the WebSocket layer a
+        // slightly larger budget than that (+20 s) so a slow but successful
+        // run_command is not reported as a transport timeout.
+        let tool_timeout_secs = args
+            .get("timeout_secs")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(60);
+        let budget = std::time::Duration::from_secs(tool_timeout_secs + 20);
+        // Mutating call: never resend after it may have reached the remote.
+        let (success, mut result_str, error_msg) =
+            match self.ws.request_no_retry("skillExec", req, budget).await {
+                Ok(v) => {
+                    let mut s = serde_json::to_string_pretty(&v).unwrap_or_default();
+                    match v.get("error").and_then(|e| e.as_str()) {
+                        Some(e) => {
+                            if e.contains("timed out") && !s.contains("\"hint\"") {
+                                s = append_skill_timeout_hint(s, &p.device_id);
+                            }
+                            (false, s, format!("tool error: {e}"))
+                        }
+                        None => (true, s, String::new()),
+                    }
+                }
+                Err(e) => {
+                    let text = if e.contains("timed out") {
+                        append_skill_timeout_hint(format!("Error: {e}"), &p.device_id)
+                    } else {
+                        format!("Error: {e}")
+                    };
+                    (false, text, format!("transport error: {e}"))
+                }
+            };
         let duration_ms = start.elapsed().as_millis() as i64;
 
-        self.state.trust.log_audit(
+        // An agent that guesses a wrong tool name should get the real list
+        // instead of a bare failure; discovery is the bridge's job.
+        if !success && error_msg.contains("unknown tool") {
+            let list_req = json!({"deviceId": p.device_id});
+            if let Ok(v) = self
+                .ws
+                .request_with_timeout("skillListTools", list_req, std::time::Duration::from_secs(30))
+                .await
+            {
+                let names = collect_tool_names(&v);
+                if !names.is_empty() {
+                    result_str = format!("{result_str}\nAvailable tools: {}", names.join(", "));
+                }
+            }
+        }
+
+        let action = if success { "executed" } else { "failed" };
+        self.state.trust.log_audit_ext(
             &p.device_id, &p.tool, &args,
-            risk.risk_level, "executed",
+            risk.risk_level, action,
             if success { "success" } else { &error_msg }, "",
+            duration_ms,
         );
 
         let session_id = format!("session-{}", &p.device_id);
@@ -1517,17 +1711,32 @@ Use skill_list_tools first to discover available tools and their parameters.")]
         result_str
     }
 
-    #[tool(description = "List all tools available on the remote skill host. \
+    #[tool(description = "List all tools available on the target skill host. \
 Returns the tool names, descriptions, and input schemas so you know how to call them \
-with skill_exec.")]
+with skill_exec. device_id is a session id from list_connections, or \"local\" for this machine.")]
     async fn skill_list_tools(&self, params: Parameters<SkillListToolsParam>) -> String {
-        let p = params.0;
+        let device_id = params.0.device_id;
         let req = json!({
-            "deviceId": p.device_id,
+            "deviceId": device_id,
         });
-        match self.ws.request("skillListTools", req).await {
-            Ok(v) => serde_json::to_string_pretty(&v).unwrap_or_default(),
-            Err(e) => format!("Error: {e}"),
+        match self
+            .ws
+            .request_with_timeout("skillListTools", req, std::time::Duration::from_secs(30))
+            .await
+        {
+            Ok(v) => {
+                let s = serde_json::to_string_pretty(&v).unwrap_or_default();
+                let timed_out = v
+                    .get("error")
+                    .and_then(|e| e.as_str())
+                    .is_some_and(|e| e.contains("timed out"));
+                if timed_out && !s.contains("\"hint\"") {
+                    append_skill_timeout_hint(s, &device_id)
+                } else {
+                    s
+                }
+            }
+            Err(e) => append_skill_timeout_hint(format!("Error: {e}"), &device_id),
         }
     }
 
@@ -1677,11 +1886,27 @@ via the QuickDesk WebSocket API. Supports argument overrides for parameterized s
                 "args": args,
             });
 
-            let (success, result_val, error) =
-                match self.ws.request("skillExec", req).await {
-                    Ok(v) => (true, v, String::new()),
-                    Err(e) => (false, json!(null), e),
-                };
+            let (success, result_val, error) = {
+                let tool_timeout_secs = args
+                    .get("timeout_secs")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(60);
+                match self
+                    .ws
+                    .request_no_retry(
+                        "skillExec",
+                        req,
+                        std::time::Duration::from_secs(tool_timeout_secs + 20),
+                    )
+                    .await
+                {
+                    Ok(v) => match v.get("error").and_then(|e| e.as_str()) {
+                        Some(e) => (false, json!(null), format!("tool error: {e}")),
+                        None => (true, v, String::new()),
+                    },
+                    Err(e) => (false, json!(null), format!("transport error: {e}")),
+                }
+            };
 
             step_results.push(json!({
                 "seq": seq,
@@ -1846,7 +2071,12 @@ impl QuickDeskMcpServer {
             - **Wait after actions**: UI animations and loading take time. After clicking or typing, wait briefly before taking the next screenshot.\n\
             - **One action at a time**: Don't chain multiple actions without verifying each one.\n\
             - **Use keyboard shortcuts**: They are more reliable than clicking menus. E.g. Ctrl+S to save, Ctrl+C to copy, Win+R to open Run dialog.\n\
-            - **Type via keyboard_type**: It uses clipboard paste internally for reliable unicode support.\n\
+            - **Find the active remote with `list_connections`**, not `get_host_clients`: the former lists remotes you control, the latter lists inbound viewers of this machine (usually empty).\n\
+            \n\
+            - **Type via keyboard_type**: it injects key events and handles ASCII (letters, digits, shifted symbols). \
+For non-ASCII/unicode text use `clipboard_type` (sets the remote clipboard and pastes in one call; pass paste_keys=[\"cmd\",\"v\"] for macOS remotes).\n\
+            - **Stuck modifiers**: key_press is stateful — call `get_held_keys` to see keys still held, and `release_all_keys` to clear them. keyboard_type/keyboard_hotkey release previously held keys automatically.\n\
+            - **OCR is best-effort**: get_screen_text, find_element, click_text, wait_for_text and assert_text_present all use OCR and can misread text. Trust the screenshot image; use OCR results only as hints and verify visually.\n\
             - **Error recovery**: If an action fails, take a screenshot to understand the current state, then try an alternative approach.\n\
             - **Modifier+click**: Use `key_press` to hold a modifier (e.g. \"ctrl\"), then `mouse_click`, then `key_release` the modifier. This enables Ctrl+click for multi-select.\n\
             - **Drag operations**: Use `mouse_drag` for selecting text, moving files, resizing windows, or drag-and-drop.\n\
@@ -1855,12 +2085,19 @@ impl QuickDeskMcpServer {
             \n\
             | Category | Tools |\n\
             |----------|-------|\n\
-            | Connection | connect_device, disconnect_device, list_connections |\n\
-            | Vision | screenshot, get_screen_size |\n\
+            | Connection | connect_device, disconnect_device, disconnect_all, list_connections, get_connection_info |\n\
+            | This machine | get_host_info, get_host_clients, get_status, get_signaling_status, refresh_access_code |\n\
+            | Vision | screenshot, get_screen_size, wait_for_screen_change, screen_diff_summary |\n\
+            | OCR (best-effort) | get_screen_text, find_element, click_text, get_ui_state, wait_for_text, assert_text_present |\n\
             | Mouse | mouse_click, mouse_double_click, mouse_move, mouse_scroll, mouse_drag |\n\
-            | Keyboard | keyboard_type, keyboard_hotkey, key_press, key_release |\n\
-            | Clipboard | get_clipboard, set_clipboard |\n\
-            | System | get_host_info, get_status |"
+            | Keyboard | keyboard_type, keyboard_hotkey, key_press, key_release, get_held_keys, release_all_keys |\n\
+            | Clipboard | get_clipboard, set_clipboard, clipboard_type |\n\
+            | Verification | verify_action_result, assert_screen_state, wait_for_event, wait_for_connection_state, wait_for_clipboard_change, get_recent_events, list_event_types |\n\
+            | Skills (remote) | skill_list_tools, skill_exec |\n\
+            | Trust/audit | assess_risk, set_trust_policy, get_trust_policy, get_audit_log, resolve_confirmation, emergency_stop, deactivate_emergency_stop, get_emergency_status |\n\
+            | Memory | get_device_profile, update_device_profile, search_operation_history, get_failure_memory, get_device_summary |\n\
+            | Workflows | start_recording, stop_recording, list_workflows, get_workflow, replay_workflow, delete_workflow |\n\
+            | Composite | batch_operation, multi_device_workflow, retry_with_alternative, document_procedure, diagnose_system_issue, analyze_screen_content, server_health_check |"
         )])
     }
 

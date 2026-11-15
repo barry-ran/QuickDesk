@@ -182,7 +182,7 @@ Popup {
                         QDIconButton {
                             iconSource: FluentIconGlyph.downloadGlyph
                             buttonSize: QDIconButton.Size.Small
-                            visible: Qt.platform.os === "windows" || Qt.platform.os === "osx"
+                            visible: Qt.platform.os === "windows" || Qt.platform.os === "osx" || Qt.platform.os === "linux"
                             onClicked: {
                                 var result = mainController.writeMcpConfig(configBtn.modelData.type)
                                 if (result === 0) {

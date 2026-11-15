@@ -6,6 +6,7 @@
 #define QUICKDESK_API_SKILLHANDLER_H
 
 #include <QAtomicInt>
+#include <QHash>
 #include <QJsonObject>
 #include <QMap>
 #include <QMutex>
@@ -43,7 +44,17 @@ public:
                          const QJsonObject& response);
 
 private:
+    enum class BridgeSupport { Unknown, Supported, Unsupported };
+
     bool isConnectionValid(const QString& deviceId) const;
+    bool isLocalTarget(const QString& deviceId) const;
+
+    // The core cannot tell whether the host advertised qd-skill-bridge, so a
+    // remote call to a host without it would otherwise stall until the full
+    // skill timeout. Probe once per device with a cheap listTools request.
+    QJsonObject ensureRemoteBridge(const QString& deviceId,
+                                   const QString& toolName,
+                                   QJsonObject* probeResult = nullptr);
 
     QJsonObject sendAndWait(const QString& deviceId,
                             const QJsonObject& payload,
@@ -53,6 +64,9 @@ private:
 
     MainController* m_controller;
     QAtomicInt      m_nextId{1};
+
+    QMutex m_bridgeMutex;
+    QHash<QString, BridgeSupport> m_bridgeSupport;
 
     struct PendingRequest {
         QMutex*         mutex  = nullptr;

@@ -3,6 +3,7 @@
 #include "NativeMessaging.h"
 #include <QJsonDocument>
 #include <QDataStream>
+#include <QThread>
 
 namespace quickdesk {
 
@@ -42,6 +43,17 @@ NativeMessaging::NativeMessaging(QLocalSocket* readSocket,
 
 void NativeMessaging::sendMessage(const QJsonObject& message)
 {
+    // Async WebSocket API handlers (clickText, skillExec, ...) call this from
+    // a QThreadPool thread. QProcess/QLocalSocket writes are not thread-safe,
+    // and an interleaved length-prefixed frame wedges the core's stdin parser
+    // permanently, so every write is serialized on the owning thread.
+    if (QThread::currentThread() != thread()) {
+        QMetaObject::invokeMethod(
+            this, [this, message]() { sendMessage(message); },
+            Qt::QueuedConnection);
+        return;
+    }
+
     QByteArray encoded = encodeMessage(message);
     qint64 written = -1;
 

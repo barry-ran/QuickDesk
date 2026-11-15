@@ -177,6 +177,11 @@ void SkillHostManager::onSkillHostFinished(int exitCode, QProcess::ExitStatus ex
     LOG_INFO("SkillHostManager: skill-host exited with code {}", exitCode);
 }
 
+void SkillHostManager::forwardFromLocal(const QString& jsonData)
+{
+    onMessageFromClient(jsonData);
+}
+
 void SkillHostManager::onMessageFromClient(const QString& jsonData)
 {
     QJsonParseError err;

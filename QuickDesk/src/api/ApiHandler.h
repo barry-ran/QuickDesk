@@ -13,6 +13,8 @@
 
 #include <QObject>
 #include <QJsonObject>
+#include <QHash>
+#include <QSet>
 #include <functional>
 #include <QMap>
 
@@ -62,6 +64,8 @@ private:
     QJsonObject handleMouseDrag(const QJsonObject& params);
     QJsonObject handleKeyPress(const QJsonObject& params);
     QJsonObject handleKeyRelease(const QJsonObject& params);
+    QJsonObject handleGetHeldKeys(const QJsonObject& params);
+    QJsonObject handleReleaseAllKeys(const QJsonObject& params);
     QJsonObject handleGetClipboard(const QJsonObject& params);
     QJsonObject handleSetClipboard(const QJsonObject& params);
     QJsonObject handleGetScreenSize(const QJsonObject& params);
@@ -89,7 +93,13 @@ private:
     QJsonObject handleDeactivateEmergency(const QJsonObject& params);
     QJsonObject handleResolveConfirmation(const QJsonObject& params);
 
-    static int keyNameToScanCode(const QString& keyName);
+    static int keyNameToNativeKeycode(const QString& keyName);
+    static bool resolveKey(const QString& keyName, int* nativeKeycode, bool* needsShift);
+
+    // Releases keys pressed through this API and still held down. Called
+    // before keyboard_type/keyboard_hotkey so a forgotten key_release cannot
+    // corrupt the next action with a stuck modifier.
+    void releaseHeldKeys(const QString& deviceId, QStringList* released = nullptr);
 
     // Helpers
     QJsonObject makeResult(const QJsonObject& data);
@@ -98,6 +108,7 @@ private:
     MainController* m_controller;
     QMap<QString, Handler> m_handlers;
     QMap<QString, QString> m_clipboardCache;  // deviceId -> last received text
+    QHash<QString, QSet<QString>> m_heldKeys; // deviceId -> key names held via keyPress
     UiStateService       m_uiState;
     VerificationService  m_verification;
     SkillHandler         m_skillHandler;
