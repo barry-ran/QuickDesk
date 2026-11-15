@@ -52,6 +52,11 @@ public:
 
     bool isRunning() const;
 
+    // Run a toolCall/listTools request that originates on this machine
+    // (local skill_exec) instead of from a remote client. Responses arrive via
+    // skillHostResponseReady.
+    void forwardFromLocal(const QString& jsonData);
+
 signals:
     // Emitted when the skill host reports its available tools (on start or hot-reload).
     void capabilitiesChanged(const QJsonArray& tools);

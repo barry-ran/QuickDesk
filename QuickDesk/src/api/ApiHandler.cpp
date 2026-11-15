@@ -140,6 +140,12 @@ void ApiHandler::registerHandlers() {
     m_handlers["keyRelease"] = [this](const QJsonObject& p) {
         return handleKeyRelease(p);
     };
+    m_handlers["getHeldKeys"] = [this](const QJsonObject& p) {
+        return handleGetHeldKeys(p);
+    };
+    m_handlers["releaseAllKeys"] = [this](const QJsonObject& p) {
+        return handleReleaseAllKeys(p);
+    };
     m_handlers["getClipboard"] = [this](const QJsonObject& p) {
         return handleGetClipboard(p);
     };
@@ -225,6 +231,7 @@ QJsonObject ApiHandler::handleGetHostInfo(const QJsonObject&) {
     data["deviceId"] = host->deviceId();
     data["accessCode"] = host->accessCode();
     data["signalingState"] = host->signalingState();
+    data["hostState"] = host->hostState();
     data["signalingRetryCount"] = host->signalingRetryCount();
     data["signalingNextRetryIn"] = host->signalingNextRetryIn();
     data["signalingError"] = host->signalingError();
@@ -282,6 +289,7 @@ QJsonObject ApiHandler::handleGetStatus(const QJsonObject&) {
     hostObj["processStatus"] =
         processStatusToString(m_controller->hostProcessStatus());
     hostObj["signalingState"] = host->signalingState();
+    hostObj["hostState"] = host->hostState();
     hostObj["deviceId"] = host->deviceId();
     hostObj["accessCode"] = host->accessCode();
     hostObj["clientCount"] = host->clientCount();
@@ -308,6 +316,7 @@ QJsonObject ApiHandler::handleGetSignalingStatus(const QJsonObject&) {
 
     QJsonObject hostSig;
     hostSig["state"] = host->signalingState();
+    hostSig["hostState"] = host->hostState();
     hostSig["retryCount"] = host->signalingRetryCount();
     hostSig["nextRetryIn"] = host->signalingNextRetryIn();
     hostSig["error"] = host->signalingError();
@@ -387,13 +396,15 @@ QJsonObject ApiHandler::handleDisconnectFromHost(const QJsonObject& params) {
         return makeError(400, "Missing 'deviceId'");
     }
     m_controller->disconnectFromRemoteHost(deviceId);
+    m_heldKeys.remove(deviceId);
     QJsonObject data;
     data["success"] = true;
     return makeResult(data);
 }
 
 QJsonObject ApiHandler::handleDisconnectAll(const QJsonObject&) {
-    m_controller->clientManager()->disconnectAll();
+    m_controller->disconnectAll();
+    m_heldKeys.clear();
     QJsonObject data;
     data["success"] = true;
     return makeResult(data);
@@ -539,21 +550,186 @@ QJsonObject ApiHandler::handleKeyboardType(const QJsonObject& params) {
         return makeError(400, "Missing 'text'");
     }
 
-    auto* client = m_controller->clientManager();
-    client->syncClipboard(deviceId, text);
+    // Resolve the whole string before injecting anything, so an unsupported
+    // character fails the call instead of leaving partial text on the remote.
+    struct Stroke {
+        int keycode;
+        bool shift;
+    };
+    QList<Stroke> strokes;
+    strokes.reserve(text.size());
+    for (const QChar& ch : text) {
+        const ushort u = ch.unicode();
+        if (u == '\r') continue;
+        if (u > 0x7F) {
+            return makeError(400, QString("Unsupported character: '%1'").arg(ch));
+        }
+        int keycode = -1;
+        bool shift = false;
+        if (!resolveKey(QString(ch), &keycode, &shift)) {
+            return makeError(400, QString("Unsupported character: '%1'").arg(ch));
+        }
+        strokes.append({keycode, shift});
+    }
 
-    int lockStates = 0;
-    client->sendKeyPress(deviceId, 0x1D, lockStates);
-    client->sendKeyPress(deviceId, 0x2F, lockStates);
-    client->sendKeyRelease(deviceId, 0x2F, lockStates);
-    client->sendKeyRelease(deviceId, 0x1D, lockStates);
+    auto* client = m_controller->clientManager();
+    // A key held by an earlier keyPress that was never released would corrupt
+    // this text (e.g. a stuck Ctrl turns letters into control codes).
+    releaseHeldKeys(deviceId);
+    const int shiftKeycode = keyNameToNativeKeycode("shift");
+    bool shiftHeld = false;
+    for (const Stroke& stroke : strokes) {
+        if (stroke.shift != shiftHeld) {
+            if (stroke.shift) {
+                client->sendKeyPress(deviceId, shiftKeycode, 0);
+            } else {
+                client->sendKeyRelease(deviceId, shiftKeycode, 0);
+            }
+            shiftHeld = stroke.shift;
+        }
+        client->sendKeyPress(deviceId, stroke.keycode, 0);
+        client->sendKeyRelease(deviceId, stroke.keycode, 0);
+    }
+    if (shiftHeld) {
+        client->sendKeyRelease(deviceId, shiftKeycode, 0);
+    }
 
     QJsonObject data;
     data["success"] = true;
     return makeResult(data);
 }
 
-int ApiHandler::keyNameToScanCode(const QString& keyName) {
+namespace {
+
+// ASCII characters typeable on a US layout, mapped to the key that produces
+// them plus whether Shift must be held. Non-ASCII text is not typeable with
+// keycodes alone.
+struct CharKeyMapping {
+    char ch;
+    const char* key;
+    bool shift;
+};
+
+constexpr CharKeyMapping kCharKeys[] = {
+    {'a', "a", false}, {'b', "b", false}, {'c', "c", false}, {'d', "d", false},
+    {'e', "e", false}, {'f', "f", false}, {'g', "g", false}, {'h', "h", false},
+    {'i', "i", false}, {'j', "j", false}, {'k', "k", false}, {'l', "l", false},
+    {'m', "m", false}, {'n', "n", false}, {'o', "o", false}, {'p', "p", false},
+    {'q', "q", false}, {'r', "r", false}, {'s', "s", false}, {'t', "t", false},
+    {'u', "u", false}, {'v', "v", false}, {'w', "w", false}, {'x', "x", false},
+    {'y', "y", false}, {'z', "z", false},
+    {'A', "a", true},  {'B', "b", true},  {'C', "c", true},  {'D', "d", true},
+    {'E', "e", true},  {'F', "f", true},  {'G', "g", true},  {'H', "h", true},
+    {'I', "i", true},  {'J', "j", true},  {'K', "k", true},  {'L', "l", true},
+    {'M', "m", true},  {'N', "n", true},  {'O', "o", true},  {'P', "p", true},
+    {'Q', "q", true},  {'R', "r", true},  {'S', "s", true},  {'T', "t", true},
+    {'U', "u", true},  {'V', "v", true},  {'W', "w", true},  {'X', "x", true},
+    {'Y', "y", true},  {'Z', "z", true},
+    {'0', "0", false}, {'1', "1", false}, {'2', "2", false}, {'3', "3", false},
+    {'4', "4", false}, {'5', "5", false}, {'6', "6", false}, {'7', "7", false},
+    {'8', "8", false}, {'9', "9", false},
+    {' ', "space", false}, {'\n', "enter", false}, {'\t', "tab", false},
+    {'-', "-", false}, {'=', "=", false}, {'[', "[", false}, {']', "]", false},
+    {';', ";", false}, {'\'', "'", false}, {',', ",", false}, {'.', ".", false},
+    {'/', "/", false}, {'\\', "\\", false}, {'`', "`", false},
+    {'!', "1", true},  {'@', "2", true},  {'#', "3", true},  {'$', "4", true},
+    {'%', "5", true},  {'^', "6", true},  {'&', "7", true},  {'*', "8", true},
+    {'(', "9", true},  {')', "0", true},  {'_', "-", true},  {'+', "=", true},
+    {'{', "[", true},  {'}', "]", true},  {':', ";", true},  {'"', "'", true},
+    {'<', ",", true},  {'>', ".", true},  {'?', "/", true},  {'|', "\\", true},
+    {'~', "`", true},
+};
+
+} // namespace
+
+bool ApiHandler::resolveKey(const QString& keyName, int* nativeKeycode, bool* needsShift)
+{
+    // Single characters are taken literally: trimming would turn a literal
+    // space into an empty name and make it untypeable.
+    const QString key = keyName.size() == 1 ? keyName : keyName.trimmed();
+    if (needsShift) *needsShift = false;
+    if (key.size() == 1) {
+        const ushort u = key.at(0).unicode();
+        if (u <= 0x7F) {
+            for (const auto& mapping : kCharKeys) {
+                if (static_cast<ushort>(mapping.ch) == u) {
+                    *nativeKeycode = keyNameToNativeKeycode(QString::fromLatin1(mapping.key));
+                    if (needsShift) *needsShift = mapping.shift;
+                    return *nativeKeycode >= 0;
+                }
+            }
+        }
+    }
+    *nativeKeycode = keyNameToNativeKeycode(key);
+    return *nativeKeycode >= 0;
+}
+
+int ApiHandler::keyNameToNativeKeycode(const QString& keyName) {
+#if defined(Q_OS_LINUX)
+    // X11 keycodes (evdev code + 8). The local Chromium client runs
+    // KeycodeConverter::NativeKeycodeToUsbKeycode() on this value, and that
+    // table is keyed by X11 keycodes on Linux.
+    static const QMap<QString, int> kMap = {
+        // Modifier keys
+        {"ctrl",   37}, {"lctrl",    37}, {"rctrl",  105},
+        {"shift",  50}, {"lshift",   50}, {"rshift",  62},
+        {"alt",    64}, {"lalt",     64}, {"ralt",   108},
+        {"win",   133}, {"lwin",    133}, {"rwin",   134},
+        {"super", 133}, {"meta",    133}, {"menu",   135},
+
+        // Common keys
+        {"enter",  36}, {"return",   36},
+        {"tab",    23},
+        {"space",  65},
+        {"backspace", 22}, {"back",  22},
+        {"escape",  9}, {"esc",      9},
+        {"delete", 119}, {"del",   119},
+        {"insert", 118}, {"ins",   118},
+        {"home",  110},
+        {"end",   115},
+        {"pageup", 112}, {"pgup",  112},
+        {"pagedown", 117}, {"pgdn", 117},
+
+        // Arrow keys
+        {"up",    111}, {"down",  116},
+        {"left",  113}, {"right", 114},
+
+        // Function keys
+        {"f1", 67}, {"f2", 68}, {"f3", 69}, {"f4", 70},
+        {"f5", 71}, {"f6", 72}, {"f7", 73}, {"f8", 74},
+        {"f9", 75}, {"f10", 76}, {"f11", 95}, {"f12", 96},
+
+        // Letters
+        {"a", 38}, {"b", 56}, {"c", 54}, {"d", 40},
+        {"e", 26}, {"f", 41}, {"g", 42}, {"h", 43},
+        {"i", 31}, {"j", 44}, {"k", 45}, {"l", 46},
+        {"m", 58}, {"n", 57}, {"o", 32}, {"p", 33},
+        {"q", 24}, {"r", 27}, {"s", 39}, {"t", 28},
+        {"u", 30}, {"v", 55}, {"w", 25}, {"x", 53},
+        {"y", 29}, {"z", 52},
+
+        // Numbers
+        {"0", 19}, {"1", 10}, {"2", 11}, {"3", 12},
+        {"4", 13}, {"5", 14}, {"6", 15}, {"7", 16},
+        {"8", 17}, {"9", 18},
+
+        // Punctuation
+        {"-", 20}, {"=", 21},
+        {"[", 34}, {"]", 35},
+        {";", 47}, {"'", 48},
+        {",", 59}, {".", 60}, {"/", 61},
+        {"\\", 51}, {"`", 49},
+
+        // Special
+        {"printscreen", 107}, {"prtsc", 107},
+        {"scrolllock", 78},
+        {"pause", 127},
+        {"capslock", 66},
+        {"numlock", 77},
+    };
+#else
+    // Windows: PS/2 set-1 scan codes, which the local Chromium client's
+    // NativeKeycodeToUsbKeycode() expects there.
     static const QMap<QString, int> kMap = {
         // Modifier keys
         {"ctrl",   0x1D}, {"lctrl",    0x1D}, {"rctrl",  0xE01D},
@@ -612,6 +788,7 @@ int ApiHandler::keyNameToScanCode(const QString& keyName) {
         {"capslock", 0x3A},
         {"numlock", 0x45},
     };
+#endif
     auto it = kMap.find(keyName.toLower().trimmed());
     return (it != kMap.end()) ? it.value() : -1;
 }
@@ -627,23 +804,32 @@ QJsonObject ApiHandler::handleKeyboardHotkey(const QJsonObject& params) {
         return makeError(400, "Missing 'keys' array");
     }
 
-    QList<int> scanCodes;
+    QList<int> keycodes;
+    bool needsShift = false;
     for (const auto& key : keysArray) {
-        int sc = keyNameToScanCode(key.toString());
-        if (sc < 0) {
+        int code = -1;
+        bool shift = false;
+        if (!resolveKey(key.toString(), &code, &shift)) {
             return makeError(400, QString("Unknown key: '%1'").arg(key.toString()));
         }
-        scanCodes.append(sc);
+        keycodes.append(code);
+        needsShift = needsShift || shift;
     }
 
     auto* client = m_controller->clientManager();
-    int lockStates = 0;
-
-    for (int sc : scanCodes) {
-        client->sendKeyPress(deviceId, sc, lockStates);
+    releaseHeldKeys(deviceId);
+    const int shiftKeycode = keyNameToNativeKeycode("shift");
+    if (needsShift) {
+        client->sendKeyPress(deviceId, shiftKeycode, 0);
     }
-    for (int i = scanCodes.size() - 1; i >= 0; --i) {
-        client->sendKeyRelease(deviceId, scanCodes[i], lockStates);
+    for (int code : keycodes) {
+        client->sendKeyPress(deviceId, code, 0);
+    }
+    for (int i = keycodes.size() - 1; i >= 0; --i) {
+        client->sendKeyRelease(deviceId, keycodes[i], 0);
+    }
+    if (needsShift) {
+        client->sendKeyRelease(deviceId, shiftKeycode, 0);
     }
 
     QJsonObject data;
@@ -689,12 +875,19 @@ QJsonObject ApiHandler::handleKeyPress(const QJsonObject& params) {
         return makeError(400, "Missing 'key'");
     }
 
-    int sc = keyNameToScanCode(keyName);
-    if (sc < 0) {
+    int code = -1;
+    bool shift = false;
+    if (!resolveKey(keyName, &code, &shift)) {
         return makeError(400, QString("Unknown key: '%1'").arg(keyName));
     }
 
-    m_controller->clientManager()->sendKeyPress(deviceId, sc, 0);
+    auto* client = m_controller->clientManager();
+    if (shift) {
+        client->sendKeyPress(deviceId, keyNameToNativeKeycode("shift"), 0);
+        m_heldKeys[deviceId].insert("shift");
+    }
+    client->sendKeyPress(deviceId, code, 0);
+    m_heldKeys[deviceId].insert(keyName.toLower());
 
     QJsonObject data;
     data["success"] = true;
@@ -712,15 +905,93 @@ QJsonObject ApiHandler::handleKeyRelease(const QJsonObject& params) {
         return makeError(400, "Missing 'key'");
     }
 
-    int sc = keyNameToScanCode(keyName);
-    if (sc < 0) {
+    int code = -1;
+    bool shift = false;
+    if (!resolveKey(keyName, &code, &shift)) {
         return makeError(400, QString("Unknown key: '%1'").arg(keyName));
     }
 
-    m_controller->clientManager()->sendKeyRelease(deviceId, sc, 0);
+    auto* client = m_controller->clientManager();
+    client->sendKeyRelease(deviceId, code, 0);
+    if (shift) {
+        client->sendKeyRelease(deviceId, keyNameToNativeKeycode("shift"), 0);
+    }
+    if (auto it = m_heldKeys.find(deviceId); it != m_heldKeys.end()) {
+        it->remove(keyName.toLower());
+        if (shift) {
+            it->remove("shift");
+        }
+        if (it->isEmpty()) {
+            m_heldKeys.erase(it);
+        }
+    }
 
     QJsonObject data;
     data["success"] = true;
+    return makeResult(data);
+}
+
+void ApiHandler::releaseHeldKeys(const QString& deviceId, QStringList* released)
+{
+    auto it = m_heldKeys.find(deviceId);
+    if (it == m_heldKeys.end()) {
+        return;
+    }
+
+    auto* client = m_controller->clientManager();
+    const QStringList names = it->values();
+    for (const QString& name : names) {
+        int code = -1;
+        bool shift = false;
+        if (!resolveKey(name, &code, &shift)) {
+            continue;
+        }
+        client->sendKeyRelease(deviceId, code, 0);
+    }
+    m_heldKeys.erase(it);
+    if (released) {
+        *released = names;
+    }
+}
+
+QJsonObject ApiHandler::handleGetHeldKeys(const QJsonObject& params) {
+    auto deviceId = params["deviceId"].toString();
+    if (deviceId.isEmpty()) {
+        return makeError(400, "Missing 'deviceId'");
+    }
+
+    QJsonArray keys;
+    for (const QString& name : m_heldKeys.value(deviceId)) {
+        keys.append(name);
+    }
+
+    QJsonObject data;
+    data["keys"] = keys;
+    data["count"] = keys.size();
+    return makeResult(data);
+}
+
+QJsonObject ApiHandler::handleReleaseAllKeys(const QJsonObject& params) {
+    auto deviceId = params["deviceId"].toString();
+    if (deviceId.isEmpty()) {
+        return makeError(400, "Missing 'deviceId'");
+    }
+
+    QStringList released;
+    releaseHeldKeys(deviceId, &released);
+
+    // Also ask the native client to release anything it tracked itself
+    // (mouse buttons, keys pressed through other paths).
+    m_controller->clientManager()->releaseAllInput(deviceId);
+
+    QJsonArray keys;
+    for (const QString& name : released) {
+        keys.append(name);
+    }
+
+    QJsonObject data;
+    data["success"] = true;
+    data["released"] = keys;
     return makeResult(data);
 }
 
@@ -736,7 +1007,9 @@ QJsonObject ApiHandler::handleGetClipboard(const QJsonObject& params) {
     } else {
         data["text"] = "";
         data["note"] = "No clipboard content received yet from remote. "
-                       "Clipboard is synced when the remote user copies something.";
+                       "Linux hosts built with the current core push the current "
+                       "clipboard at session start; Windows/macOS hosts only push "
+                       "after the remote user copies something.";
     }
     return makeResult(data);
 }
@@ -748,10 +1021,13 @@ QJsonObject ApiHandler::handleSetClipboard(const QJsonObject& params) {
     }
 
     auto text = params["text"].toString();
-    m_controller->clientManager()->syncClipboard(deviceId, text);
+    if (!m_controller->clientManager()->syncClipboard(deviceId, text)) {
+        return makeError(409, "Not connected to device '" + deviceId + "'");
+    }
 
     QJsonObject data;
     data["success"] = true;
+    data["delivery"] = "best-effort";
     return makeResult(data);
 }
 

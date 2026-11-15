@@ -687,7 +687,16 @@ func (h *RealtimeHandler) HandleSignal(c *gin.Context) {
 	defer h.unregisterSignalConn(sc)
 
 	if sc.role == service.SignalRoleHost {
-		if err := h.presence.MarkWSConnected(c.Request.Context(), sc.deviceID); err == nil {
+		// An authenticated host WS proves the host process is alive. The
+		// desktop host core can take minutes to send its first HTTP
+		// heartbeat after a reconnect, and presence requires hb && ws, so
+		// refresh the heartbeat lease here or verify() rejects a live host
+		// with HOST_OFFLINE in that window.
+		if err := h.presence.RefreshWSPresence(c.Request.Context(), sc.deviceID); err == nil {
+			if err := h.presence.Heartbeat(c.Request.Context(), sc.deviceID); err != nil {
+				log.Printf("[realtime/signal] host heartbeat mark failed device=%s session=%s err=%v",
+					sc.deviceID, sessionID, err)
+			}
 			state := h.presence.State(c.Request.Context(), sc.deviceID)
 			log.Printf("[realtime/signal] host presence connected device=%s session=%s presence={%s}",
 				sc.deviceID, sessionID, state.String())

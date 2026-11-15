@@ -70,6 +70,7 @@ private slots:
 private:
     void fail(const QString& message);
     void capturePoster(const QVideoFrame& frame);
+    QString recordingDirectory() const;
     QString httpBaseUrl() const;
     void uploadRecording(const QString& filePath);
     void createIndexRowThenUpload(const QString& filePath, qint64 sizeBytes);

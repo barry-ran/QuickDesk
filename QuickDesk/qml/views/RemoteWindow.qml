@@ -791,6 +791,62 @@ Window {
                 fileTransferDrawer.open()
             }
         }
+
+        // Always-visible disconnect control. The floating "..." menu also has
+        // a Disconnect entry, but it is easy to miss; keep an explicit one.
+        Rectangle {
+            id: disconnectButton
+            x: Math.max(Theme.spacingSmall,
+                        sessionTools.x - width - Theme.spacingSmall)
+            y: sessionTools.y + (sessionTools.height - height) / 2
+            z: 1001
+            width: disconnectLabel.implicitWidth + Theme.spacingLarge * 2
+            height: 36
+            radius: height / 2
+            visible: connectionModel.count > 0
+            color: disconnectArea.containsMouse ? Qt.lighter(Theme.error, 1.12) : Theme.error
+            opacity: 0.92
+
+            Text {
+                id: disconnectLabel
+                anchors.centerIn: parent
+                text: qsTr("Disconnect")
+                color: "#ffffff"
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fontSizeMedium
+            }
+
+            MouseArea {
+                id: disconnectArea
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: {
+                    if (remoteWindow.currentTabIndex >= 0
+                            && remoteWindow.currentTabIndex < connectionModel.count) {
+                        console.log("Disconnect button pressed for tab:",
+                                    remoteWindow.currentTabIndex)
+                        remoteWindow.closeConnection(remoteWindow.currentTabIndex)
+                    }
+                }
+            }
+
+            Accessible.role: Accessible.Button
+            Accessible.name: qsTr("Disconnect from remote device")
+        }
+
+        Shortcut {
+            sequence: "Ctrl+Shift+D"
+            enabled: connectionModel.count > 0
+            onActivated: {
+                if (remoteWindow.currentTabIndex >= 0
+                        && remoteWindow.currentTabIndex < connectionModel.count) {
+                    console.log("Disconnect shortcut pressed for tab:",
+                                remoteWindow.currentTabIndex)
+                    remoteWindow.closeConnection(remoteWindow.currentTabIndex)
+                }
+            }
+        }
         
         // Video Stats Overlay — semi-transparent panel with detailed stats
         VideoStatsOverlay {

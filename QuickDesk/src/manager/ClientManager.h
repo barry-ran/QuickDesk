@@ -97,6 +97,10 @@ public:
                                       const QString& remoteOs = QString());
     Q_INVOKABLE void disconnectFromHost(const QString& deviceId);
     Q_INVOKABLE void disconnectAll();
+    // Blocks (bounded) until the client process acknowledges disconnectAll.
+    // Used during application shutdown so the Jingle session-terminate is
+    // flushed before the client process is terminated.
+    bool waitForDisconnectAll(int timeoutMs);
     Q_INVOKABLE void sendHello(const QString& deviceId = QString(),
                                const QString& preferredVideoCodec = QString());
 
@@ -110,7 +114,7 @@ public:
     Q_INVOKABLE void releaseAllInput(const QString& deviceId);
 
     // Clipboard
-    Q_INVOKABLE void syncClipboard(const QString& deviceId, const QString& text);
+    Q_INVOKABLE bool syncClipboard(const QString& deviceId, const QString& text);
 
     // Skill bridge
     Q_INVOKABLE void sendSkillCommand(const QString& deviceId,
@@ -182,6 +186,8 @@ public:
     Q_INVOKABLE int getSignalingNextRetryIn(const QString& deviceId) const;
     Q_INVOKABLE QString getSignalingError(const QString& deviceId) const;
 
+    bool isMessagingReady() const;
+
     SharedMemoryManager* sharedMemoryManager() const { return m_sharedMemoryManager.get(); }
 
     Q_INVOKABLE bool saveFrameToFile(const QString& deviceId, 
@@ -209,6 +215,7 @@ signals:
     void connectionAdded(const QString& deviceId);
     void connectionRemoved(const QString& deviceId);
     void connectionListChanged();
+    void disconnectAllCompleted();
     void videoFrameReady(const QString& deviceId, int frameIndex);
     void clipboardReceived(const QString& deviceId, const QString& text);
 
@@ -294,6 +301,7 @@ private:
     QHash<QString, QString> m_connIdToDeviceId;   // connectionId -> deviceId reverse lookup
     QString m_activeDeviceId;
     int m_connectionCounter = 0;
+    bool m_disconnectAllPending = false;
     
     QJsonObject m_iceConfig;
 

@@ -74,7 +74,11 @@ ApplicationWindow {
 
         function onRequestShowRemoteWindow(deviceId) {
             console.log("API requested showRemoteWindow:", deviceId)
-            root.showRemoteWindow(deviceId)
+            // Connect is asynchronous (verify + spawn), so the device is not in
+            // connectedDeviceIds yet when the API request arrives. Mirror the
+            // UI connect flow (showRemoteWindow(id, true)) so the renderer is
+            // created and the host receives a video layout.
+            root.showRemoteWindow(deviceId, true)
         }
     }
 

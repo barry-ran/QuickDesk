@@ -148,6 +148,38 @@ MainController::MainController(QObject* parent)
     // Listen to Client signaling state to update client server status
     connect(m_clientManager.get(), &ClientManager::signalingStateChanged,
             this, &MainController::onClientSignalingStateChanged);
+
+    // Crash recovery: a recovered session is only done once the client
+    // reports it connected; until then it stays in m_crashRecoveryQueue.
+    connect(m_clientManager.get(), &ClientManager::connectionStateChanged,
+            this, [this](const QString& deviceId, const QString& state,
+                         const QJsonObject&) {
+        if (state != "connected") {
+            return;
+        }
+        if (m_crashRecoveryQueue.removeAll(deviceId) > 0) {
+            m_crashRecoveryTries.remove(deviceId);
+            m_crashRecoveryWaits.remove(deviceId);
+            LOG_INFO("Crash recovery: session to device={} re-established",
+                     deviceId.toStdString());
+        }
+    });
+
+    // During crash recovery, retryable failures (an old host slot that has
+    // not been released yet, a rotated access code, a momentarily offline
+    // host) get a bounded number of retries instead of being dropped the
+    // first time the re-verify fails.
+    connect(m_clientManager.get(), &ClientManager::errorOccurred,
+            this, [this](const QString& deviceId, const QString& code,
+                         const QString& message) {
+        if (deviceId.isEmpty()) {
+            return;
+        }
+        handleRecoveryFailure(deviceId, code, message);
+    });
+
+    connect(m_hostManager.get(), &HostManager::hostStateChanged,
+            this, &MainController::onHostStateChanged);
     
     // Listen to Client connection removed to update primary device
     connect(m_clientManager.get(), &ClientManager::connectionRemoved,
@@ -306,6 +338,11 @@ MainController::~MainController()
 void MainController::initialize()
 {
     LOG_INFO("MainController::initialize()");
+
+    // Shut down while the event loop is still alive so the client process can
+    // acknowledge disconnectAll before its stdin is closed.
+    connect(QCoreApplication::instance(), &QCoreApplication::aboutToQuit,
+            this, [this]() { shutdown(); });
     
     // Initialize RemoteDeviceManager
     if (!m_remoteDeviceManager->init()) {
@@ -363,6 +400,11 @@ void MainController::shutdown()
     if (m_isShutdown)
         return;
     m_isShutdown = true;
+    m_hostSignalingArmed = false;
+    m_hostSignalingResetSent = false;
+    if (m_hostSignalingWatchdog) {
+        m_hostSignalingWatchdog->stop();
+    }
 
     LOG_INFO("MainController::shutdown()");
 
@@ -380,7 +422,15 @@ void MainController::shutdown()
     
     m_presetManager->stop();
     m_hostManager->disconnectFromServer();
+    m_sessionIntents.clear();
+    m_crashRecoveryQueue.clear();
     m_clientManager->disconnectAll();
+
+    // Wait (bounded) for the client process to confirm it has sent the
+    // session-terminate. Stopping the process immediately would drop the
+    // signaling socket first, leaving the host to time out instead of
+    // seeing a clean disconnect.
+    m_clientManager->waitForDisconnectAll(1500);
 
     // Clear messaging references before stopping processes.
     // stopAllProcesses() → cleanupServiceConnection() destroys NativeMessaging,
@@ -406,6 +456,8 @@ QString MainController::connectToRemoteHost(const QString& deviceId,
     // This replaces the legacy /api/v1/auth/verify round-trip that the
     // Chromium client used to perform itself (now deleted).
     m_connectionTracks[deviceId] = { QDateTime::currentMSecsSinceEpoch() };
+    m_sessionIntents[deviceId] = { accessCode, url };
+    m_crashRecoveryQueue.removeAll(deviceId);
     verifyAndConnectToRemoteHost(deviceId, accessCode, url, true);
 
     // Return the device_id as the tentative connection_id (same as before
@@ -451,6 +503,10 @@ void MainController::verifyAndConnectToRemoteHost(const QString& deviceId,
                         }
                         LOG_INFO("Retrying verifyAccessCode for device={} with refreshed access_code",
                                  deviceId.toStdString());
+                        auto intent = m_sessionIntents.find(deviceId);
+                        if (intent != m_sessionIntents.end()) {
+                            intent->accessCode = latestCode;
+                        }
                         verifyAndConnectToRemoteHost(deviceId, latestCode, serverUrl, false);
                     },
                     [this, deviceId, httpStatus, code, detail](int, const QString&, const QString&) {
@@ -471,16 +527,52 @@ void MainController::reportVerifyAccessCodeFailure(const QString& deviceId,
     LOG_WARN("verifyAccessCode FAILED device={} status={} code={} detail={}",
              deviceId.toStdString(), httpStatus,
              code.toStdString(), detail.toStdString());
+
+    // A session being restored after a client crash gets retries with
+    // backoff instead of being dropped on the first failure.
+    if (handleRecoveryFailure(deviceId,
+                              code.isEmpty() ? QStringLiteral("VERIFY_FAILED") : code,
+                              detail)) {
+        return;
+    }
+
     m_connectionTracks.remove(deviceId);
+    m_sessionIntents.remove(deviceId);
+    m_crashRecoveryQueue.removeAll(deviceId);
+    m_crashRecoveryTries.remove(deviceId);
+    QString effectiveDetail = detail;
+    if (code == QLatin1String("INVALID_CODE")) {
+        if (!effectiveDetail.isEmpty())
+            effectiveDetail += QLatin1String(" ");
+        effectiveDetail += QStringLiteral(
+            "The host's access code may have changed. Read the current code "
+            "shown on the host and reconnect.");
+    } else if (code == QLatin1String("HOST_OFFLINE")) {
+        if (!effectiveDetail.isEmpty())
+            effectiveDetail += QLatin1String(" ");
+        effectiveDetail += QStringLiteral(
+            "The host is not registered with the signaling server. Check that "
+            "QuickDesk is still running on the host and its signaling status "
+            "shows Connected.");
+    }
     Q_EMIT m_clientManager->errorOccurred(
         deviceId,
         code.isEmpty() ? QStringLiteral("VERIFY_FAILED") : code,
-        detail);
+        effectiveDetail);
 }
 
 void MainController::disconnectFromRemoteHost(const QString& deviceId)
 {
+    m_sessionIntents.remove(deviceId);
+    m_crashRecoveryQueue.removeAll(deviceId);
     m_clientManager->disconnectFromHost(deviceId);
+}
+
+void MainController::disconnectAll()
+{
+    m_sessionIntents.clear();
+    m_crashRecoveryQueue.clear();
+    m_clientManager->disconnectAll();
 }
 
 void MainController::showRemoteWindowForDevice(const QString& deviceId)
@@ -541,6 +633,11 @@ ServerManager* MainController::serverManager() const
 HostManager* MainController::hostManager() const
 {
     return m_hostManager.get();
+}
+
+SkillHostManager* MainController::skillHostManager() const
+{
+    return m_skillHostManager.get();
 }
 
 ClientManager* MainController::clientManager() const
@@ -746,6 +843,7 @@ void MainController::onHostProcessStarted()
 
             QString serverUrl = getDefaultServerUrl();
             LOG_INFO("Auto-connecting to signaling server: {}", serverUrl.toStdString());
+            armHostSignaling(serverUrl, savedAccessCode);
             m_hostManager->connectToServer(serverUrl, savedAccessCode);
         });
     });
@@ -754,6 +852,12 @@ void MainController::onHostProcessStarted()
 void MainController::onHostProcessStopped(int exitCode)
 {
     LOG_INFO("Host process stopped with exit code: {}", exitCode);
+
+    m_hostSignalingArmed = false;
+    m_hostSignalingResetSent = false;
+    if (m_hostSignalingWatchdog) {
+        m_hostSignalingWatchdog->stop();
+    }
 
     if (m_skillHostManager) {
         m_skillHostManager->stopSkillHost();
@@ -782,6 +886,112 @@ void MainController::onHostProcessError(const QString& error)
 void MainController::onHostProcessRestarting(int retryCount, int maxRetries)
 {
     LOG_INFO("Host process restarting, attempt {} of {}", retryCount, maxRetries);
+}
+
+void MainController::armHostSignaling(const QString& url, const QString& savedAccessCode)
+{
+    m_hostSignalingUrl = url;
+    m_hostSignalingSavedCode = savedAccessCode;
+    m_hostSignalingArmed = true;
+    m_hostSignalingRecoveryAttempts = 0;
+    m_hostSignalingLossReported = false;
+    m_hostSignalingResetSent = false;
+    if (m_hostSignalingWatchdog) {
+        m_hostSignalingWatchdog->stop();
+    }
+}
+
+void MainController::onHostStateChanged()
+{
+    const QString state = m_hostManager->hostState();
+    if (state.isEmpty()) {
+        return;
+    }
+    LOG_INFO("Host state changed: {}", state.toStdString());
+
+    if (state == QLatin1String("DISCONNECTED")) {
+        m_hostSignalingRecoveryAttempts = 0;
+        if (m_isShutdown || !m_hostSignalingArmed) {
+            return;
+        }
+        if (!m_hostSignalingLossReported) {
+            m_hostSignalingLossReported = true;
+            LOG_WARN("Host reported DISCONNECTED; its signaling was torn down "
+                     "and it will not re-register by itself. Scheduling recovery.");
+            Q_EMIT m_clientManager->errorOccurred(
+                QString(), QStringLiteral("HOST_SIGNALING_LOST"),
+                QStringLiteral("The local host lost its signaling connection; "
+                               "re-registering automatically."));
+        }
+        scheduleHostSignalingRecovery(3000);
+    } else if (state == QLatin1String("CONNECTED") ||
+               state == QLatin1String("RECEIVED_ACCESS_CODE")) {
+        if (m_hostSignalingLossReported) {
+            LOG_INFO("Host signaling restored (state={})", state.toStdString());
+            m_hostSignalingLossReported = false;
+        }
+        m_hostSignalingRecoveryAttempts = 0;
+        m_hostSignalingResetSent = false;
+        if (m_hostSignalingWatchdog) {
+            m_hostSignalingWatchdog->stop();
+        }
+    }
+}
+
+void MainController::scheduleHostSignalingRecovery(int delayMs)
+{
+    if (m_isShutdown || !m_hostSignalingArmed) {
+        return;
+    }
+    if (!m_hostSignalingWatchdog) {
+        m_hostSignalingWatchdog = new QTimer(this);
+        m_hostSignalingWatchdog->setSingleShot(true);
+        connect(m_hostSignalingWatchdog, &QTimer::timeout,
+                this, &MainController::attemptHostSignalingRecovery);
+    }
+    m_hostSignalingWatchdog->start(delayMs);
+}
+
+void MainController::attemptHostSignalingRecovery()
+{
+    if (m_isShutdown || !m_hostSignalingArmed) {
+        return;
+    }
+
+    const QString state = m_hostManager->hostState();
+    if (!state.isEmpty() && state != QLatin1String("DISCONNECTED")) {
+        // STARTING..CONNECTED means the host is re-provisioning or a client
+        // session is active; never send another "connect" then, it would
+        // replace the live QuickDeskHost.
+        return;
+    }
+
+    if (m_processManager->hostProcessStatus() != ProcessStatus::Running) {
+        LOG_WARN("Host signaling recovery: host process is {}, retrying",
+                 m_processManager->hostProcessStatus() == ProcessStatus::Starting
+                     ? "starting" : "not running");
+        scheduleHostSignalingRecovery(5000);
+        return;
+    }
+
+    if (!m_hostSignalingResetSent) {
+        // A host that tore its network service down keeps a stale
+        // QuickDeskHost object, and ProcessConnect answers INVALID_STATE
+        // ("Connect can be called only when disconnected") until that object
+        // is dropped. Send "disconnect" first, then reconnect on the next tick.
+        LOG_WARN("Host signaling recovery: resetting stale host session");
+        m_hostManager->resetHostSession();
+        m_hostSignalingResetSent = true;
+        scheduleHostSignalingRecovery(1200);
+        return;
+    }
+
+    m_hostSignalingResetSent = false;
+    ++m_hostSignalingRecoveryAttempts;
+    LOG_WARN("Host signaling recovery: re-sending connect to {} (attempt {})",
+             m_hostSignalingUrl.toStdString(), m_hostSignalingRecoveryAttempts);
+    m_hostManager->connectToServer(m_hostSignalingUrl, m_hostSignalingSavedCode);
+    scheduleHostSignalingRecovery(m_hostSignalingRecoveryAttempts < 10 ? 5000 : 30000);
 }
 
 void MainController::onClientProcessStarted()
@@ -821,12 +1031,227 @@ void MainController::onClientProcessStarted()
             m_clientManager->sendHello(localDeviceId, videoCodec);
         }
     });
+
+    // A previous client process died with sessions open; the restart only
+    // brings the transport back, so re-run verification and re-establish
+    // each dropped session once hello has gone out.
+    if (!m_crashRecoveryQueue.isEmpty()) {
+        LOG_INFO("Client restarted with {} pending session(s) to recover",
+                 m_crashRecoveryQueue.size());
+        m_crashRecoveryAttempts = 0;
+        QTimer::singleShot(1500, this, [this]() { runCrashRecovery(); });
+    }
+}
+
+void MainController::runCrashRecovery()
+{
+    if (m_isShutdown || m_crashRecoveryQueue.isEmpty()) {
+        return;
+    }
+
+    if (!m_clientManager->isMessagingReady()) {
+        if (++m_crashRecoveryAttempts <= 20) {
+            QTimer::singleShot(500, this, [this]() { runCrashRecovery(); });
+        } else {
+            const QStringList stuck = m_crashRecoveryQueue;
+            LOG_WARN("Crash recovery: client transport never became ready, "
+                     "dropping {} session(s)", stuck.size());
+            for (const QString& deviceId : stuck) {
+                finishCrashRecovery(deviceId, QStringLiteral("NOT_READY"),
+                                    QStringLiteral("Client process did not become ready"));
+            }
+            m_crashRecoveryAttempts = 0;
+        }
+        return;
+    }
+    m_crashRecoveryAttempts = 0;
+
+    // Keep every queued device until the session is confirmed connected or
+    // recovery is given up; dropping the entry here is what made a
+    // SESSION_REJECTED from a not-yet-released host slot permanent.
+    const QStringList pending = m_crashRecoveryQueue;
+    for (const QString& deviceId : pending) {
+        if (!m_crashRecoveryQueue.contains(deviceId)) {
+            continue;
+        }
+        if (m_clientManager->connectedDeviceIds().contains(deviceId)) {
+            m_crashRecoveryQueue.removeAll(deviceId);
+            m_crashRecoveryTries.remove(deviceId);
+            m_crashRecoveryWaits.remove(deviceId);
+            continue;
+        }
+        auto it = m_sessionIntents.constFind(deviceId);
+        if (it == m_sessionIntents.constEnd()) {
+            m_crashRecoveryQueue.removeAll(deviceId);
+            m_crashRecoveryTries.remove(deviceId);
+            m_crashRecoveryWaits.remove(deviceId);
+            continue;
+        }
+        LOG_INFO("Crash recovery: re-establishing session to device={}",
+                 deviceId.toStdString());
+        scheduleCrashRecoveryAttempt(deviceId, 0);
+    }
+}
+
+void MainController::scheduleCrashRecoveryAttempt(const QString& deviceId, int delayMs)
+{
+    if (m_isShutdown || !m_crashRecoveryQueue.contains(deviceId)) {
+        return;
+    }
+    QTimer::singleShot(delayMs, this, [this, deviceId]() {
+        if (m_isShutdown || !m_crashRecoveryQueue.contains(deviceId)) {
+            return;
+        }
+        if (m_clientManager->connectedDeviceIds().contains(deviceId)) {
+            m_crashRecoveryQueue.removeAll(deviceId);
+            m_crashRecoveryTries.remove(deviceId);
+            m_crashRecoveryWaits.remove(deviceId);
+            return;
+        }
+        // A client crash tears the host's own network service down, so the
+        // first attempts usually land on a host that is still re-registering.
+        // Wait for that instead of burning attempts on guaranteed failures.
+        if (m_hostManager->hostState() == QLatin1String("DISCONNECTED")) {
+            const int waits = m_crashRecoveryWaits.value(deviceId) + 1;
+            if (waits <= 15) {
+                m_crashRecoveryWaits[deviceId] = waits;
+                LOG_INFO("Crash recovery: device={} waiting for local host to "
+                         "re-register ({}/15)",
+                         deviceId.toStdString(), waits);
+                QTimer::singleShot(2000, this, [this, deviceId]() {
+                    scheduleCrashRecoveryAttempt(deviceId, 0);
+                });
+                return;
+            }
+        }
+        m_crashRecoveryWaits.remove(deviceId);
+        auto it = m_sessionIntents.constFind(deviceId);
+        if (it == m_sessionIntents.constEnd()) {
+            m_crashRecoveryQueue.removeAll(deviceId);
+            m_crashRecoveryTries.remove(deviceId);
+            return;
+        }
+        m_crashRecoveryTries[deviceId] += 1;
+        LOG_INFO("Crash recovery: attempt {} for device={}",
+                 m_crashRecoveryTries.value(deviceId), deviceId.toStdString());
+        m_connectionTracks[deviceId] = { QDateTime::currentMSecsSinceEpoch() };
+        verifyAndConnectToRemoteHost(deviceId, it->accessCode, it->serverUrl, false);
+    });
+}
+
+bool MainController::handleRecoveryFailure(const QString& deviceId,
+                                           const QString& code,
+                                           const QString& detail)
+{
+    if (m_isShutdown || !m_crashRecoveryQueue.contains(deviceId)) {
+        return false;
+    }
+
+    const int tries = m_crashRecoveryTries.value(deviceId);
+    int maxTries = 5;
+    int delayMs = 2000;
+
+    if (code == QLatin1String("HOST_OFFLINE") ||
+        code == QLatin1String("NETWORK_FAILURE")) {
+        // The host may be re-registering after the crash took its network
+        // service down; one full reconnect cycle can take several seconds.
+        maxTries = 8;
+        delayMs = 5000;
+    } else if (code == QLatin1String("SESSION_REJECTED")) {
+        // The old client slot on the host is released moments after the
+        // reject, so a short backoff is enough.
+        maxTries = 6;
+        delayMs = 3000;
+    } else if (code != QLatin1String("AUTHENTICATION_FAILED") &&
+               code != QLatin1String("CONNECTION_FAILED") &&
+               code != QLatin1String("INVALID_CODE") &&
+               code != QLatin1String("NOT_READY")) {
+        finishCrashRecovery(deviceId, code, detail);
+        return true;
+    }
+
+    if (tries >= maxTries) {
+        finishCrashRecovery(deviceId, code, detail);
+        return true;
+    }
+
+    LOG_WARN("Crash recovery: device={} failed ({}: {}), retry {}/{} in {} ms",
+             deviceId.toStdString(), code.toStdString(), detail.toStdString(),
+             tries + 1, maxTries, delayMs);
+
+    if (code == QLatin1String("AUTHENTICATION_FAILED") ||
+        code == QLatin1String("INVALID_CODE")) {
+        // The host rotated its access code while the client was dead;
+        // refresh from the cloud copy before retrying.
+        m_cloudDeviceManager->refreshDeviceAccessCodeNow(
+            deviceId,
+            [this, deviceId](const QString& latestCode) {
+                if (m_isShutdown || !m_crashRecoveryQueue.contains(deviceId)) {
+                    return;
+                }
+                auto intent = m_sessionIntents.find(deviceId);
+                if (intent != m_sessionIntents.end() && !latestCode.isEmpty()) {
+                    intent->accessCode = latestCode;
+                }
+                scheduleCrashRecoveryAttempt(deviceId, 2000);
+            },
+            [this, deviceId, delayMs](int, const QString&, const QString&) {
+                if (m_isShutdown || !m_crashRecoveryQueue.contains(deviceId)) {
+                    return;
+                }
+                scheduleCrashRecoveryAttempt(deviceId, delayMs);
+            });
+        return true;
+    }
+
+    scheduleCrashRecoveryAttempt(deviceId, delayMs);
+    return true;
+}
+
+void MainController::finishCrashRecovery(const QString& deviceId,
+                                         const QString& code,
+                                         const QString& detail)
+{
+    LOG_WARN("Crash recovery: giving up on device={} after {} attempt(s) ({}: {})",
+             deviceId.toStdString(), m_crashRecoveryTries.value(deviceId),
+             code.toStdString(), detail.toStdString());
+    m_crashRecoveryQueue.removeAll(deviceId);
+    m_crashRecoveryTries.remove(deviceId);
+    m_crashRecoveryWaits.remove(deviceId);
+    m_sessionIntents.remove(deviceId);
+    m_connectionTracks.remove(deviceId);
+
+    QString message =
+        QStringLiteral("The session to device %1 could not be restored after "
+                       "the client process crashed.").arg(deviceId);
+    if (!detail.isEmpty()) {
+        message += QLatin1String(" ") + detail;
+    }
+    Q_EMIT m_clientManager->errorOccurred(
+        deviceId, code.isEmpty() ? QStringLiteral("RECOVERY_FAILED") : code,
+        message);
 }
 
 void MainController::onClientProcessStopped(int exitCode)
 {
     LOG_INFO("Client process stopped with exit code: {}", exitCode);
-    
+
+    // Snapshot the sessions the dead client process was carrying before
+    // setMessaging(nullptr) clears ClientManager's connection table.
+    if (!m_isShutdown && m_clientManager && !m_sessionIntents.isEmpty()) {
+        const QStringList dropped = m_clientManager->connectedDeviceIds();
+        for (const QString& deviceId : dropped) {
+            if (m_sessionIntents.contains(deviceId) &&
+                !m_crashRecoveryQueue.contains(deviceId)) {
+                m_crashRecoveryQueue.append(deviceId);
+            }
+        }
+        if (!m_crashRecoveryQueue.isEmpty()) {
+            LOG_INFO("Client crashed with {} open session(s), queued for recovery",
+                     m_crashRecoveryQueue.size());
+        }
+    }
+
     // Update server status
     m_clientServerStatus = ServerStatus::Disconnected;
     emit clientServerStatusChanged();
@@ -1082,6 +1507,13 @@ void MainController::setupWebSocketApiEvents() {
         data["state"] = state;
         data["hostInfo"] = hostInfo;
         m_wsApiServer->broadcastEvent("connectionStateChanged", data);
+    });
+    connect(m_clientManager.get(), &ClientManager::errorOccurred,
+            this, [this](const QString& deviceId, const QString& code,
+                         const QString& message) {
+        m_wsApiServer->broadcastEvent("connectionError", {
+            {"deviceId", deviceId}, {"code", code}, {"message", message}
+        });
     });
     connect(m_clientManager.get(), &ClientManager::clipboardReceived,
             this, [this](const QString& deviceId, const QString& text) {
@@ -1480,19 +1912,21 @@ QString MainController::getMcpConfigPath(const QString& clientType) const {
 #elif defined(Q_OS_MAC)
         return QDir::homePath() +
                "/Library/Application Support/Claude/claude_desktop_config.json";
+#elif defined(Q_OS_LINUX)
+        return QDir::homePath() + "/.config/Claude/claude_desktop_config.json";
 #endif
     } else if (clientType == "cursor") {
 #ifdef Q_OS_WIN
         return QDir::toNativeSeparators(
             QDir::homePath() + "/.cursor/mcp.json");
-#elif defined(Q_OS_MAC)
+#else
         return QDir::homePath() + "/.cursor/mcp.json";
 #endif
     } else if (clientType == "windsurf") {
 #ifdef Q_OS_WIN
         return QDir::toNativeSeparators(
             QDir::homePath() + "/.codeium/windsurf/mcp_config.json");
-#elif defined(Q_OS_MAC)
+#else
         return QDir::homePath() + "/.codeium/windsurf/mcp_config.json";
 #endif
     } else if (clientType == "vscode") {
@@ -1502,6 +1936,8 @@ QString MainController::getMcpConfigPath(const QString& clientType) const {
 #elif defined(Q_OS_MAC)
         return QDir::homePath() +
                "/Library/Application Support/Code/User/mcp.json";
+#elif defined(Q_OS_LINUX)
+        return QDir::homePath() + "/.config/Code/User/mcp.json";
 #endif
     }
     return QString();

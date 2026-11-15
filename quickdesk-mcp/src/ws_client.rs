@@ -105,6 +105,29 @@ impl WsClient {
         }
     }
 
+    /// Send a mutating request once with the default budget. A timed-out call
+    /// may still execute on the remote, so it is never resent.
+    pub async fn request_once(&self, method: &str, params: Value) -> Result<Value, String> {
+        self.request_no_retry(method, params, Duration::from_secs(30)).await
+    }
+
+    /// Same as `request_with_timeout`, but never resends the request after it
+    /// was handed to the socket. A timed-out mutating call (skill_exec,
+    /// key presses, clicks) must not be retried: the first attempt may still
+    /// execute on the remote, so a silent retry can run it twice. Only
+    /// reconnect-and-retry when the request was provably never sent.
+    pub async fn request_no_retry(&self, method: &str, params: Value, timeout: Duration) -> Result<Value, String> {
+        match self.try_request(method, params.clone(), timeout).await {
+            Ok(v) => Ok(v),
+            Err(e) if e == "Not connected" => {
+                tracing::warn!("WsClient '{}' not connected, reconnecting…", method);
+                self.do_connect().await?;
+                self.try_request(method, params, timeout).await
+            }
+            Err(e) => Err(e),
+        }
+    }
+
     async fn try_request(&self, method: &str, params: Value, timeout: Duration) -> Result<Value, String> {
         let (id, rx) = {
             let mut guard = self.inner.lock().await;

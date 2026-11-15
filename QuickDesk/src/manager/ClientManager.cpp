@@ -9,6 +9,8 @@
 #include <QUuid>
 #include <QWindow>
 #include <QCoreApplication>
+#include <QElapsedTimer>
+#include <QEventLoop>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QDir>
@@ -80,6 +82,11 @@ void ClientManager::setMessaging(NativeMessaging* messaging)
         m_connections.clear();
         m_connIdToDeviceId.clear();
         m_activeDeviceId.clear();
+
+        if (m_disconnectAllPending) {
+            m_disconnectAllPending = false;
+            emit disconnectAllCompleted();
+        }
 
         if (!deviceIds.isEmpty()) {
             emit connectionCountChanged();
@@ -178,17 +185,22 @@ QString ClientManager::connectToHost(const QString& deviceId,
 
 void ClientManager::disconnectFromHost(const QString& deviceId)
 {
-    if (!m_messaging || !m_messaging->isReady()) {
-        return;
-    }
-
     QString connId = connectionIdFor(deviceId);
-    if (connId.isEmpty()) return;
 
-    QJsonObject message;
-    message["type"] = "disconnectFromHost";
-    message["connectionId"] = connId;
-    m_messaging->sendMessage(message);
+    if (!m_messaging || !m_messaging->isReady()) {
+        LOG_WARN("disconnectFromHost({}): client messaging unavailable, dropping connection locally",
+                 deviceId.toStdString());
+    } else if (connId.isEmpty()) {
+        LOG_WARN("disconnectFromHost({}): no tracked connection, dropping connection locally",
+                 deviceId.toStdString());
+    } else {
+        QJsonObject message;
+        message["type"] = "disconnectFromHost";
+        message["connectionId"] = connId;
+        m_messaging->sendMessage(message);
+        LOG_INFO("Disconnect requested: device={} connectionId={}",
+                 deviceId.toStdString(), connId.toStdString());
+    }
 
     if (m_connections.contains(deviceId)) {
         m_connections[deviceId].rtcState = RtcStatus::Disconnected;
@@ -214,12 +226,22 @@ void ClientManager::disconnectFromHost(const QString& deviceId)
 void ClientManager::disconnectAll()
 {
     if (!m_messaging || !m_messaging->isReady()) {
+        LOG_WARN("disconnectAll: client messaging unavailable, clearing connections locally");
+        m_connections.clear();
+        m_connIdToDeviceId.clear();
+        m_activeDeviceId.clear();
+        m_disconnectAllPending = false;
+        emit connectionCountChanged();
+        emit activeConnectionChanged();
+        emit connectionListChanged();
+        emit disconnectAllCompleted();
         return;
     }
 
     QJsonObject message;
     message["type"] = "disconnectAll";
     m_messaging->sendMessage(message);
+    m_disconnectAllPending = true;
 
     QStringList deviceIds = m_connections.keys();
     for (const auto& devId : deviceIds) {
@@ -235,6 +257,26 @@ void ClientManager::disconnectAll()
     emit connectionCountChanged();
     emit activeConnectionChanged();
     emit connectionListChanged();
+}
+
+bool ClientManager::waitForDisconnectAll(int timeoutMs)
+{
+    if (!m_disconnectAllPending) {
+        return true;
+    }
+
+    QElapsedTimer timer;
+    timer.start();
+    while (m_disconnectAllPending && timer.elapsed() < timeoutMs) {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
+    }
+
+    if (m_disconnectAllPending) {
+        LOG_WARN("Timed out after {} ms waiting for the client to acknowledge disconnectAll",
+                 timeoutMs);
+        return false;
+    }
+    return true;
 }
 
 void ClientManager::sendHello(const QString& deviceId,
@@ -283,11 +325,13 @@ void ClientManager::sendMouseWheel(const QString& deviceId, int x, int y, int de
 
 void ClientManager::sendKeyPress(const QString& deviceId, int nativeScanCode, int lockStates)
 {
+    if (nativeScanCode <= 0) return;
     sendKeyboardEvent(deviceId, "press", nativeScanCode, lockStates);
 }
 
 void ClientManager::sendKeyRelease(const QString& deviceId, int nativeScanCode, int lockStates)
 {
+    if (nativeScanCode <= 0) return;
     sendKeyboardEvent(deviceId, "release", nativeScanCode, lockStates);
 }
 
@@ -296,19 +340,20 @@ void ClientManager::releaseAllInput(const QString& deviceId)
     sendAction(deviceId, "releaseAllInputAction");
 }
 
-void ClientManager::syncClipboard(const QString& deviceId, const QString& text)
+bool ClientManager::syncClipboard(const QString& deviceId, const QString& text)
 {
     if (!m_messaging || !m_messaging->isReady()) {
-        return;
+        return false;
     }
     QString connId = connectionIdFor(deviceId);
-    if (connId.isEmpty()) return;
+    if (connId.isEmpty()) return false;
 
     QJsonObject message;
     message["type"] = "clipboardSync";
     message["connectionId"] = connId;
     message["text"] = text;
     m_messaging->sendMessage(message);
+    return true;
 }
 
 void ClientManager::sendSkillCommand(const QString& deviceId,
@@ -771,6 +816,11 @@ ConnectionInfo ClientManager::getConnection(const QString& deviceId) const
 QStringList ClientManager::connectedDeviceIds() const
 {
     return m_connections.keys();
+}
+
+bool ClientManager::isMessagingReady() const
+{
+    return m_messaging && m_messaging->isReady();
 }
 
 RtcStatus::Status ClientManager::getConnectionRtcState(const QString& deviceId) const
@@ -1259,6 +1309,8 @@ void ClientManager::handleDisconnectAllResponse(const QJsonObject& message)
 {
     Q_UNUSED(message);
     LOG_INFO("Disconnect all response received");
+    m_disconnectAllPending = false;
+    emit disconnectAllCompleted();
 }
 
 void ClientManager::handleCursorShapeChanged(const QJsonObject& message)
@@ -1402,9 +1454,9 @@ void ClientManager::sendMouseEvent(const QString& deviceId, const QString& event
 void ClientManager::sendKeyboardEvent(const QString& deviceId, const QString& eventType,
                                       int nativeScanCode, int lockStates)
 {
-    // Pending and active capture both own the physical keyboard. Captured
-    // events use the sequence/ack path below, never the QML event path.
-    if (deviceId == m_captureDevice) return;
+    // No keyboard-capture guard here: the QML path already skips captured
+    // devices, and API-injected input must still reach the remote while a
+    // local fullscreen capture is active.
     if (!m_messaging || !m_messaging->isReady()) {
         return;
     }
