@@ -7,6 +7,10 @@
 #include "infra/log/log.h"
 #include <QJsonArray>
 
+#ifndef QUICKDESK_API_KEY
+#define QUICKDESK_API_KEY ""
+#endif
+
 namespace quickdesk {
 
 namespace {
@@ -49,6 +53,8 @@ void HostManager::setMessaging(NativeMessaging* messaging)
         m_signalingRetryCount = 0;
         m_signalingNextRetryIn = 0;
         m_signalingError.clear();
+        m_hostState.clear();
+        m_hostStateReason.clear();
         m_supportsAutoLockOnSessionEnd = false;
         m_autoLockOnSessionEnd = false;
         
@@ -56,6 +62,7 @@ void HostManager::setMessaging(NativeMessaging* messaging)
         emit accessCodeChanged();
         emit connectionStatusChanged();
         emit signalingStateChanged();
+        emit hostStateChanged();
         emit autoLockOnSessionEndChanged();
         if (hadClients) {
             emit clientCountChanged();
@@ -79,8 +86,15 @@ void HostManager::connectToServer(const QString& serverUrl, const QString& saved
     // Send app version so host can report it to signaling server
     message["appVersion"] = infra::ApplicationContext::instance().applicationVersion();
 
-    // Pass runtime API key so host process can authenticate with signaling server
+    // Pass runtime API key so host process can authenticate with signaling server.
+    // Falls back to the compile-time key for self-hosted builds.
     QString apiKey = core::LocalConfigCenter::instance().apiKey();
+    if (apiKey.isEmpty()) {
+        constexpr const char* kCompileApiKey = QUICKDESK_API_KEY;
+        if (kCompileApiKey[0] != '\0') {
+            apiKey = QString::fromLatin1(kCompileApiKey);
+        }
+    }
     if (!apiKey.isEmpty()) {
         message["apiKey"] = apiKey;
     }
@@ -131,6 +145,32 @@ void HostManager::disconnectFromServer()
     emit accessCodeChanged();
     emit clientCountChanged();
     emit clientListChanged();
+}
+
+void HostManager::resetHostSession()
+{
+    // The native host's ProcessConnect refuses while a QuickDeskHost object
+    // still exists ("Connect can be called only when disconnected"). When the
+    // host tore its network service down on its own it stays at
+    // hostState=DISCONNECTED with that stale object alive, so re-connecting
+    // must be preceded by a "disconnect" to drop it.
+    if (!m_messaging || !m_messaging->isReady()) {
+        return;
+    }
+
+    QJsonObject message;
+    message["type"] = "disconnect";
+    m_messaging->sendMessage(message);
+
+    const bool hadClients = !m_clients.isEmpty();
+    m_isConnected = false;
+    m_clients.clear();
+
+    emit connectionStatusChanged();
+    if (hadClients) {
+        emit clientCountChanged();
+        emit clientListChanged();
+    }
 }
 
 void HostManager::sendHello()
@@ -273,6 +313,8 @@ void HostManager::onMessageReceived(const QJsonObject& message)
         handleConnectResponse(message);
     } else if (type == "hostReady") {
         handleHostReady(message);
+    } else if (type == "hostStateChanged") {
+        handleHostStateChanged(message);
     } else if (type == "accessCodeChanged") {
         handleAccessCodeChanged(message);
     } else if (type == "natPolicyChanged") {
@@ -579,10 +621,100 @@ void HostManager::handleDisconnectResponse(const QJsonObject& message)
     LOG_INFO("Host disconnect response received");
 }
 
+void HostManager::handleHostStateChanged(const QJsonObject& message)
+{
+    // Mirrors QuickDeskHostState from the Chromium host:
+    // STARTING / REQUESTED_ACCESS_CODE / RECEIVED_ACCESS_CODE /
+    // CONNECTING / CONNECTED / DISCONNECTED. kError is delivered as a
+    // separate "error" message, so DISCONNECTED is the terminal signal
+    // that the host has torn down its network service.
+    const QString state = message.value("state").toString();
+    const QString reason = message.value("disconnectReason").toString();
+    const QString accessCode = message.value("accessCode").toString();
+
+    bool hostStateDidChange = (m_hostState != state);
+    m_hostState = state;
+    if (!reason.isEmpty() || state == QLatin1String("DISCONNECTED")) {
+        m_hostStateReason = reason;
+    }
+
+    bool accessCodeDidChange = false;
+    if (!accessCode.isEmpty() && accessCode != m_accessCode) {
+        m_accessCode = accessCode;
+        accessCodeDidChange = true;
+    }
+
+    // Normalize into the signaling state the rest of the app consumes so a
+    // torn-down host can no longer keep reporting "connected". CONNECTING here
+    // means a client is connecting, which proves the host is registered.
+    QString signaling;
+    if (state == QLatin1String("CONNECTED") ||
+        state == QLatin1String("RECEIVED_ACCESS_CODE") ||
+        state == QLatin1String("CONNECTING")) {
+        signaling = "connected";
+    } else if (state == QLatin1String("STARTING") ||
+               state == QLatin1String("REQUESTED_ACCESS_CODE")) {
+        signaling = "connecting";
+    } else if (state == QLatin1String("DISCONNECTED")) {
+        signaling = "disconnected";
+    }
+
+    bool signalingDidChange = false;
+    if (!signaling.isEmpty() && signaling != m_signalingState) {
+        m_signalingState = signaling;
+        signalingDidChange = true;
+    }
+    if (state == QLatin1String("DISCONNECTED")) {
+        m_signalingRetryCount = 0;
+        m_signalingNextRetryIn = 0;
+        if (!reason.isEmpty() && m_signalingError != reason) {
+            m_signalingError = reason;
+            signalingDidChange = true;
+        }
+    } else if (signaling == "connected" && !m_signalingError.isEmpty()) {
+        m_signalingError.clear();
+        signalingDidChange = true;
+    }
+
+    bool wasConnected = m_isConnected;
+    if (!signaling.isEmpty()) {
+        m_isConnected = (signaling == "connected");
+    }
+
+    qInfo() << "Host state changed:" << state
+            << "signaling:" << m_signalingState
+            << "reason:" << reason;
+
+    if (accessCodeDidChange) {
+        emit accessCodeChanged();
+    }
+    if (hostStateDidChange) {
+        emit hostStateChanged();
+    }
+    if (signalingDidChange) {
+        emit signalingStateChanged();
+    }
+    if (wasConnected != m_isConnected) {
+        emit connectionStatusChanged();
+    }
+
+    if (state == QLatin1String("DISCONNECTED")) {
+        LOG_WARN("Host is fully offline (network service torn down, reason={}); "
+                 "Qt must re-send connect to restore it",
+                 reason.toStdString());
+    }
+}
+
 QString HostManager::signalingState() const
 {
     return m_signalingState;
 }
+
+QString HostManager::hostState() const
+{
+    return m_hostState;
+}
+
 
 int HostManager::signalingRetryCount() const
 {

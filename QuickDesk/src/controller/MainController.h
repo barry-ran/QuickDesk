@@ -113,6 +113,7 @@ public:
      * @brief Disconnect from a remote host
      */
     Q_INVOKABLE void disconnectFromRemoteHost(const QString& deviceId);
+    Q_INVOKABLE void disconnectAll();
 
     /**
      * @brief Refresh access code
@@ -137,6 +138,7 @@ public:
     // Property getters
     ServerManager* serverManager() const;
     HostManager* hostManager() const;
+    SkillHostManager* skillHostManager() const;
     ClientManager* clientManager() const;
     DeviceRecorder* deviceRecorder() const;
     TurnServerManager* turnServerManager() const;
@@ -335,6 +337,41 @@ private:
         qint64 startTimeMs = 0;
     };
     QHash<QString, ConnectionTrack> m_connectionTracks;
+
+    // Session intent (key = deviceId): the credentials of an active session,
+    // so a crashed/auto-restarted client process can re-establish it.
+    struct SessionIntent {
+        QString accessCode;
+        QString serverUrl;
+    };
+    QHash<QString, SessionIntent> m_sessionIntents;
+    QStringList m_crashRecoveryQueue;  // deviceIds to restore after client restart
+    QHash<QString, int> m_crashRecoveryTries;  // per-device recovery attempts
+    QHash<QString, int> m_crashRecoveryWaits;  // per-device waits for host re-registration
+    int m_crashRecoveryAttempts = 0;
+    void runCrashRecovery();
+    void scheduleCrashRecoveryAttempt(const QString& deviceId, int delayMs);
+    bool handleRecoveryFailure(const QString& deviceId,
+                               const QString& code,
+                               const QString& detail);
+    void finishCrashRecovery(const QString& deviceId,
+                             const QString& code,
+                             const QString& detail);
+
+    // Host signaling watchdog: the Chromium host tears down its network
+    // service on a fatal signaling error and does not re-register on its
+    // own, so Qt re-sends "connect" when the host reports DISCONNECTED.
+    void onHostStateChanged();
+    void armHostSignaling(const QString& url, const QString& savedAccessCode);
+    void scheduleHostSignalingRecovery(int delayMs);
+    void attemptHostSignalingRecovery();
+    QTimer* m_hostSignalingWatchdog = nullptr;
+    QString m_hostSignalingUrl;
+    QString m_hostSignalingSavedCode;
+    bool m_hostSignalingArmed = false;
+    int m_hostSignalingRecoveryAttempts = 0;
+    bool m_hostSignalingLossReported = false;
+    bool m_hostSignalingResetSent = false;
 };
 
 } // namespace quickdesk
