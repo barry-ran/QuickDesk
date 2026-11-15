@@ -86,8 +86,7 @@ bool DeviceRecorder::startRecording(const QString& deviceId) {
         return false;
     }
 
-    const QString dir = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
-    QDir().mkpath(dir);
+    const QString dir = recordingDirectory();
     m_outputPath = QDir(dir).filePath(
         QStringLiteral("quickdesk-rec-%1.mp4").arg(QDateTime::currentMSecsSinceEpoch()));
     QFile::remove(m_outputPath);
@@ -199,6 +198,25 @@ void DeviceRecorder::fail(const QString& message) {
     LOG_WARN("DeviceRecorder: {}", message.toStdString());
 }
 
+QString DeviceRecorder::recordingDirectory() const {
+    // The capture must survive even when the server is unreachable or the app
+    // is used without an account, so it lands in the user's videos folder.
+    QString dir = QStandardPaths::writableLocation(QStandardPaths::MoviesLocation);
+    if (dir.isEmpty()) {
+        dir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    }
+    if (dir.isEmpty()) {
+        dir = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
+    }
+    dir += QStringLiteral("/QuickDesk");
+    if (QDir().mkpath(dir)) {
+        return dir;
+    }
+    const QString fallback = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
+    QDir().mkpath(fallback);
+    return fallback;
+}
+
 QString DeviceRecorder::httpBaseUrl() const {
     QString url = m_server ? m_server->serverUrl() : QString();
     url.replace(QStringLiteral("ws://"), QStringLiteral("http://"));
@@ -216,6 +234,15 @@ void DeviceRecorder::uploadRecording(const QString& filePath) {
         QFile::remove(filePath);
         QFile::remove(m_posterPath);
         m_posterPath.clear();
+        return;
+    }
+    if (!m_auth || !m_auth->isLoggedIn()) {
+        // Cloud sync needs a signed-in user; access-code sessions have no
+        // account, so the local capture is the deliverable.
+        LOG_INFO("DeviceRecorder: recording saved locally at {} (not signed in, not uploaded)",
+                 filePath.toStdString());
+        m_lastRecordingId.clear();
+        emit uploadFinished(m_lastRecordingId);
         return;
     }
     createIndexRowThenUpload(filePath, info.size());
@@ -252,9 +279,9 @@ void DeviceRecorder::createIndexRowThenUpload(const QString& filePath, qint64 si
                         const QString payloadText = QString::fromStdString(data);
                         QMetaObject::invokeMethod(this, [this, statusCode, message, payloadText, filePath]() {
                             if (statusCode != 200 && statusCode != 201) {
-                                fail(QStringLiteral("could not index recording: HTTP %1 %2")
+                                fail(QStringLiteral("could not index recording: HTTP %1 %2 (kept at %3)")
                                          .arg(statusCode)
-                                         .arg(message));
+                                         .arg(message, filePath));
                                 return;
                             }
                             const QJsonObject row =
@@ -276,11 +303,11 @@ void DeviceRecorder::uploadBytes(const QString& filePath, const QString& recordi
                       QStringLiteral("artifact"),
                       [this, filePath, recordingId](bool ok, int status, const QString& detail) {
                           if (!ok) {
-                              fail(QStringLiteral("recording upload failed: HTTP %1 %2")
+                              fail(QStringLiteral("recording upload failed: HTTP %1 %2 (kept at %3)")
                                        .arg(status)
-                                       .arg(detail));
-                              // Leave the index honest and drop the orphaned capture: a row
-                              // that says "recording" forever is worse than an explicit failure.
+                                       .arg(detail, filePath));
+                              // Leave the index honest; the capture stays on
+                              // disk because the server never received it.
                               markFailed(recordingId, filePath);
                               return;
                           }
@@ -391,13 +418,9 @@ void DeviceRecorder::postFileWithRetry(
 }
 
 void DeviceRecorder::markFailed(const QString& recordingId, const QString& filePath) {
-    // The capture never reached the server, so drop it immediately: keeping an
-    // orphan file around would only hide the failure.
-    QFile::remove(filePath);
-    if (!m_posterPath.isEmpty()) {
-        QFile::remove(m_posterPath);
-        m_posterPath.clear();
-    }
+    // The capture never reached the server, so the local file is the only
+    // copy of the recording — keep it (and its poster) on disk.
+    LOG_WARN("DeviceRecorder: keeping failed-upload capture at {}", filePath.toStdString());
     if (!m_auth || recordingId.isEmpty()) {
         return;
     }
