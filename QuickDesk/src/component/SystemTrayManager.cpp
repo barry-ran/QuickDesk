@@ -29,6 +29,11 @@ SystemTrayManager& SystemTrayManager::instance()
 
 void SystemTrayManager::initTrayIcon()
 {
+    if (!QSystemTrayIcon::isSystemTrayAvailable()) {
+        LOG_INFO("SystemTrayManager: system tray not available on this platform");
+        return;
+    }
+
     m_trayIcon = new QSystemTrayIcon(this);
     m_trayIcon->setIcon(QIcon(":/image/tray/logo.png"));
     m_trayIcon->setToolTip("QuickDesk");
@@ -60,6 +65,9 @@ void SystemTrayManager::initTrayIcon()
 
 void SystemTrayManager::minimizeToTray()
 {
+    if (!m_trayIcon) {
+        return;
+    }
     if (!core::LocalConfigCenter::instance().trayMessageShown()) {
         core::LocalConfigCenter::instance().setTrayMessageShown(true);
         m_trayIcon->showMessage(
@@ -73,7 +81,9 @@ void SystemTrayManager::minimizeToTray()
 void SystemTrayManager::quit()
 {
     LOG_INFO("SystemTrayManager: quit requested");
-    m_trayIcon->hide();
+    if (m_trayIcon) {
+        m_trayIcon->hide();
+    }
     QTimer::singleShot(200, qApp, &QApplication::quit);
 }
 
