@@ -23,6 +23,11 @@ if (APPLE)
         autostart/autostartmanagerplatformmac.mm
     )
 endif()
+if (UNIX AND NOT APPLE)
+    list(APPEND QD_TARGET_SOURCES
+        autostart/autostartmanagerplatformlinux.cpp
+    )
+endif()
 source_group(${QD_TARGET_NAME} FILES ${QD_TARGET_SOURCES})
 
 # object库类似gn的source set，可以在多个target中使用，不会重复编译
