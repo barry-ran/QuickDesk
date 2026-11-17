@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=QuickDesk
+GenericName=Remote Desktop
+Comment=Remote control and support
+Exec=QuickDesk
+Icon=quickdesk
+Terminal=false
+Categories=Network;RemoteAccess;Qt;
+StartupWMClass=QuickDesk

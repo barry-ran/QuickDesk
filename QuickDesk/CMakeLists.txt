@@ -327,12 +327,19 @@ if(RAPIDOCR_FOUND)
                 "$<TARGET_FILE_DIR:QuickDesk>/../Frameworks/"
             COMMENT "Deploying RapidOcrOnnx.dylib"
         )
+    elseif(UNIX)
+        add_custom_command(TARGET QuickDesk POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${RAPIDOCR_DLLS}"
+                "$<TARGET_FILE_DIR:QuickDesk>/"
+            COMMENT "Deploying libRapidOcrOnnx.so"
+        )
     endif()
     
 endif()
 
 # -------------------------------------------------------------------------
-# 部署 OCR 模型文件（Windows & macOS）
+# 部署 OCR 模型文件（Windows & macOS & Linux）
 # -------------------------------------------------------------------------
 if(RAPIDOCR_FOUND AND EXISTS "${RAPIDOCR_MODEL_DIR}")
     if(WIN32)
@@ -348,6 +355,13 @@ if(RAPIDOCR_FOUND AND EXISTS "${RAPIDOCR_MODEL_DIR}")
                 "${RAPIDOCR_MODEL_DIR}"
                 "$<TARGET_FILE_DIR:QuickDesk>/../Resources/models"
             COMMENT "Deploying OCR models to macOS bundle"
+        )
+    elseif(UNIX)
+        add_custom_command(TARGET QuickDesk POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_directory
+                "${RAPIDOCR_MODEL_DIR}"
+                "$<TARGET_FILE_DIR:QuickDesk>/models"
+            COMMENT "Deploying OCR models"
         )
     endif()
 endif()

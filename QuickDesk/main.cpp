@@ -2,11 +2,12 @@
 // QuickDesk Qt Application Entry Point
 
 #include <QApplication>
+#include <QDir>
 #include <QFontDatabase>
 #include <QIcon>
+#include <QLockFile>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
-#include <QSharedMemory>
 #include <QJSEngine>
 #include <QtQuickControls2/QQuickStyle>
 
@@ -33,12 +34,13 @@
 
 int main(int argc, char *argv[])
 {
-    QSharedMemory sharedMemory("quick_coder_qdsm");
-    // attach成功说明已经create过了，直接退出
-    if (sharedMemory.attach()) {
+    // QLockFile: the OS releases the lock on process death, so a crash cannot
+    // leave a stale segment that blocks every future launch (SysV shm did).
+    QLockFile singleInstanceLock(QDir::tempPath() + "/quick_coder_qdsm.lock");
+    singleInstanceLock.setStaleLockTime(0);
+    if (!singleInstanceLock.tryLock(100)) {
         return 0;
     }
-    sharedMemory.create(1);
 
     QApplication::setHighDpiScaleFactorRoundingPolicy(
         Qt::HighDpiScaleFactorRoundingPolicy::PassThrough);

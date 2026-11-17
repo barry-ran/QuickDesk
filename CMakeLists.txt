@@ -34,6 +34,15 @@ if(DEFINED QUICKDESK_API_KEY AND NOT QUICKDESK_API_KEY STREQUAL "")
 else()
     message(STATUS "QUICKDESK_API_KEY: not set (open-source build)")
 endif()
+
+# Default signaling server URL for self-hosted builds.
+# CI / self-hosted builds set this via: cmake -DQUICKDESK_SERVER_URL="ws://host:8000"
+if(DEFINED QUICKDESK_SERVER_URL AND NOT QUICKDESK_SERVER_URL STREQUAL "")
+    add_compile_definitions(QUICKDESK_SERVER_URL="${QUICKDESK_SERVER_URL}")
+    message(STATUS "QUICKDESK_SERVER_URL: ${QUICKDESK_SERVER_URL}")
+else()
+    message(STATUS "QUICKDESK_SERVER_URL: not set (official default)")
+endif()
 message(STATUS "APP_VERSION_MAJOR:${PROJECT_VERSION_MAJOR}, APP_VERSION_MINOR:${PROJECT_VERSION_MINOR}, APP_VERSION_PATCH:${PROJECT_VERSION_PATCH}, APP_VERSION_TWEAK:${PROJECT_VERSION_TWEAK}")
 message(STATUS "APP_VERSION_STR:${APP_VERSION_STR}")
 # CMAKE_PROJECT_NAME和PROJECT_NAME都表示最近的project的名称
@@ -109,6 +118,9 @@ if (NOT MSVC)
 
     # disable some warning
     add_compile_options(-Wno-unknown-warning-option -Wno-nested-anon-types -Wno-c++17-extensions -Wno-overloaded-virtual -Wno-variadic-macro-arguments-omitted -Wno-gnu-zero-variadic-macro-arguments -Wno-deprecated-declarations -Wno-comment)
+    if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        add_compile_options(-Wno-dangling-reference)
+    endif()
 endif()
 
 # 开启qml import trace(这里设置无效，需要在项目配置设置该环境变量)

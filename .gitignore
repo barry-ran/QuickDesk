@@ -62,6 +62,7 @@ build
 QuickDesk/res/Info_Mac.plist
 .DS_Store
 QuickDesk/3rdparty/quickdesk-remoting
+scripts/linux/.cache/
 
 
 # Node.js

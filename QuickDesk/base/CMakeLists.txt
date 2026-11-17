@@ -1,6 +1,8 @@
 set(QD_TARGET_NAME "base")
 
-enable_language(ASM_MASM)
+if(MSVC)
+    enable_language(ASM_MASM)
+endif()
 
 set(QD_TARGET_SOURCES
     singleton.h

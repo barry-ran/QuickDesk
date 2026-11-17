@@ -6,6 +6,10 @@
 
 #include <QObject>
 
+#ifndef QUICKDESK_SERVER_URL
+#define QUICKDESK_SERVER_URL "wss://qdsignaling.quickcoder.cc"
+#endif
+
 namespace quickdesk {
 
 /**
@@ -39,7 +43,7 @@ signals:
     void statusChanged();
 
 private:
-    QString m_serverUrl = "wss://qdsignaling.quickcoder.cc";
+    QString m_serverUrl = QUICKDESK_SERVER_URL;
     QString m_status = "已配置";
 
     void updateStatus(const QString& status);
