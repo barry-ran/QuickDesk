@@ -254,6 +254,9 @@ QJsonObject ApiHandler::handleGetHostClients(const QJsonObject&) {
 }
 
 QJsonObject ApiHandler::handleRefreshAccessCode(const QJsonObject&) {
+    if (m_controller->permanentPasswordEnabled()) {
+        return makeError(409, "Access code is a permanent password and cannot be refreshed");
+    }
     m_controller->refreshAccessCode();
     QJsonObject data;
     data["success"] = true;

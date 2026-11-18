@@ -193,6 +193,16 @@ Item {
                                     configViewModel.accessCodeRefreshInterval = selectedValue
                                 }
 
+                                // A permanent password is never refreshed
+                                enabled: !(root.mainController && root.mainController.permanentPasswordEnabled)
+
+                                Connections {
+                                    target: configViewModel
+                                    function onAccessCodeRefreshIntervalChanged(value) {
+                                        accessCodeRefreshCombo.currentIndex = accessCodeRefreshCombo.indexOfValue(value)
+                                    }
+                                }
+
                                 function indexOfValue(value) {
                                     for (let i = 0; i < accessCodeRefreshModel.count; i++) {
                                         if (accessCodeRefreshModel.get(i).value === value) {
@@ -200,6 +210,118 @@ Item {
                                         }
                                     }
                                     return 3  // Default to 2 hours if not found
+                                }
+                            }
+                        }
+
+                        // Permanent Password (typed twice to confirm)
+                        Column {
+                            id: permanentPasswordSection
+                            width: parent.width
+                            spacing: Theme.spacingSmall
+
+                            readonly property bool isSet: root.mainController
+                                                          ? root.mainController.permanentPasswordEnabled : false
+
+                            function errorMessage(code) {
+                                switch (code) {
+                                case "MISMATCH": return qsTr("The two passwords do not match")
+                                case "TOO_SHORT": return qsTr("The password must be at least 8 characters long")
+                                case "TOO_LONG": return qsTr("The password can be at most 32 characters long")
+                                case "INVALID_CHARS": return qsTr("Use only letters and digits")
+                                default: return qsTr("Unknown error")
+                                }
+                            }
+
+                            Text {
+                                text: qsTr("Permanent Password")
+                                font.pixelSize: Theme.fontSizeMedium
+                                color: Theme.text
+                            }
+
+                            Text {
+                                text: qsTr("Use a fixed password instead of a temporary access code. Type it twice to confirm. 8-32 letters and digits.")
+                                font.pixelSize: Theme.fontSizeSmall
+                                color: Theme.textSecondary
+                                wrapMode: Text.WordWrap
+                                width: parent.width
+                            }
+
+                            Text {
+                                visible: permanentPasswordSection.isSet
+                                text: root.mainController && root.mainController.permanentPasswordActive
+                                      ? qsTr("A permanent password is active.")
+                                      : qsTr("A permanent password is set. Restart QuickDesk to apply it.")
+                                font.pixelSize: Theme.fontSizeSmall
+                                color: Theme.accent
+                                wrapMode: Text.WordWrap
+                                width: parent.width
+                            }
+
+                            Row {
+                                width: parent.width
+                                spacing: Theme.spacingSmall
+
+                                QDTextField {
+                                    id: permanentPasswordField
+                                    width: (parent.width - parent.spacing) / 2
+                                    placeholderText: permanentPasswordSection.isSet
+                                                     ? qsTr("New password") : qsTr("Password")
+                                    echoMode: TextInput.Password
+                                    maximumLength: 32
+                                }
+
+                                QDTextField {
+                                    id: permanentPasswordConfirmField
+                                    width: (parent.width - parent.spacing) / 2
+                                    placeholderText: qsTr("Confirm password")
+                                    echoMode: TextInput.Password
+                                    maximumLength: 32
+                                    error: text.length > 0 && text !== permanentPasswordField.text
+                                }
+                            }
+
+                            Row {
+                                spacing: Theme.spacingSmall
+
+                                QDButton {
+                                    text: permanentPasswordSection.isSet
+                                          ? qsTr("Change Password") : qsTr("Set Password")
+                                    iconText: FluentIconGlyph.lockGlyph
+                                    buttonType: QDButton.Type.Primary
+                                    enabled: root.mainController
+                                             && permanentPasswordField.text.length > 0
+                                             && permanentPasswordConfirmField.text.length > 0
+
+                                    onClicked: {
+                                        let err = root.mainController.setPermanentPassword(
+                                                permanentPasswordField.text,
+                                                permanentPasswordConfirmField.text)
+                                        if (err === "") {
+                                            permanentPasswordField.text = ""
+                                            permanentPasswordConfirmField.text = ""
+                                            root.showToast(qsTr("Permanent password saved. Restart QuickDesk to apply it."),
+                                                           QDToast.Type.Success)
+                                        } else {
+                                            root.showToast(permanentPasswordSection.errorMessage(err),
+                                                           QDToast.Type.Error)
+                                        }
+                                    }
+                                }
+
+                                QDButton {
+                                    text: qsTr("Remove Password")
+                                    iconText: FluentIconGlyph.deleteGlyph
+                                    buttonType: QDButton.Type.Danger
+                                    visible: permanentPasswordSection.isSet
+
+                                    onClicked: {
+                                        root.mainController.clearPermanentPassword()
+                                        permanentPasswordField.text = ""
+                                        permanentPasswordConfirmField.text = ""
+                                        root.showToast(qsTr("Permanent password removed. A temporary access code will be used."),
+                                                       QDToast.Type.Info)
+                                    }
                                 }
                             }
                         }
