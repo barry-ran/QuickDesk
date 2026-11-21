@@ -6,6 +6,7 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QFileInfo>
+#include <QtGlobal>  // for qEnvironmentVariable()
 #ifdef Q_OS_WIN
 #include <qt_windows.h>
 #include <winsvc.h>
@@ -618,6 +619,17 @@ bool ProcessManager::startProcess(QProcess* process, const QString& exePath,
     }
     if (!m_configDir.isEmpty()) {
         arguments << QString("--config-dir=%1").arg(m_configDir);
+    }
+
+    // Optional WebRTC field trials injection (advanced users only).
+    // Forwarded to the client/host child process as --field-trials=<value>.
+    // The WebRTC layer may apply it via base::FieldTrialList::
+    // CreateTrialsFromString(). Empty by default => no behavior change.
+    const QByteArray fieldTrials = qEnvironmentVariable("QUICKDESK_FIELD_TRIALS");
+    if (!fieldTrials.isEmpty()) {
+        arguments << QString("--field-trials=%1").arg(QString::fromUtf8(fieldTrials));
+        LOG_INFO("Forwarding WebRTC field trials to {} process ({} bytes)",
+                 processName.toStdString(), fieldTrials.size());
     }
 #ifdef Q_OS_MAC
     if (process == m_hostProcess.get()) {
